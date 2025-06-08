@@ -6,20 +6,21 @@ export type UserRole = 'customer' | 'barber';
 export interface FirebaseUser extends FirebaseUserAuth {}
 
 // AppUser for phone + OTP authentication.
-// Password is not stored in the AppUser model as it's handled by OTP.
 export interface AppUser extends FirebaseUser {
   role?: UserRole;
   firstName?: string;
   lastName?: string;
-  email?: string | null; // Optional actual email
-  phoneNumber: string; // Primary identifier for login
+  email?: string | null; 
+  phoneNumber: string; 
 }
 
 export interface BarberService {
-  id: string;
+  id: string; // Firestore document ID
+  barberId: string; // ID of the barber who offers this service
   name: string;
   price: number;
   duration: number; // in minutes
+  // Optional: createdAt?: string; (ISO date string)
 }
 
 export type DayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
@@ -40,4 +41,3 @@ export interface Appointment {
   status: 'upcoming' | 'checked-in' | 'completed' | 'next';
   date: string; // YYYY-MM-DD
 }
-

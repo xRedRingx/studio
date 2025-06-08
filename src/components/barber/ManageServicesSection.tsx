@@ -21,9 +21,9 @@ import {
 
 interface ManageServicesSectionProps {
   services: BarberService[];
-  onAddService: (service: Omit<BarberService, 'id'>) => void;
-  onUpdateService: (serviceId: string, serviceData: Omit<BarberService, 'id'>) => void;
-  onDeleteService: (serviceId: string) => void;
+  onAddService: (service: Omit<BarberService, 'id' | 'barberId'>) => Promise<void>;
+  onUpdateService: (serviceId: string, serviceData: Omit<BarberService, 'id' | 'barberId'>) => Promise<void>;
+  onDeleteService: (serviceId: string) => Promise<void>;
 }
 
 export default function ManageServicesSection({
@@ -35,6 +35,7 @@ export default function ManageServicesSection({
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [serviceToEdit, setServiceToEdit] = useState<BarberService | null>(null);
   const [serviceToDelete, setServiceToDelete] = useState<BarberService | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleOpenDialog = (service?: BarberService) => {
     setServiceToEdit(service || null);
@@ -42,22 +43,27 @@ export default function ManageServicesSection({
   };
 
   const handleCloseDialog = () => {
+    if (isSubmitting) return;
     setIsDialogOpen(false);
     setServiceToEdit(null);
   };
 
-  const handleSubmitService = (serviceData: Omit<BarberService, 'id'>, id?: string) => {
+  const handleSubmitService = async (serviceData: Omit<BarberService, 'id' | 'barberId'>, id?: string) => {
+    setIsSubmitting(true);
     if (id) {
-      onUpdateService(id, serviceData);
+      await onUpdateService(id, serviceData);
     } else {
-      onAddService(serviceData);
+      await onAddService(serviceData);
     }
+    setIsSubmitting(false);
     handleCloseDialog();
   };
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (serviceToDelete) {
-      onDeleteService(serviceToDelete.id);
+      setIsSubmitting(true);
+      await onDeleteService(serviceToDelete.id);
+      setIsSubmitting(false);
       setServiceToDelete(null);
     }
   };
@@ -69,13 +75,13 @@ export default function ManageServicesSection({
           <CardTitle>Manage Services</CardTitle>
           <CardDescription>Add, edit, or remove the services you offer.</CardDescription>
         </div>
-        <Button onClick={() => handleOpenDialog()} size="sm">
+        <Button onClick={() => handleOpenDialog()} size="sm" disabled={isSubmitting}>
           <PlusCircle className="mr-2 h-4 w-4" /> Add New Service
         </Button>
       </CardHeader>
       <CardContent>
         {services.length === 0 ? (
-          <p className="text-muted-foreground">You have not added any services yet.</p>
+          <p className="text-muted-foreground">You have not added any services yet. Click "Add New Service" to begin.</p>
         ) : (
           <div className="space-y-4">
             {services.map((service) => (
@@ -89,13 +95,13 @@ export default function ManageServicesSection({
                     </div>
                   </div>
                   <div className="space-x-2">
-                    <Button variant="outline" size="icon" onClick={() => handleOpenDialog(service)}>
+                    <Button variant="outline" size="icon" onClick={() => handleOpenDialog(service)} disabled={isSubmitting}>
                       <Edit3 className="h-4 w-4" />
                       <span className="sr-only">Edit {service.name}</span>
                     </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="destructive" size="icon" onClick={() => setServiceToDelete(service)}>
+                        <Button variant="destructive" size="icon" onClick={() => setServiceToDelete(service)} disabled={isSubmitting}>
                           <Trash2 className="h-4 w-4" />
                           <span className="sr-only">Delete {service.name}</span>
                         </Button>
@@ -108,8 +114,10 @@ export default function ManageServicesSection({
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
-                          <AlertDialogCancel onClick={() => setServiceToDelete(null)}>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={handleDeleteConfirm}>Delete</AlertDialogAction>
+                          <AlertDialogCancel onClick={() => setServiceToDelete(null)} disabled={isSubmitting}>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleDeleteConfirm} disabled={isSubmitting}>
+                            {isSubmitting ? 'Deleting...' : 'Delete'}
+                          </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
@@ -120,12 +128,15 @@ export default function ManageServicesSection({
           </div>
         )}
       </CardContent>
-      <ServiceDialog
-        isOpen={isDialogOpen}
-        onClose={handleCloseDialog}
-        onSubmit={handleSubmitService}
-        serviceToEdit={serviceToEdit}
-      />
+      {isDialogOpen && ( // Conditionally render to reset form state on open
+        <ServiceDialog
+          isOpen={isDialogOpen}
+          onClose={handleCloseDialog}
+          onSubmit={handleSubmitService}
+          serviceToEdit={serviceToEdit}
+          isSubmitting={isSubmitting}
+        />
+      )}
     </Card>
   );
 }
