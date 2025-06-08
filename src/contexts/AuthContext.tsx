@@ -8,8 +8,8 @@ import {
   // signInWithPhoneNumber, // Import this for actual phone auth
   // RecaptchaVerifier, // Import this for actual phone auth
   signOut as firebaseSignOut,
-  type UserCredential, // May not be directly applicable for OTP flow simulation as is
-  type AuthError,
+  // type UserCredential, // May not be directly applicable for OTP flow simulation as is
+  // type AuthError,
   type User as FirebaseUserType, // Renamed to avoid conflict with our FirebaseUser
 } from 'firebase/auth';
 import { auth, firestore } from '@/firebase/config';
@@ -33,7 +33,7 @@ interface AuthContextType {
     firstName: string;
     lastName: string;
     phoneNumber: string;
-    email?: string; // Optional
+    // email removed from input
     role: UserRole;
   }) => Promise<SimulatedUserCredential>; // Updated return type for simulation
   signIn: (data: {
@@ -84,17 +84,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             ...(firebaseUser as unknown as FirebaseUser), // Cast needed due to type differences
             ...appUserData,
             phoneNumber: appUserData.phoneNumber || firebaseUser.phoneNumber || '', 
+            email: appUserData.email || firebaseUser.email || null, // Ensure email is handled
           };
           setUser(appUser);
           if (appUser.role && !role) {
              setRoleContextAndStorage(appUser.role);
           }
         } else {
-          // This case might occur if user record deleted from Firestore but not Auth
-          // Or during initial part of a multi-step phone auth flow
           const minimalAppUser: AppUser = {
             ...(firebaseUser as unknown as FirebaseUser),
             phoneNumber: firebaseUser.phoneNumber || 'UNKNOWN_PHONE',
+            email: firebaseUser.email || null, // Ensure email is handled
             role: role || undefined, 
           };
           setUser(minimalAppUser);
@@ -117,10 +117,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     firstName: string;
     lastName: string;
     phoneNumber: string;
-    email?: string;
+    // email removed
     role: UserRole;
   }): Promise<SimulatedUserCredential> => {
-    const { firstName, lastName, phoneNumber, email, role: userRole } = data;
+    const { firstName, lastName, phoneNumber, role: userRole } = data;
 
     // SIMULATION: In a real app, you'd call signInWithPhoneNumber here
     // const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier!);
@@ -128,20 +128,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // const userCredential = await confirmationResult.confirm(otpFromUser);
     // const firebaseUser = userCredential.user;
 
-    // For this simulation, we'll create a mock FirebaseUser-like object.
-    // The UID would normally come from Firebase after successful OTP verification.
     const simulatedUid = `simulated-${Date.now()}`; 
     const simulatedFirebaseUser: FirebaseUser = {
       uid: simulatedUid,
       phoneNumber: phoneNumber,
       displayName: `${firstName} ${lastName}`,
-      email: email || null,
-      // Add other FirebaseUser properties as needed, possibly mocked
+      email: null, // Email is explicitly null
       emailVerified: false,
       isAnonymous: false,
       metadata: {},
       providerData: [],
-      providerId: 'phone', // Mock providerId
+      providerId: 'phone', 
       refreshToken: 'mockRefreshToken',
       tenantId: null,
       delete: async () => {},
@@ -155,7 +152,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await setDoc(doc(firestore, "users", simulatedFirebaseUser.uid), {
       uid: simulatedFirebaseUser.uid,
       phoneNumber: phoneNumber,
-      email: email || null,
+      email: null, // Store email as null
       role: userRole,
       firstName,
       lastName,
@@ -163,47 +160,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
     
     setRoleContextAndStorage(userRole);
-    const appUser: AppUser = { ...simulatedFirebaseUser, role: userRole, firstName, lastName };
+    const appUser: AppUser = { ...simulatedFirebaseUser, role: userRole, firstName, lastName, email: null };
     setUser(appUser);
     
-    // Simulate returning a UserCredential-like object
     return { user: simulatedFirebaseUser }; 
   };
 
   const signIn = async (data: { phoneNumber: string }): Promise<SimulatedUserCredential> => {
     const { phoneNumber } = data;
     
-    // SIMULATION: In a real app, you'd call signInWithPhoneNumber here.
-    // const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier!);
-    // Then, UI for OTP entry, then:
-    // const userCredential = await confirmationResult.confirm(otpFromUser);
-    // const firebaseUser = userCredential.user;
-    // onAuthStateChanged would then pick up this user.
-
-    // For simulation, we'll assume a user with this phone number exists and "logs in".
-    // We won't create a new Firestore doc here, assuming signUp did.
-    // We need to find a user or mock one. For simplicity, if no user exists in state,
-    // this won't do much other than setting loading states.
-    // A real sign-in would trigger onAuthStateChanged.
-    
     console.log(`Simulating OTP sent to ${phoneNumber}. In a real app, user would enter OTP.`);
-    // In a real flow, onAuthStateChanged would handle setting user state after OTP confirmation.
-    // For simulation, we'll just indicate an attempt. The actual user setting
-    // will be managed by onAuthStateChanged if you were to implement full Firebase phone auth.
-    // If a user with this phone (as UID key if that's how you store it) exists in Auth, 
-    // Firebase's onAuthStateChanged would handle it.
-    // This simulation is simplified.
-
-    // Mock a user object that onAuthStateChanged might provide.
-    // This is highly simplified for prototype.
-    const mockUserQuery = (await getDoc(doc(firestore, "users", `uid-for-${phoneNumber}`))); // This UID needs to be known
+    
+    const mockUserQuery = (await getDoc(doc(firestore, "users", `uid-for-${phoneNumber}`))); 
     if (mockUserQuery.exists()) {
         const appUserData = mockUserQuery.data() as AppUser;
          const simulatedFirebaseUser: FirebaseUser = {
             uid: appUserData.uid!,
             phoneNumber: appUserData.phoneNumber,
             displayName: `${appUserData.firstName} ${appUserData.lastName}`,
-            email: appUserData.email || null,
+            email: appUserData.email || null, // Keep existing email if it was there from old data
             emailVerified: false, isAnonymous: false, metadata: {}, providerData: [], providerId: 'phone', refreshToken: '', tenantId: null,
             delete: async () => {}, getIdToken: async () => '', getIdTokenResult: async () => ({} as any), reload: async () => {}, toJSON: () => ({}), photoURL: null,
         };
@@ -212,23 +187,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return { user: simulatedFirebaseUser };
     }
     
-    // Fallback: If no user found, return a mock/empty structure
-    // This part of the simulation is tricky because signIn doesn't directly return the user
-    // in the way createUser... does. onAuthStateChanged is the main actor.
     const placeholderUser: FirebaseUser = { 
         uid: 'simulated-signin-uid', phoneNumber, displayName: 'Simulated User', email: null,
         emailVerified: false, isAnonymous: false, metadata: {}, providerData: [], providerId: 'phone', refreshToken: '', tenantId: null,
         delete: async () => {}, getIdToken: async () => '', getIdTokenResult: async () => ({} as any), reload: async () => {}, toJSON: () => ({}), photoURL: null,
     };
-    return { user: placeholderUser }; // Placeholder return
+    return { user: placeholderUser }; 
   };
 
   const signOut = () => {
     return firebaseSignOut(auth).then(() => {
       setUser(null); 
-      // Optionally clear role from localStorage too, or leave it for quicker role selection next time.
-      // localStorage.removeItem(LOCAL_STORAGE_ROLE_KEY);
-      // setRoleState(null);
     });
   };
 

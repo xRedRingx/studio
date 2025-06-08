@@ -14,12 +14,11 @@ import type { UserRole } from '@/types';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { useState } from 'react';
 
-// Schema for phone + OTP registration (no password here)
+// Schema for phone + OTP registration (no email, no password here)
 const registrationSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   phoneNumber: z.string().min(10, "Valid phone number is required (e.g., +12223334444 or 10 digits minimum)"),
-  email: z.string().email("Invalid email address").optional().or(z.literal('')), // Email remains optional
 });
 
 type RegistrationFormValues = z.infer<typeof registrationSchema>;
@@ -40,17 +39,16 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
       firstName: '',
       lastName: '',
       phoneNumber: '',
-      email: '',
     },
   });
 
   async function onSubmit(values: RegistrationFormValues) {
     setIsLoading(true);
     try {
+      // Pass role and no email
       await signUp({ ...values, role }); 
       toast({
         title: "Registration Initiated!",
-        // In a real OTP flow, you'd say something like "OTP sent to your phone."
         description: "Account created (OTP flow simulated). You can now log in.",
       });
       router.push(`/${role}/login`); 
@@ -110,20 +108,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
             </FormItem>
           )}
         />
-        <FormField
-          control={form.control}
-          name="email"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Email (Optional)</FormLabel>
-              <FormControl>
-                <Input type="email" placeholder="Enter your email address" {...field} className="text-base py-3 px-4 h-12"/>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        {/* Password fields removed for OTP flow */}
+        {/* Email field removed */}
         <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14" disabled={isLoading}>
           {isLoading ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
           Register

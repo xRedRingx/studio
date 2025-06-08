@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
-import { LogOut, User as UserIcon, Phone } from "lucide-react"; // Added Phone icon
+import { LogOut, User as UserIcon, Phone, Mail } from "lucide-react"; // Added Phone and Mail icons
 import { useRouter } from "next/navigation";
 
 export default function UserNav() {
@@ -42,11 +42,11 @@ export default function UserNav() {
   
   const displayName = user.firstName && user.lastName 
     ? `${user.firstName} ${user.lastName}` 
-    : user.displayName || user.phoneNumber || 'User'; // Fallback to phoneNumber if other names not available
+    : user.displayName || user.phoneNumber || 'User';
 
-  // Use phoneNumber for display if email is not available or not primary
-  const contactInfo = user.email || user.phoneNumber;
-
+  // Prioritize phone number for display, as email is no longer actively collected
+  const contactInfo = user.phoneNumber; 
+  const displayEmail = user.email; // Still check if an old email exists
 
   return (
     <DropdownMenu>
@@ -64,10 +64,15 @@ export default function UserNav() {
             <p className="text-sm font-medium leading-none">{displayName}</p>
             {contactInfo && (
               <p className="text-xs leading-none text-muted-foreground flex items-center">
-                {/* Show phone icon if contactInfo is likely a phone number (basic check) */}
-                {/* In a real app, you might have a better way to distinguish email vs phone */}
-                {user.phoneNumber && contactInfo === user.phoneNumber && <Phone className="mr-1.5 h-3 w-3" />} 
+                <Phone className="mr-1.5 h-3 w-3" />
                 {contactInfo}
+              </p>
+            )}
+            {/* Conditionally display email if it exists (e.g., for older accounts) */}
+            {displayEmail && (
+              <p className="text-xs leading-none text-muted-foreground flex items-center pt-0.5">
+                <Mail className="mr-1.5 h-3 w-3" />
+                {displayEmail}
               </p>
             )}
             {role && <p className="text-xs leading-none text-muted-foreground capitalize pt-1">Role: {role}</p>}
