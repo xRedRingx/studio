@@ -9,7 +9,10 @@ export interface AppUser extends FirebaseUser {
   role?: UserRole;
   firstName?: string;
   lastName?: string;
-  phoneNumber?: string;
+  // Email is now optional
+  email?: string | null; 
+  // phoneNumber is now the primary identifier for auth
+  phoneNumber: string; 
 }
 
 export interface BarberService {

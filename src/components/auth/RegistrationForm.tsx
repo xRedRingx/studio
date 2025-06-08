@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useForm } from 'react-hook-form';
@@ -13,12 +14,12 @@ import type { UserRole } from '@/types';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { useState } from 'react';
 
+// Updated schema for phone registration
 const registrationSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  email: z.string().email("Invalid email address"),
-  phoneNumber: z.string().min(10, "Phone number must be at least 10 digits").optional().or(z.literal('')), // Optional for now
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  phoneNumber: z.string().min(10, "Valid phone number is required (e.g., +12223334444 or 10 digits minimum)"),
+  email: z.string().email("Invalid email address").optional().or(z.literal('')), // Email is now optional
 });
 
 type RegistrationFormValues = z.infer<typeof registrationSchema>;
@@ -38,21 +39,22 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
     defaultValues: {
       firstName: '',
       lastName: '',
-      email: '',
       phoneNumber: '',
-      password: '',
+      email: '',
     },
   });
 
   async function onSubmit(values: RegistrationFormValues) {
     setIsLoading(true);
     try {
+      // Pass role to signUp context function
       await signUp({ ...values, role });
       toast({
-        title: "Registration Successful!",
-        description: "Welcome! You are now being redirected.",
+        title: "Registration Initiated!",
+        description: "Please follow the instructions to verify your phone number. (Simulated for prototype)",
       });
-      router.push(`/${role}/dashboard`);
+      // In a real app, you might navigate to an OTP screen or wait for onAuthStateChanged
+      router.push(`/${role}/dashboard`); 
     } catch (error: any) {
       console.error("Registration failed:", error);
       toast({
@@ -98,24 +100,12 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
         </div>
         <FormField
           control={form.control}
-          name="email"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Email</FormLabel>
-              <FormControl>
-                <Input type="email" placeholder="Enter your email address" {...field} className="text-base py-3 px-4 h-12"/>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
           name="phoneNumber"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Phone Number (Optional)</FormLabel>
+              <FormLabel>Phone Number</FormLabel>
               <FormControl>
+                {/* Consider using a more specific input type or library for phone numbers in production */}
                 <Input type="tel" placeholder="Enter your phone number" {...field} className="text-base py-3 px-4 h-12"/>
               </FormControl>
               <FormMessage />
@@ -124,21 +114,24 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
         />
         <FormField
           control={form.control}
-          name="password"
+          name="email"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Password</FormLabel>
+              <FormLabel>Email (Optional)</FormLabel>
               <FormControl>
-                <Input type="password" placeholder="Create a password (min 6 characters)" {...field} className="text-base py-3 px-4 h-12"/>
+                <Input type="email" placeholder="Enter your email address" {...field} className="text-base py-3 px-4 h-12"/>
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
+        {/* Password field removed */}
         <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14" disabled={isLoading}>
           {isLoading ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
           Register
         </Button>
+        {/* Placeholder for reCAPTCHA, would be necessary for real Firebase phone auth */}
+        {/* <div id="recaptcha-container-registration"></div> */}
       </form>
     </Form>
   );
