@@ -5,16 +5,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import type { DayAvailability, DayOfWeek } from '@/types';
 import DayScheduleInput from './DayScheduleInput';
 import { Button } from '../ui/button';
+import LoadingSpinner from '../ui/loading-spinner';
 
 interface SetWorkScheduleSectionProps {
   schedule: DayAvailability[];
   onUpdateSchedule: (day: DayOfWeek, updates: Partial<DayAvailability>) => void;
-  onSaveChanges: () => void; // Placeholder for future save functionality
+  onSaveChanges: () => Promise<void>;
+  isSaving: boolean;
 }
 
 const daysOfWeek: DayOfWeek[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
-export default function SetWorkScheduleSection({ schedule, onUpdateSchedule, onSaveChanges }: SetWorkScheduleSectionProps) {
+export default function SetWorkScheduleSection({ schedule, onUpdateSchedule, onSaveChanges, isSaving }: SetWorkScheduleSectionProps) {
   
   const getDayAvailability = (day: DayOfWeek): DayAvailability => {
     return schedule.find(d => d.day === day) || { day, isOpen: false, startTime: '09:00 AM', endTime: '05:00 PM' };
@@ -35,8 +37,10 @@ export default function SetWorkScheduleSection({ schedule, onUpdateSchedule, onS
           />
         ))}
         <div className="pt-4 flex justify-end">
-            {/* <Button onClick={onSaveChanges}>Save Schedule Changes</Button> */}
-            {/* Save button can be implemented later if connecting to backend */}
+            <Button onClick={onSaveChanges} disabled={isSaving}>
+              {isSaving && <LoadingSpinner className="mr-2 h-4 w-4" />}
+              {isSaving ? 'Saving...' : 'Save Schedule Changes'}
+            </Button>
         </div>
       </CardContent>
     </Card>

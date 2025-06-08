@@ -6,23 +6,28 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import type { Appointment } from '@/types';
 import { cn } from '@/lib/utils';
 import { User, Clock, CheckCircle2, UserCheck, AlertCircle } from 'lucide-react';
+import LoadingSpinner from '../ui/loading-spinner';
 
 interface AppointmentCardProps {
-  appointment: Appointment;
-  onCheckIn: (appointmentId: string) => void;
-  onMarkDone: (appointmentId: string) => void;
+  appointment: Appointment & { displayStatus?: Appointment['status'] }; // displayStatus for UI highlight
+  onCheckIn: (appointmentId: string) => Promise<void>;
+  onMarkDone: (appointmentId: string) => Promise<void>;
+  isInteracting: boolean; // True if any appointment update is in progress
 }
 
-export default function AppointmentCard({ appointment, onCheckIn, onMarkDone }: AppointmentCardProps) {
-  const isNext = appointment.status === 'next';
-  const isCheckedIn = appointment.status === 'checked-in';
-  const isCompleted = appointment.status === 'completed';
+export default function AppointmentCard({ appointment, onCheckIn, onMarkDone, isInteracting }: AppointmentCardProps) {
+  // Use displayStatus for visual cues, but the actual appointment.status for logic if needed
+  const currentStatus = appointment.displayStatus || appointment.status;
+
+  const isNext = currentStatus === 'next';
+  const isCheckedIn = currentStatus === 'checked-in';
+  const isCompleted = appointment.status === 'completed'; // Original status for "completed" styling
 
   return (
     <Card className={cn(
       "shadow-lg",
       isNext && "border-primary ring-2 ring-primary",
-      isCheckedIn && "bg-blue-50",
+      isCheckedIn && !isNext && "bg-blue-50", // Don't make 'next' also blue
       isCompleted && "bg-green-50 opacity-70"
     )}>
       <CardHeader className="pb-3">
@@ -42,14 +47,16 @@ export default function AppointmentCard({ appointment, onCheckIn, onMarkDone }: 
       </CardContent>
       {!isCompleted && (
         <CardFooter className="flex justify-end space-x-2">
-          {appointment.status === 'upcoming' || appointment.status === 'next' ? (
-            <Button variant="outline" onClick={() => onCheckIn(appointment.id)} size="sm">
-              <UserCheck className="mr-2 h-4 w-4" /> Customer is Here
+          {(currentStatus === 'upcoming' || currentStatus === 'next') ? (
+            <Button variant="outline" onClick={() => onCheckIn(appointment.id)} size="sm" disabled={isInteracting}>
+              {isInteracting && appointment.status === 'upcoming' ? <LoadingSpinner className="mr-2 h-4 w-4" /> : <UserCheck className="mr-2 h-4 w-4" />}
+              Customer is Here
             </Button>
           ) : null}
-          {isCheckedIn ? (
-            <Button onClick={() => onMarkDone(appointment.id)} size="sm">
-              <CheckCircle2 className="mr-2 h-4 w-4" /> Mark as Done
+          {isCheckedIn ? ( // Only show "Mark as Done" if actually checked-in, not if it's 'next' but was 'upcoming'
+            <Button onClick={() => onMarkDone(appointment.id)} size="sm" disabled={isInteracting}>
+              {isInteracting && appointment.status === 'checked-in' ? <LoadingSpinner className="mr-2 h-4 w-4" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+              Mark as Done
             </Button>
           ) : null}
         </CardFooter>

@@ -18,11 +18,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import LoadingSpinner from '@/components/ui/loading-spinner';
 
 interface ManageServicesSectionProps {
   services: BarberService[];
-  onAddService: (service: Omit<BarberService, 'id' | 'barberId'>) => Promise<void>;
-  onUpdateService: (serviceId: string, serviceData: Omit<BarberService, 'id' | 'barberId'>) => Promise<void>;
+  onAddService: (service: Omit<BarberService, 'id' | 'barberId' | 'createdAt' | 'updatedAt'>) => Promise<void>;
+  onUpdateService: (serviceId: string, serviceData: Omit<BarberService, 'id' | 'barberId' | 'createdAt' | 'updatedAt'>) => Promise<void>;
   onDeleteService: (serviceId: string) => Promise<void>;
 }
 
@@ -48,7 +49,7 @@ export default function ManageServicesSection({
     setServiceToEdit(null);
   };
 
-  const handleSubmitService = async (serviceData: Omit<BarberService, 'id' | 'barberId'>, id?: string) => {
+  const handleSubmitService = async (serviceData: Omit<BarberService, 'id' | 'barberId' | 'createdAt' | 'updatedAt'>, id?: string) => {
     setIsSubmitting(true);
     if (id) {
       await onUpdateService(id, serviceData);
@@ -103,7 +104,7 @@ export default function ManageServicesSection({
                       <AlertDialogTrigger asChild>
                         <Button variant="destructive" size="icon" onClick={() => setServiceToDelete(service)} disabled={isSubmitting}>
                           <Trash2 className="h-4 w-4" />
-                          <span className="sr-only">Delete {service.name}</span>
+                           <span className="sr-only">Delete {service.name}</span>
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
@@ -115,7 +116,8 @@ export default function ManageServicesSection({
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel onClick={() => setServiceToDelete(null)} disabled={isSubmitting}>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={handleDeleteConfirm} disabled={isSubmitting}>
+                          <AlertDialogAction onClick={handleDeleteConfirm} disabled={isSubmitting} className={isSubmitting ? 'bg-destructive/70' : ''}>
+                            {isSubmitting ? <LoadingSpinner className="mr-2 h-4 w-4" /> : null}
                             {isSubmitting ? 'Deleting...' : 'Delete'}
                           </AlertDialogAction>
                         </AlertDialogFooter>

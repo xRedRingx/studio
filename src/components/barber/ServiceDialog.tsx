@@ -26,12 +26,13 @@ const serviceSchema = z.object({
   duration: z.coerce.number().min(5, 'Duration must be at least 5 minutes').max(720, 'Duration is too long (max 12 hours)').int('Duration must be a whole number'),
 });
 
-type ServiceFormValues = z.infer<typeof serviceSchema>;
+// Exclude Firestore-managed fields from the form values type
+type ServiceFormValues = Omit<BarberService, 'id' | 'barberId' | 'createdAt' | 'updatedAt'>;
 
 interface ServiceDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onSubmit: (service: Omit<BarberService, 'id' | 'barberId'>, id?: string) => Promise<void>;
+  onSubmit: (service: ServiceFormValues, id?: string) => Promise<void>;
   serviceToEdit?: BarberService | null;
   isSubmitting: boolean;
 }
@@ -47,7 +48,7 @@ export default function ServiceDialog({ isOpen, onClose, onSubmit, serviceToEdit
   });
 
   useEffect(() => {
-    if (isOpen) { // Only reset form when dialog opens
+    if (isOpen) { 
       if (serviceToEdit) {
         form.reset({
           name: serviceToEdit.name,
@@ -62,12 +63,9 @@ export default function ServiceDialog({ isOpen, onClose, onSubmit, serviceToEdit
 
   const handleSubmit = async (values: ServiceFormValues) => {
     await onSubmit(values, serviceToEdit?.id);
-    // onClose is called by parent after submission completes
   };
 
-  // This check should ideally not be needed if parent controls isOpen properly,
-  // but as a fallback.
-  if (!isOpen) return null; 
+  if (!isOpen) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && !isSubmitting && onClose()}>

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import ProtectedPage from '@/components/layout/ProtectedPage';
 import { useAuth } from '@/hooks/useAuth';
-import type { BarberService, DayAvailability, Appointment, DayOfWeek } from '@/types';
+import type { BarberService, DayAvailability, Appointment, DayOfWeek, BarberScheduleDoc } from '@/types';
 import ManageServicesSection from '@/components/barber/ManageServicesSection';
 import SetWorkScheduleSection from '@/components/barber/SetWorkScheduleSection';
 import TodaysAppointmentsSection from '@/components/barber/TodaysAppointmentsSection';
@@ -19,48 +19,44 @@ import {
   deleteDoc,
   orderBy,
   Timestamp,
+  setDoc,
+  getDoc,
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 
-// Helper to get today's date in YYYY-MM-DD format
+// Helper to get today's date in YYYY-MM-DD format - remains client-side for filtering
 const getTodayDateString = () => new Date().toISOString().split('T')[0];
 
-// Initial dummy data for schedule and appointments (services will be fetched)
-const initialSchedule: DayAvailability[] = (['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as DayOfWeek[]).map(day => ({
+const INITIAL_SCHEDULE: DayAvailability[] = (['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as DayOfWeek[]).map(day => ({
   day,
-  isOpen: !['Saturday', 'Sunday'].includes(day), 
+  isOpen: !['Saturday', 'Sunday'].includes(day),
   startTime: '09:00 AM',
   endTime: '05:00 PM',
 }));
 
-const appointmentsForTodayBase: Omit<Appointment, 'id' | 'date'>[] = [
-  { customerName: 'John Doe', serviceName: "Men's Haircut", startTime: '10:00 AM', endTime: '10:30 AM', status: 'upcoming' },
-  { customerName: 'Jane Smith', serviceName: "Beard Trim", startTime: '11:00 AM', endTime: '11:15 AM', status: 'upcoming' },
-  { customerName: 'Mike Ross', serviceName: "Men's Haircut", startTime: '02:00 PM', endTime: '02:30 PM', status: 'upcoming' },
-  { customerName: 'Sarah Connor', serviceName: "Men's Haircut", startTime: '09:00 AM', endTime: '09:30 AM', status: 'completed' },
-  { customerName: 'Kyle Reese', serviceName: "Beard Trim", startTime: '04:00 PM', endTime: '04:15 PM', status: 'upcoming' },
-];
-
-const appointmentForAnotherDay: Appointment = {
-  id: 'app6', customerName: 'Old Appointment', serviceName: "Men's Haircut", startTime: '10:00 AM', endTime: '10:30 AM', status: 'completed', date: '2023-01-01'
-};
-
 export default function BarberDashboardPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [services, setServices] = useState<BarberService[]>([]);
-  const [schedule, setSchedule] = useState<DayAvailability[]>(initialSchedule);
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [isLoadingServices, setIsLoadingServices] = useState(true);
 
-  // Fetch services from Firestore
+  const [services, setServices] = useState<BarberService[]>([]);
+  const [schedule, setSchedule] = useState<DayAvailability[]>(INITIAL_SCHEDULE);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+
+  const [isLoadingServices, setIsLoadingServices] = useState(true);
+  const [isLoadingSchedule, setIsLoadingSchedule] = useState(true);
+  const [isSavingSchedule, setIsSavingSchedule] = useState(false);
+  const [isLoadingAppointments, setIsLoadingAppointments] = useState(true);
+  const [isUpdatingAppointment, setIsUpdatingAppointment] = useState(false);
+
+
+  // --- Services ---
   const fetchServices = useCallback(async () => {
     if (!user?.uid) return;
     setIsLoadingServices(true);
     try {
       const servicesCollection = collection(firestore, 'services');
-      const q = query(servicesCollection, where('barberId', '==', user.uid), orderBy('name'));
+      const q = query(servicesCollection, where('barberId', '==', user.uid), orderBy('createdAt', 'desc'));
       const querySnapshot = await getDocs(q);
       const fetchedServices: BarberService[] = [];
       querySnapshot.forEach((doc) => {
@@ -75,31 +71,16 @@ export default function BarberDashboardPage() {
     }
   }, [user?.uid, toast]);
 
-  useEffect(() => {
-    fetchServices();
-  }, [fetchServices]);
-
-  useEffect(() => {
-    const today = getTodayDateString();
-    const dynamicAppointmentsForToday: Appointment[] = appointmentsForTodayBase.map((app, index) => ({
-      ...app,
-      id: `app${index + 1}`,
-      date: today,
-    }));
-    setAppointments([...dynamicAppointmentsForToday, appointmentForAnotherDay]);
-  }, []);
-
-
-  // Manage Services Handlers
-  const handleAddService = async (serviceData: Omit<BarberService, 'id' | 'barberId'>) => {
+  const handleAddService = async (serviceData: Omit<BarberService, 'id' | 'barberId' | 'createdAt' | 'updatedAt'>) => {
     if (!user?.uid) {
       toast({ title: "Error", description: "You must be logged in to add services.", variant: "destructive" });
       return;
     }
     try {
-      const newServiceData = { ...serviceData, barberId: user.uid, createdAt: Timestamp.now() };
+      const now = Timestamp.now();
+      const newServiceData = { ...serviceData, barberId: user.uid, createdAt: now, updatedAt: now };
       const docRef = await addDoc(collection(firestore, 'services'), newServiceData);
-      setServices((prev) => [...prev, { ...newServiceData, id: docRef.id }]);
+      setServices((prev) => [{ ...newServiceData, id: docRef.id }, ...prev]);
       toast({ title: "Success", description: "Service added successfully." });
     } catch (error) {
       console.error("Error adding service:", error);
@@ -107,11 +88,12 @@ export default function BarberDashboardPage() {
     }
   };
 
-  const handleUpdateService = async (serviceId: string, serviceData: Omit<BarberService, 'id' | 'barberId'>) => {
+  const handleUpdateService = async (serviceId: string, serviceData: Omit<BarberService, 'id' | 'barberId' | 'createdAt' | 'updatedAt'>) => {
     try {
       const serviceRef = doc(firestore, 'services', serviceId);
-      await updateDoc(serviceRef, serviceData);
-      setServices((prev) => prev.map(s => s.id === serviceId ? { ...s, ...serviceData } : s));
+      const updatedServiceData = { ...serviceData, updatedAt: Timestamp.now() };
+      await updateDoc(serviceRef, updatedServiceData);
+      setServices((prev) => prev.map(s => s.id === serviceId ? { ...s, ...updatedServiceData } : s));
       toast({ title: "Success", description: "Service updated successfully." });
     } catch (error) {
       console.error("Error updating service:", error);
@@ -131,25 +113,106 @@ export default function BarberDashboardPage() {
     }
   };
 
-  // Set Work Schedule Handlers (currently local state)
-  const handleUpdateSchedule = (day: DayOfWeek, updates: Partial<DayAvailability>) => {
+  // --- Schedule ---
+  const fetchSchedule = useCallback(async () => {
+    if (!user?.uid) return;
+    setIsLoadingSchedule(true);
+    try {
+      const scheduleDocRef = doc(firestore, 'barberSchedules', user.uid);
+      const docSnap = await getDoc(scheduleDocRef);
+      if (docSnap.exists()) {
+        const scheduleData = docSnap.data() as BarberScheduleDoc;
+        setSchedule(scheduleData.schedule);
+      } else {
+        setSchedule(INITIAL_SCHEDULE); // Use default if no schedule saved yet
+      }
+    } catch (error) {
+      console.error("Error fetching schedule:", error);
+      toast({ title: "Error", description: "Could not fetch work schedule.", variant: "destructive" });
+      setSchedule(INITIAL_SCHEDULE); // Fallback to initial on error
+    } finally {
+      setIsLoadingSchedule(false);
+    }
+  }, [user?.uid, toast]);
+
+  const handleUpdateScheduleDay = (day: DayOfWeek, updates: Partial<DayAvailability>) => {
     setSchedule((prev) =>
       prev.map((d) => (d.day === day ? { ...d, ...updates } : d))
     );
   };
-  const handleSaveSchedule = () => {
-    console.log("Schedule saved (local):", schedule);
-    toast({ title: "Schedule Saved (Local)", description: "Schedule changes are saved locally."});
-    // TODO: Persist schedule to Firestore
+
+  const handleSaveSchedule = async () => {
+    if (!user?.uid) {
+      toast({ title: "Error", description: "You must be logged in.", variant: "destructive" });
+      return;
+    }
+    setIsSavingSchedule(true);
+    try {
+      const scheduleDocRef = doc(firestore, 'barberSchedules', user.uid);
+      const scheduleDataToSave: BarberScheduleDoc = {
+        barberId: user.uid,
+        schedule: schedule,
+        updatedAt: Timestamp.now(),
+      };
+      await setDoc(scheduleDocRef, scheduleDataToSave, { merge: true }); // merge true will create or update
+      toast({ title: "Success", description: "Work schedule saved successfully." });
+    } catch (error) {
+      console.error("Error saving schedule:", error);
+      toast({ title: "Error", description: "Could not save work schedule.", variant: "destructive" });
+    } finally {
+      setIsSavingSchedule(false);
+    }
   };
 
-  // Today's Appointments Handlers (currently local state)
-  const handleUpdateAppointmentStatus = (appointmentId: string, status: Appointment['status']) => {
-    setAppointments((prev) =>
-      prev.map((app) => (app.id === appointmentId ? { ...app, status } : app))
-    );
-     // TODO: Persist appointment status changes to Firestore
+  // --- Appointments ---
+  const fetchAppointments = useCallback(async () => {
+    if (!user?.uid) return;
+    setIsLoadingAppointments(true);
+    try {
+      const appointmentsCollection = collection(firestore, 'appointments');
+      // For now, just fetch all appointments for the barber. Sorting/filtering for "today" happens in TodaysAppointmentsSection.
+      // Consider adding server-side filtering by date in the future for performance.
+      const q = query(appointmentsCollection, where('barberId', '==', user.uid), orderBy('date', 'desc'), orderBy('startTime'));
+      const querySnapshot = await getDocs(q);
+      const fetchedAppointments: Appointment[] = [];
+      querySnapshot.forEach((doc) => {
+        fetchedAppointments.push({ id: doc.id, ...doc.data() } as Appointment);
+      });
+      setAppointments(fetchedAppointments);
+    } catch (error) {
+      console.error("Error fetching appointments:", error);
+      toast({ title: "Error", description: "Could not fetch appointments.", variant: "destructive" });
+    } finally {
+      setIsLoadingAppointments(false);
+    }
+  }, [user?.uid, toast]);
+
+  const handleUpdateAppointmentStatus = async (appointmentId: string, status: Appointment['status']) => {
+    setIsUpdatingAppointment(true);
+    try {
+      const appointmentRef = doc(firestore, 'appointments', appointmentId);
+      await updateDoc(appointmentRef, { status: status, updatedAt: Timestamp.now() });
+      setAppointments((prev) =>
+        prev.map((app) => (app.id === appointmentId ? { ...app, status, updatedAt: Timestamp.now() } : app))
+      );
+      toast({ title: "Success", description: `Appointment status updated to ${status}.` });
+    } catch (error) {
+      console.error("Error updating appointment status:", error);
+      toast({ title: "Error", description: "Could not update appointment status.", variant: "destructive" });
+    } finally {
+      setIsUpdatingAppointment(false);
+    }
   };
+
+  // Initial data fetching
+  useEffect(() => {
+    if (user?.uid) {
+      fetchServices();
+      fetchSchedule();
+      fetchAppointments();
+    }
+  }, [user?.uid, fetchServices, fetchSchedule, fetchAppointments]);
+
 
   return (
     <ProtectedPage expectedRole="barber">
@@ -158,10 +221,18 @@ export default function BarberDashboardPage() {
           Barber Dashboard, {user?.firstName || user?.displayName || 'Barber'}!
         </h1>
 
-        <TodaysAppointmentsSection
-          appointments={appointments}
-          onUpdateAppointmentStatus={handleUpdateAppointmentStatus}
-        />
+        {isLoadingAppointments ? (
+          <div className="flex justify-center items-center py-10">
+            <LoadingSpinner className="h-8 w-8 text-primary" />
+            <p className="ml-2">Loading appointments...</p>
+          </div>
+        ) : (
+          <TodaysAppointmentsSection
+            appointments={appointments} // Pass all fetched appointments
+            onUpdateAppointmentStatus={handleUpdateAppointmentStatus}
+            isUpdatingAppointment={isUpdatingAppointment}
+          />
+        )}
         
         {isLoadingServices ? (
           <div className="flex justify-center items-center py-10">
@@ -177,12 +248,19 @@ export default function BarberDashboardPage() {
           />
         )}
 
-        <SetWorkScheduleSection
-          schedule={schedule}
-          onUpdateSchedule={handleUpdateSchedule}
-          onSaveChanges={handleSaveSchedule} // TODO: Implement Firestore save for schedule
-        />
-        
+        {isLoadingSchedule ? (
+           <div className="flex justify-center items-center py-10">
+            <LoadingSpinner className="h-8 w-8 text-primary" />
+            <p className="ml-2">Loading schedule...</p>
+          </div>
+        ) : (
+          <SetWorkScheduleSection
+            schedule={schedule}
+            onUpdateSchedule={handleUpdateScheduleDay}
+            onSaveChanges={handleSaveSchedule}
+            isSaving={isSavingSchedule}
+          />
+        )}
       </div>
     </ProtectedPage>
   );

@@ -6,58 +6,72 @@ import type { Appointment } from '@/types';
 import AppointmentCard from './AppointmentCard';
 import { CalendarDays } from 'lucide-react';
 import { useMemo, useState, useEffect } from 'react';
-import LoadingSpinner from '@/components/ui/loading-spinner'; // Assuming you have a spinner
+import LoadingSpinner from '@/components/ui/loading-spinner';
 
 // Helper to get today's date in YYYY-MM-DD format
 const getTodayDateStringLocal = () => new Date().toISOString().split('T')[0];
 
 interface TodaysAppointmentsSectionProps {
-  appointments: Appointment[];
-  onUpdateAppointmentStatus: (appointmentId: string, status: Appointment['status']) => void;
+  appointments: Appointment[]; // All appointments for the barber are passed in
+  onUpdateAppointmentStatus: (appointmentId: string, status: Appointment['status']) => Promise<void>;
+  isUpdatingAppointment: boolean; // To disable buttons during an update
 }
 
-export default function TodaysAppointmentsSection({ appointments, onUpdateAppointmentStatus }: TodaysAppointmentsSectionProps) {
+export default function TodaysAppointmentsSection({ appointments, onUpdateAppointmentStatus, isUpdatingAppointment }: TodaysAppointmentsSectionProps) {
   const [todayDate, setTodayDate] = useState<string | null>(null);
 
   useEffect(() => {
-    setTodayDate(getTodayDateStringLocal());
-  }, []); // Runs once on mount, client-side
+    setTodayDate(getTodayDateStringLocal()); // Set today's date on client mount
+  }, []);
 
   const todaysAppointments = useMemo(() => {
     if (!todayDate) {
       return [];
     }
     return appointments
-      .filter(app => app.date === todayDate)
+      .filter(app => app.date === todayDate) // Filter for today
       .sort((a, b) => {
-        // Sort by start time - ensure consistent date for comparison
-        const dateForComparison = todayDate || '1970-01-01'; // Fallback, though todayDate should be set
-        const timeA = new Date(`${dateForComparison}T${a.startTime.replace(/( AM| PM)/, '')}`);
-        const timeB = new Date(`${dateForComparison}T${b.startTime.replace(/( AM| PM)/, '')}`);
-        if (a.startTime.includes('PM') && !a.startTime.includes('12:')) timeA.setHours(timeA.getHours() + 12);
-        if (b.startTime.includes('PM') && !b.startTime.includes('12:')) timeB.setHours(timeB.getHours() + 12);
-        if (a.startTime.includes('AM') && a.startTime.includes('12:')) timeA.setHours(0); 
-        if (b.startTime.includes('AM') && b.startTime.includes('12:')) timeB.setHours(0); 
-        return timeA.getTime() - timeB.getTime();
+        // Sort by start time
+        const dateForComparison = todayDate || '1970-01-01';
+        let timeAHours = parseInt(a.startTime.split(':')[0]);
+        const timeAMinutes = parseInt(a.startTime.split(':')[1].substring(0,2));
+        if (a.startTime.includes('PM') && timeAHours !== 12) timeAHours += 12;
+        if (a.startTime.includes('AM') && timeAHours === 12) timeAHours = 0; // Midnight case
+
+        let timeBHours = parseInt(b.startTime.split(':')[0]);
+        const timeBMinutes = parseInt(b.startTime.split(':')[1].substring(0,2));
+        if (b.startTime.includes('PM') && timeBHours !== 12) timeBHours += 12;
+        if (b.startTime.includes('AM') && timeBHours === 12) timeBHours = 0; // Midnight case
+        
+        const fullTimeA = new Date(`${dateForComparison}T00:00:00`);
+        fullTimeA.setHours(timeAHours, timeAMinutes);
+        
+        const fullTimeB = new Date(`${dateForComparison}T00:00:00`);
+        fullTimeB.setHours(timeBHours, timeBMinutes);
+
+        return fullTimeA.getTime() - fullTimeB.getTime();
       })
       .map((app, index, arr) => {
-        const firstUpcomingIndex = arr.findIndex(a => a.status === 'upcoming');
-        if (app.status === 'upcoming' && index === firstUpcomingIndex) {
-          return { ...app, status: 'next' as Appointment['status'] };
+        // Determine "next" status
+        const firstUpcomingOrCheckedInIndex = arr.findIndex(a => a.status === 'upcoming' || a.status === 'checked-in');
+        if ((app.status === 'upcoming' || app.status === 'checked-in') && index === firstUpcomingOrCheckedInIndex) {
+          // If this is the first 'upcoming' or 'checked-in' appointment, mark it as 'next' for display
+          // But keep its original status for Firestore updates
+          return { ...app, displayStatus: 'next' as Appointment['status'] };
         }
-        return app;
+        return {...app, displayStatus: app.status };
       });
   }, [appointments, todayDate]);
 
-  const handleCheckIn = (appointmentId: string) => {
-    onUpdateAppointmentStatus(appointmentId, 'checked-in');
+  const handleCheckIn = async (appointmentId: string) => {
+    await onUpdateAppointmentStatus(appointmentId, 'checked-in');
   };
 
-  const handleMarkDone = (appointmentId: string) => {
-    onUpdateAppointmentStatus(appointmentId, 'completed');
+  const handleMarkDone = async (appointmentId: string) => {
+    await onUpdateAppointmentStatus(appointmentId, 'completed');
   };
 
-  if (!todayDate) {
+  if (!todayDate) { // Still determining today's date on the client
     return (
       <Card>
         <CardHeader>
@@ -72,6 +86,10 @@ export default function TodaysAppointmentsSection({ appointments, onUpdateAppoin
       </Card>
     );
   }
+  
+  const formattedTodayDate = new Date(todayDate + 'T00:00:00').toLocaleDateString(undefined, { 
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' 
+  });
 
   return (
     <Card>
@@ -79,7 +97,7 @@ export default function TodaysAppointmentsSection({ appointments, onUpdateAppoin
         <CardTitle className="flex items-center">
           <CalendarDays className="mr-2 h-6 w-6 text-primary" /> Today's Appointments
         </CardTitle>
-        <CardDescription>View and manage your appointments scheduled for today ({new Date(todayDate + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}).</CardDescription>
+        <CardDescription>View and manage your appointments scheduled for today ({formattedTodayDate}).</CardDescription>
       </CardHeader>
       <CardContent>
         {todaysAppointments.length === 0 ? (
@@ -89,9 +107,12 @@ export default function TodaysAppointmentsSection({ appointments, onUpdateAppoin
             {todaysAppointments.map((appointment) => (
               <AppointmentCard
                 key={appointment.id}
-                appointment={appointment}
+                // Pass displayStatus for card styling, but original status for logic if needed
+                appointment={{...appointment, status: appointment.displayStatus || appointment.status}}
                 onCheckIn={handleCheckIn}
                 onMarkDone={handleMarkDone}
+                // Disable buttons if any appointment status is currently being updated
+                isInteracting={isUpdatingAppointment} 
               />
             ))}
           </div>
