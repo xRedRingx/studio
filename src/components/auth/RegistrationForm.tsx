@@ -14,12 +14,17 @@ import type { UserRole } from '@/types';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { useState } from 'react';
 
-// Updated schema for phone registration
+// Updated schema for phone + password registration
 const registrationSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   phoneNumber: z.string().min(10, "Valid phone number is required (e.g., +12223334444 or 10 digits minimum)"),
-  email: z.string().email("Invalid email address").optional().or(z.literal('')), // Email is now optional
+  email: z.string().email("Invalid email address").optional().or(z.literal('')), // Email remains optional
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  confirmPassword: z.string().min(6, "Password confirmation is required"),
+}).refine(data => data.password === data.confirmPassword, {
+  message: "Passwords do not match",
+  path: ["confirmPassword"], // path of error
 });
 
 type RegistrationFormValues = z.infer<typeof registrationSchema>;
@@ -41,6 +46,8 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
       lastName: '',
       phoneNumber: '',
       email: '',
+      password: '',
+      confirmPassword: '',
     },
   });
 
@@ -48,13 +55,13 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
     setIsLoading(true);
     try {
       // Pass role to signUp context function
-      await signUp({ ...values, role });
+      // phoneNumber will be used as 'email' by Firebase auth internally
+      await signUp({ ...values, role }); 
       toast({
-        title: "Registration Initiated!",
-        description: "Please follow the instructions to verify your phone number. (Simulated for prototype)",
+        title: "Registration Successful!",
+        description: "You can now log in.",
       });
-      // In a real app, you might navigate to an OTP screen or wait for onAuthStateChanged
-      router.push(`/${role}/dashboard`); 
+      router.push(`/${role}/login`); // Redirect to login page after successful registration
     } catch (error: any) {
       console.error("Registration failed:", error);
       toast({
@@ -105,7 +112,6 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
             <FormItem>
               <FormLabel>Phone Number</FormLabel>
               <FormControl>
-                {/* Consider using a more specific input type or library for phone numbers in production */}
                 <Input type="tel" placeholder="Enter your phone number" {...field} className="text-base py-3 px-4 h-12"/>
               </FormControl>
               <FormMessage />
@@ -125,13 +131,36 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
             </FormItem>
           )}
         />
-        {/* Password field removed */}
+        <FormField
+          control={form.control}
+          name="password"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Password</FormLabel>
+              <FormControl>
+                <Input type="password" placeholder="Enter your password" {...field} className="text-base py-3 px-4 h-12"/>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
+          name="confirmPassword"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Confirm Password</FormLabel>
+              <FormControl>
+                <Input type="password" placeholder="Confirm your password" {...field} className="text-base py-3 px-4 h-12"/>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
         <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14" disabled={isLoading}>
           {isLoading ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
           Register
         </Button>
-        {/* Placeholder for reCAPTCHA, would be necessary for real Firebase phone auth */}
-        {/* <div id="recaptcha-container-registration"></div> */}
       </form>
     </Form>
   );

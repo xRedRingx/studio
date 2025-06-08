@@ -4,8 +4,6 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-// Link component is no longer needed here as "Forgot Password" is removed
-// import Link from 'next/link'; 
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,11 +13,12 @@ import { useToast } from '@/hooks/use-toast';
 import type { UserRole } from '@/types';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { useState } from 'react';
+import Link from 'next/link'; // Re-add if "Forgot Password?" is to be used with custom logic
 
-// Updated schema for phone login
+// Updated schema for phone + password login
 const loginSchema = z.object({
   phoneNumber: z.string().min(10, "Valid phone number is required"),
-  // Password field removed
+  password: z.string().min(1, "Password is required"), // Password field re-added
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
@@ -38,24 +37,25 @@ export default function LoginForm({ role }: LoginFormProps) {
     resolver: zodResolver(loginSchema),
     defaultValues: {
       phoneNumber: '',
+      password: '', // Default password
     },
   });
 
   async function onSubmit(values: LoginFormValues) {
     setIsLoading(true);
     try {
-      await signIn(values.phoneNumber);
+      // signIn will use phoneNumber as 'email' and password for Firebase auth
+      await signIn(values); 
       toast({
-        title: "Login Initiated!",
-        description: "If your number is recognized, you'll proceed. (Simulated for prototype)",
+        title: "Login Successful!",
+        description: "Welcome back!",
       });
-      // In a real app, you might navigate to an OTP screen or wait for onAuthStateChanged
       router.push(`/${role}/dashboard`);
     } catch (error: any) {
       console.error("Login failed:", error);
       toast({
         title: "Login Failed",
-        description: error.message || "Invalid phone number or an error occurred. Please try again.",
+        description: error.message || "Invalid phone number/password or an error occurred.",
         variant: "destructive",
       });
     } finally {
@@ -73,26 +73,42 @@ export default function LoginForm({ role }: LoginFormProps) {
             <FormItem>
               <FormLabel>Phone Number</FormLabel>
               <FormControl>
-                 {/* Consider using a more specific input type or library for phone numbers in production */}
                 <Input type="tel" placeholder="Enter your phone number" {...field} className="text-base py-3 px-4 h-12"/>
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-        {/* Password field removed */}
-        {/* Forgot Password link removed */}
-        {/* <div className="flex items-center justify-end">
+        <FormField
+          control={form.control}
+          name="password"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Password</FormLabel>
+              <FormControl>
+                <Input type="password" placeholder="Enter your password" {...field} className="text-base py-3 px-4 h-12"/>
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        {/* 
+          "Forgot Password?" link is complex with phone-as-email. 
+          Firebase's sendPasswordResetEmail expects a real email.
+          A custom solution would be needed for phone-based password reset (e.g., via SMS OTP to reset).
+          For now, it remains commented out.
+        */}
+        {/* 
+        <div className="flex items-center justify-end">
           <Link href="/forgot-password" className="text-sm text-primary hover:underline">
             Forgot Password?
           </Link>
-        </div> */}
+        </div> 
+        */}
         <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14 mt-4" disabled={isLoading}>
           {isLoading ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
           Login
         </Button>
-         {/* Placeholder for reCAPTCHA, would be necessary for real Firebase phone auth */}
-        {/* <div id="recaptcha-container-login"></div> */}
       </form>
     </Form>
   );
