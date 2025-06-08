@@ -90,8 +90,8 @@ export default function LoginForm({ role }: LoginFormProps) {
           )}
         />
         <div className="flex items-center justify-end">
-          <Link href="/forgot-password" legacyBehavior>
-            <a className="text-sm text-primary hover:underline">Forgot Password?</a>
+          <Link href="/forgot-password" className="text-sm text-primary hover:underline">
+            Forgot Password?
           </Link>
         </div>
         <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14" disabled={isLoading}>
