@@ -1,6 +1,7 @@
 
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -8,20 +9,25 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import type { UserRole } from '@/types';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { useState } from 'react';
 
-// Schema for phone + OTP registration (no email, no password here)
-const registrationSchema = z.object({
+const RECAPTCHA_CONTAINER_ID = 'recaptcha-container-register';
+
+const userDetailsSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  phoneNumber: z.string().min(10, "Valid phone number is required (e.g., +12223334444 or 10 digits minimum)"),
+  phoneNumber: z.string().min(10, "Valid phone number is required (e.g., +12223334444 or 10 digits)"),
 });
+type UserDetailsFormValues = z.infer<typeof userDetailsSchema>;
 
-type RegistrationFormValues = z.infer<typeof registrationSchema>;
+const otpSchema = z.object({
+  otp: z.string().length(6, "OTP must be 6 digits"),
+});
+type OtpFormValues = z.infer<typeof otpSchema>;
 
 interface RegistrationFormProps {
   role: UserRole;
@@ -29,12 +35,13 @@ interface RegistrationFormProps {
 
 export default function RegistrationForm({ role }: RegistrationFormProps) {
   const router = useRouter();
-  const { signUp } = useAuth(); // signUp will handle phone + OTP (simulated)
+  const { sendOtp, confirmOtp, otpSent, isSendingOtp, isVerifyingOtp, resetOtpState, user } = useAuth();
   const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
 
-  const form = useForm<RegistrationFormValues>({
-    resolver: zodResolver(registrationSchema),
+  const [pendingRegistrationDetails, setPendingRegistrationDetails] = useState<UserDetailsFormValues | null>(null);
+
+  const userDetailsForm = useForm<UserDetailsFormValues>({
+    resolver: zodResolver(userDetailsSchema),
     defaultValues: {
       firstName: '',
       lastName: '',
@@ -42,34 +49,91 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
     },
   });
 
-  async function onSubmit(values: RegistrationFormValues) {
-    setIsLoading(true);
-    try {
-      // Pass role and no email
-      await signUp({ ...values, role }); 
-      toast({
-        title: "Registration Initiated!",
-        description: "Account created (OTP flow simulated). You can now log in.",
-      });
-      router.push(`/${role}/login`); 
-    } catch (error: any) {
-      console.error("Registration failed:", error);
-      toast({
-        title: "Registration Failed",
-        description: error.message || "An unexpected error occurred. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
+  const otpForm = useForm<OtpFormValues>({
+    resolver: zodResolver(otpSchema),
+    defaultValues: {
+      otp: '',
+    },
+  });
+
+  useEffect(() => {
+    // If user becomes authenticated (meaning registration & OTP confirm successful), redirect
+    if (user && role) {
+      resetOtpState();
+      router.push(`/${role}/login`); // Redirect to login after successful registration
+      toast({ title: "Registration Successful!", description: "You can now log in with your phone number." });
     }
+  }, [user, role, router, toast, resetOtpState]);
+
+  // Cleanup OTP state if component unmounts or role changes
+  useEffect(() => {
+    return () => {
+      resetOtpState();
+    };
+  }, [resetOtpState, role]);
+
+  async function onUserDetailsSubmit(values: UserDetailsFormValues) {
+    setPendingRegistrationDetails(values);
+    await sendOtp(values.phoneNumber, RECAPTCHA_CONTAINER_ID, true, { 
+      firstName: values.firstName, 
+      lastName: values.lastName, 
+      role: role 
+    });
+  }
+
+  async function onOtpSubmit(values: OtpFormValues) {
+    // pendingRegistrationDetails should be set in AuthContext now.
+    // confirmOtp in AuthContext will handle creating the user document.
+    await confirmOtp(values.otp);
+  }
+
+  if (otpSent) {
+    return (
+      <Form {...otpForm}>
+        <form onSubmit={otpForm.handleSubmit(onOtpSubmit)} className="space-y-6">
+          <p className="text-sm text-muted-foreground">
+            Enter the 6-digit OTP sent to {pendingRegistrationDetails?.phoneNumber}.
+          </p>
+          <FormField
+            control={otpForm.control}
+            name="otp"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>One-Time Password</FormLabel>
+                <FormControl>
+                  <InputOTP maxLength={6} {...field}>
+                    <InputOTPGroup className="w-full justify-between">
+                      <InputOTPSlot index={0} />
+                      <InputOTPSlot index={1} />
+                      <InputOTPSlot index={2} />
+                      <InputOTPSlot index={3} />
+                      <InputOTPSlot index={4} />
+                      <InputOTPSlot index={5} />
+                    </InputOTPGroup>
+                  </InputOTP>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14" disabled={isVerifyingOtp}>
+            {isVerifyingOtp ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
+            Verify OTP & Register
+          </Button>
+          <Button variant="link" onClick={() => resetOtpState()} disabled={isVerifyingOtp}>
+            Change details or resend OTP
+          </Button>
+        </form>
+      </Form>
+    );
   }
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+    <Form {...userDetailsForm}>
+      <form onSubmit={userDetailsForm.handleSubmit(onUserDetailsSubmit)} className="space-y-6">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <FormField
-            control={form.control}
+            control={userDetailsForm.control}
             name="firstName"
             render={({ field }) => (
               <FormItem>
@@ -82,7 +146,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
             )}
           />
           <FormField
-            control={form.control}
+            control={userDetailsForm.control}
             name="lastName"
             render={({ field }) => (
               <FormItem>
@@ -96,24 +160,28 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
           />
         </div>
         <FormField
-          control={form.control}
+          control={userDetailsForm.control}
           name="phoneNumber"
           render={({ field }) => (
             <FormItem>
               <FormLabel>Phone Number</FormLabel>
               <FormControl>
-                <Input type="tel" placeholder="Enter your phone number" {...field} className="text-base py-3 px-4 h-12"/>
+                <Input 
+                  type="tel" 
+                  placeholder="Enter phone number (e.g. +14155552671)" 
+                  {...field} 
+                  className="text-base py-3 px-4 h-12"
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-        {/* Email field removed */}
-        <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14" disabled={isLoading}>
-          {isLoading ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
-          Register
+        <div id={RECAPTCHA_CONTAINER_ID}></div>
+        <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14" disabled={isSendingOtp}>
+          {isSendingOtp ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
+          Send OTP
         </Button>
-        {/* TODO: Add a div here for reCAPTCHA if implementing full Firebase phone auth, e.g., <div id="recaptcha-container-id-register"></div> */}
       </form>
     </Form>
   );

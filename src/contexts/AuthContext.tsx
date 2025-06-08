@@ -5,42 +5,36 @@ import type { ReactNode } from 'react';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { 
   onAuthStateChanged,
-  // signInWithPhoneNumber, // Import this for actual phone auth
-  // RecaptchaVerifier, // Import this for actual phone auth
+  signInWithPhoneNumber,
+  RecaptchaVerifier,
   signOut as firebaseSignOut,
-  // type UserCredential, // May not be directly applicable for OTP flow simulation as is
-  // type AuthError,
-  type User as FirebaseUserType, // Renamed to avoid conflict with our FirebaseUser
+  type ConfirmationResult,
+  type User as FirebaseUserType,
 } from 'firebase/auth';
 import { auth, firestore } from '@/firebase/config';
 import type { AppUser, UserRole, FirebaseUser } from '@/types';
 import { LOCAL_STORAGE_ROLE_KEY } from '@/lib/constants';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
-
-// Placeholder for actual Firebase UserCredential if using full phone auth
-// For simulation, we might not get a full UserCredential in the same way
-interface SimulatedUserCredential {
-  user: FirebaseUser;
-}
+import { useToast } from '@/hooks/use-toast';
 
 interface AuthContextType {
   user: AppUser | null;
   role: UserRole | null;
   loadingAuth: boolean;
   initialRoleChecked: boolean;
+  isSendingOtp: boolean;
+  isVerifyingOtp: boolean;
+  otpSent: boolean;
   setRole: (role: UserRole) => void;
-  signUp: (data: {
-    firstName: string;
-    lastName: string;
-    phoneNumber: string;
-    // email removed from input
-    role: UserRole;
-  }) => Promise<SimulatedUserCredential>; // Updated return type for simulation
-  signIn: (data: {
-    phoneNumber: string;
-  }) => Promise<SimulatedUserCredential>; // Updated return type for simulation
+  sendOtp: (
+    phoneNumber: string, 
+    recaptchaContainerId: string,
+    isRegistration: boolean, 
+    userDetails?: { firstName: string; lastName: string; role: UserRole }
+  ) => Promise<void>;
+  confirmOtp: (otp: string) => Promise<void>;
   signOut: () => Promise<void>;
-  // recaptchaVerifier: RecaptchaVerifier | null; // Placeholder for actual Recaptcha
+  resetOtpState: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -50,7 +44,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [role, setRoleState] = useState<UserRole | null>(null);
   const [loadingAuth, setLoadingAuth] = useState(true);
   const [initialRoleChecked, setInitialRoleChecked] = useState(false);
-  // const [recaptchaVerifier, setRecaptchaVerifier] = useState<RecaptchaVerifier | null>(null);
+  
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [pendingUserDetails, setPendingUserDetails] = useState<{ firstName: string; lastName: string; phoneNumber: string; role: UserRole } | null>(null);
+
+  const { toast } = useToast();
+
+  // RecaptchaVerifier instances - managed here to avoid re-initialization on every call
+  // These are initialized in the sendOtp function now
+  const [loginRecaptchaVerifier, setLoginRecaptchaVerifier] = useState<RecaptchaVerifier | null>(null);
+  const [registerRecaptchaVerifier, setRegisterRecaptchaVerifier] = useState<RecaptchaVerifier | null>(null);
+
 
   useEffect(() => {
     const storedRole = localStorage.getItem(LOCAL_STORAGE_ROLE_KEY) as UserRole | null;
@@ -59,21 +66,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
     setInitialRoleChecked(true);
 
-    // For actual phone auth, you'd set up RecaptchaVerifier here, possibly in a useEffect
-    // Example:
-    // if (auth && !recaptchaVerifier) {
-    //   const verifier = new RecaptchaVerifier(auth, 'recaptcha-container-id', { // 'recaptcha-container-id' is an invisible div
-    //     'size': 'invisible',
-    //     'callback': (response: any) => {
-    //       // reCAPTCHA solved, allow signInWithPhoneNumber.
-    //     },
-    //     'expired-callback': () => {
-    //       // Response expired. Ask user to solve reCAPTCHA again.
-    //     }
-    //   });
-    //   setRecaptchaVerifier(verifier);
-    // }
-
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUserType | null) => {
       if (firebaseUser) {
         const userDocRef = doc(firestore, "users", firebaseUser.uid);
@@ -81,23 +73,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (userDocSnap.exists()) {
           const appUserData = userDocSnap.data() as Omit<AppUser, keyof FirebaseUserType>;
           const appUser: AppUser = {
-            ...(firebaseUser as unknown as FirebaseUser), // Cast needed due to type differences
+            ...(firebaseUser as unknown as FirebaseUser),
             ...appUserData,
             phoneNumber: appUserData.phoneNumber || firebaseUser.phoneNumber || '', 
-            email: appUserData.email || firebaseUser.email || null, // Ensure email is handled
+            email: appUserData.email || firebaseUser.email || null,
           };
           setUser(appUser);
           if (appUser.role && !role) {
              setRoleContextAndStorage(appUser.role);
           }
         } else {
-          const minimalAppUser: AppUser = {
-            ...(firebaseUser as unknown as FirebaseUser),
-            phoneNumber: firebaseUser.phoneNumber || 'UNKNOWN_PHONE',
-            email: firebaseUser.email || null, // Ensure email is handled
-            role: role || undefined, 
-          };
-          setUser(minimalAppUser);
+           // This case might happen if user is authenticated but Firestore doc creation failed/pending
+           // Or if it's a new user post-OTP but before Firestore doc is created
+           if (pendingUserDetails && firebaseUser.phoneNumber === pendingUserDetails.phoneNumber) {
+             await createUserDocument(firebaseUser, pendingUserDetails.firstName, pendingUserDetails.lastName, pendingUserDetails.role);
+             setPendingUserDetails(null); // Clear pending details
+           } else {
+            // If no pending details, treat as an issue or incomplete registration
+            console.warn("Authenticated user document not found in Firestore and no pending details.");
+            // Potentially sign out user or prompt for more info
+            const minimalAppUser: AppUser = {
+              ...(firebaseUser as unknown as FirebaseUser),
+              phoneNumber: firebaseUser.phoneNumber || 'UNKNOWN_PHONE',
+              email: firebaseUser.email || null,
+              role: role || undefined, 
+            };
+            setUser(minimalAppUser);
+           }
         }
       } else {
         setUser(null);
@@ -106,105 +108,189 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
 
     return () => unsubscribe();
-  }, [role]); // recaptchaVerifier could be a dependency if initialized here
+  }, [role, pendingUserDetails]);
 
   const setRoleContextAndStorage = (newRole: UserRole) => {
     localStorage.setItem(LOCAL_STORAGE_ROLE_KEY, newRole);
     setRoleState(newRole);
   };
+
+  const initializeRecaptchaVerifier = (recaptchaContainerId: string, isRegistration: boolean): RecaptchaVerifier => {
+    let verifier = isRegistration ? registerRecaptchaVerifier : loginRecaptchaVerifier;
+    if (verifier) {
+      // Attempt to clear previous instance if element is gone
+      try {
+        verifier.clear();
+      } catch (e) {
+        console.warn("Error clearing old reCAPTCHA verifier:", e);
+      }
+    }
+    
+    // Ensure the container exists before creating new verifier
+    const recaptchaContainer = document.getElementById(recaptchaContainerId);
+    if (!recaptchaContainer) {
+      throw new Error(`reCAPTCHA container with id '${recaptchaContainerId}' not found.`);
+    }
+    // Ensure it's empty
+    while (recaptchaContainer.firstChild) {
+        recaptchaContainer.removeChild(recaptchaContainer.firstChild);
+    }
+
+
+    const newVerifier = new RecaptchaVerifier(auth, recaptchaContainerId, {
+      'size': 'invisible',
+      'callback': (response: any) => {
+        // reCAPTCHA solved, allow signInWithPhoneNumber.
+        console.log("reCAPTCHA verified:", response);
+      },
+      'expired-callback': () => {
+        toast({ title: "reCAPTCHA Expired", description: "Please try sending the OTP again.", variant: "destructive" });
+        setIsSendingOtp(false);
+      }
+    });
+    
+    if (isRegistration) {
+      setRegisterRecaptchaVerifier(newVerifier);
+    } else {
+      setLoginRecaptchaVerifier(newVerifier);
+    }
+    return newVerifier;
+  };
   
-  const signUp = async (data: {
-    firstName: string;
-    lastName: string;
-    phoneNumber: string;
-    // email removed
-    role: UserRole;
-  }): Promise<SimulatedUserCredential> => {
-    const { firstName, lastName, phoneNumber, role: userRole } = data;
+  const sendOtp = async (
+    phoneNumber: string, 
+    recaptchaContainerId: string,
+    isRegistration: boolean,
+    userDetails?: { firstName: string; lastName: string; role: UserRole }
+  ) => {
+    setIsSendingOtp(true);
+    setOtpSent(false);
+    try {
+      const verifier = initializeRecaptchaVerifier(recaptchaContainerId, isRegistration);
+      const result = await signInWithPhoneNumber(auth, phoneNumber, verifier);
+      setConfirmationResult(result);
+      setOtpSent(true);
+      if (isRegistration && userDetails) {
+        setPendingUserDetails({ ...userDetails, phoneNumber });
+      }
+      toast({ title: "OTP Sent", description: `An OTP has been sent to ${phoneNumber}.` });
+    } catch (error: any) {
+      console.error("Error sending OTP:", error);
+      toast({ title: "OTP Send Error", description: error.message || "Failed to send OTP. Please try again.", variant: "destructive" });
+      setOtpSent(false); // Explicitly set to false on error
+      // Attempt to clear verifier on error to allow retry
+      const verifierToClear = isRegistration ? registerRecaptchaVerifier : loginRecaptchaVerifier;
+      verifierToClear?.clear();
+      if (isRegistration) setRegisterRecaptchaVerifier(null); else setLoginRecaptchaVerifier(null);
 
-    // SIMULATION: In a real app, you'd call signInWithPhoneNumber here
-    // const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier!);
-    // Then, you'd need a UI for the user to enter the OTP, and then call:
-    // const userCredential = await confirmationResult.confirm(otpFromUser);
-    // const firebaseUser = userCredential.user;
+    } finally {
+      setIsSendingOtp(false);
+    }
+  };
 
-    const simulatedUid = `simulated-${Date.now()}`; 
-    const simulatedFirebaseUser: FirebaseUser = {
-      uid: simulatedUid,
-      phoneNumber: phoneNumber,
-      displayName: `${firstName} ${lastName}`,
-      email: null, // Email is explicitly null
-      emailVerified: false,
-      isAnonymous: false,
-      metadata: {},
-      providerData: [],
-      providerId: 'phone', 
-      refreshToken: 'mockRefreshToken',
-      tenantId: null,
-      delete: async () => {},
-      getIdToken: async () => 'mockIdToken',
-      getIdTokenResult: async () => ({token: 'mockIdToken', claims: {}, authTime: '', expirationTime: '', issuedAtTime: '', signInProvider: null, signInSecondFactor: null}),
-      reload: async () => {},
-      toJSON: () => ({}),
-      photoURL: null,
+  const createUserDocument = async (firebaseUser: FirebaseUserType, firstName: string, lastName: string, userRole: UserRole) => {
+    const appUser: AppUser = {
+      ...(firebaseUser as unknown as FirebaseUser),
+      firstName,
+      lastName,
+      role: userRole,
+      phoneNumber: firebaseUser.phoneNumber || pendingUserDetails?.phoneNumber || 'UNKNOWN_PHONE',
+      email: null, // Explicitly null
     };
-
-    await setDoc(doc(firestore, "users", simulatedFirebaseUser.uid), {
-      uid: simulatedFirebaseUser.uid,
-      phoneNumber: phoneNumber,
-      email: null, // Store email as null
+    await setDoc(doc(firestore, "users", firebaseUser.uid), {
+      uid: firebaseUser.uid,
+      phoneNumber: appUser.phoneNumber,
+      email: null,
       role: userRole,
       firstName,
       lastName,
       createdAt: new Date().toISOString(),
     });
-    
-    setRoleContextAndStorage(userRole);
-    const appUser: AppUser = { ...simulatedFirebaseUser, role: userRole, firstName, lastName, email: null };
     setUser(appUser);
-    
-    return { user: simulatedFirebaseUser }; 
+    if (appUser.role) setRoleContextAndStorage(appUser.role);
   };
 
-  const signIn = async (data: { phoneNumber: string }): Promise<SimulatedUserCredential> => {
-    const { phoneNumber } = data;
-    
-    console.log(`Simulating OTP sent to ${phoneNumber}. In a real app, user would enter OTP.`);
-    
-    const mockUserQuery = (await getDoc(doc(firestore, "users", `uid-for-${phoneNumber}`))); 
-    if (mockUserQuery.exists()) {
-        const appUserData = mockUserQuery.data() as AppUser;
-         const simulatedFirebaseUser: FirebaseUser = {
-            uid: appUserData.uid!,
-            phoneNumber: appUserData.phoneNumber,
-            displayName: `${appUserData.firstName} ${appUserData.lastName}`,
-            email: appUserData.email || null, // Keep existing email if it was there from old data
-            emailVerified: false, isAnonymous: false, metadata: {}, providerData: [], providerId: 'phone', refreshToken: '', tenantId: null,
-            delete: async () => {}, getIdToken: async () => '', getIdTokenResult: async () => ({} as any), reload: async () => {}, toJSON: () => ({}), photoURL: null,
-        };
-        setUser(appUserData);
-        if (appUserData.role) setRoleContextAndStorage(appUserData.role);
-        return { user: simulatedFirebaseUser };
+  const confirmOtp = async (otp: string) => {
+    if (!confirmationResult) {
+      toast({ title: "Verification Error", description: "No OTP request found. Please request an OTP first.", variant: "destructive" });
+      return;
     }
-    
-    const placeholderUser: FirebaseUser = { 
-        uid: 'simulated-signin-uid', phoneNumber, displayName: 'Simulated User', email: null,
-        emailVerified: false, isAnonymous: false, metadata: {}, providerData: [], providerId: 'phone', refreshToken: '', tenantId: null,
-        delete: async () => {}, getIdToken: async () => '', getIdTokenResult: async () => ({} as any), reload: async () => {}, toJSON: () => ({}), photoURL: null,
-    };
-    return { user: placeholderUser }; 
+    setIsVerifyingOtp(true);
+    try {
+      const credential = await confirmationResult.confirm(otp);
+      const firebaseUser = credential.user;
+
+      if (pendingUserDetails && firebaseUser.phoneNumber === pendingUserDetails.phoneNumber) {
+        // This is a registration flow
+        await createUserDocument(firebaseUser, pendingUserDetails.firstName, pendingUserDetails.lastName, pendingUserDetails.role);
+        setPendingUserDetails(null); // Clear pending details
+      } else {
+        // This is a login flow, or registration where pending details somehow got lost (should be rare)
+        // User document should already exist for login, or will be fetched by onAuthStateChanged
+        const userDocRef = doc(firestore, "users", firebaseUser.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        if (userDocSnap.exists()) {
+          const appUserData = userDocSnap.data() as Omit<AppUser, keyof FirebaseUserType>;
+          const appUser: AppUser = {
+            ...(firebaseUser as unknown as FirebaseUser),
+            ...appUserData,
+            phoneNumber: appUserData.phoneNumber || firebaseUser.phoneNumber || '',
+            email: appUserData.email || firebaseUser.email || null,
+          };
+          setUser(appUser);
+          if (appUser.role) setRoleContextAndStorage(appUser.role);
+        } else if (pendingUserDetails) { 
+          // Fallback if somehow onAuthStateChanged didn't pick up pending details fast enough
+          await createUserDocument(firebaseUser, pendingUserDetails.firstName, pendingUserDetails.lastName, pendingUserDetails.role);
+          setPendingUserDetails(null);
+        } else {
+          console.error("User document not found after OTP confirmation for login.");
+           toast({ title: "Login Error", description: "User profile not found. Please contact support.", variant: "destructive" });
+           // Don't set user, let onAuthStateChanged handle it or redirect.
+        }
+      }
+      
+      toast({ title: "Success!", description: "You've been successfully verified." });
+      setOtpSent(false); // Reset otpSent after successful verification
+      // Navigation will be handled by the form component or useEffect watching the user state
+    } catch (error: any) {
+      console.error("Error confirming OTP:", error);
+      toast({ title: "OTP Verification Failed", description: error.message || "Invalid OTP or an error occurred.", variant: "destructive" });
+    } finally {
+      setIsVerifyingOtp(false);
+    }
+  };
+  
+  const resetOtpState = () => {
+    setOtpSent(false);
+    setConfirmationResult(null);
+    setIsSendingOtp(false);
+    setIsVerifyingOtp(false);
+    setPendingUserDetails(null);
+    loginRecaptchaVerifier?.clear();
+    setLoginRecaptchaVerifier(null);
+    registerRecaptchaVerifier?.clear();
+    setRegisterRecaptchaVerifier(null);
   };
 
-  const signOut = () => {
+  const signOutUser = () => {
     return firebaseSignOut(auth).then(() => {
-      setUser(null); 
+      setUser(null);
+      resetOtpState(); // Also reset OTP state on sign out
     });
   };
 
   return (
-    <AuthContext.Provider value={{ user, role, loadingAuth, initialRoleChecked, setRole: setRoleContextAndStorage, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ 
+      user, role, loadingAuth, initialRoleChecked, 
+      isSendingOtp, isVerifyingOtp, otpSent,
+      setRole: setRoleContextAndStorage, 
+      sendOtp, 
+      confirmOtp, 
+      signOut: signOutUser,
+      resetOtpState
+    }}>
       {children}
-      {/* Add a div for reCAPTCHA if you implement full phone auth, e.g., <div id="recaptcha-container-id"></div> */}
     </AuthContext.Provider>
   );
 };

@@ -1,26 +1,31 @@
 
 'use client';
 
-import { useForm } from 'react-hook-form';
+import { useState, useEffect } from 'react';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import type { UserRole } from '@/types';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { useState } from 'react';
-// Link component for "Forgot Password?" is removed as it's not applicable for OTP flow.
 
-// Schema for phone + OTP login (no password here)
-const loginSchema = z.object({
-  phoneNumber: z.string().min(10, "Valid phone number is required"),
+const RECAPTCHA_CONTAINER_ID = 'recaptcha-container-login';
+
+const phoneSchema = z.object({
+  phoneNumber: z.string().min(10, "Valid phone number is required (e.g., +12223334444 or 10 digits)"),
 });
+type PhoneFormValues = z.infer<typeof phoneSchema>;
 
-type LoginFormValues = z.infer<typeof loginSchema>;
+const otpSchema = z.object({
+  otp: z.string().length(6, "OTP must be 6 digits"),
+});
+type OtpFormValues = z.infer<typeof otpSchema>;
 
 interface LoginFormProps {
   role: UserRole;
@@ -28,62 +33,119 @@ interface LoginFormProps {
 
 export default function LoginForm({ role }: LoginFormProps) {
   const router = useRouter();
-  const { signIn } = useAuth(); // signIn will handle phone + OTP (simulated)
+  const { user, sendOtp, confirmOtp, otpSent, isSendingOtp, isVerifyingOtp, resetOtpState } = useAuth();
   const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
 
-  const form = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
+  const [currentPhoneNumber, setCurrentPhoneNumber] = useState('');
+
+  const phoneForm = useForm<PhoneFormValues>({
+    resolver: zodResolver(phoneSchema),
     defaultValues: {
       phoneNumber: '',
     },
   });
 
-  async function onSubmit(values: LoginFormValues) {
-    setIsLoading(true);
-    try {
-      await signIn(values); 
-      toast({
-        title: "Login Initiated!",
-        // In a real OTP flow, you'd say "OTP sent..." or "Logged in successfully after OTP"
-        description: "Welcome back! (OTP flow simulated)", 
-      });
+  const otpForm = useForm<OtpFormValues>({
+    resolver: zodResolver(otpSchema),
+    defaultValues: {
+      otp: '',
+    },
+  });
+  
+  useEffect(() => {
+    // If user becomes authenticated, redirect to dashboard
+    if (user && role) {
+      resetOtpState(); // Clean up OTP state
       router.push(`/${role}/dashboard`);
-    } catch (error: any) {
-      console.error("Login failed:", error);
-      toast({
-        title: "Login Failed",
-        description: error.message || "Invalid phone number or an error occurred.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
     }
+  }, [user, role, router, resetOtpState]);
+
+  // Cleanup OTP state if component unmounts or role changes
+  useEffect(() => {
+    return () => {
+      resetOtpState();
+    };
+  }, [resetOtpState, role]);
+
+
+  async function onPhoneSubmit(values: PhoneFormValues) {
+    setCurrentPhoneNumber(values.phoneNumber);
+    // The recaptchaContainerId is passed to sendOtp
+    await sendOtp(values.phoneNumber, RECAPTCHA_CONTAINER_ID, false);
+  }
+
+  async function onOtpSubmit(values: OtpFormValues) {
+    await confirmOtp(values.otp);
+    // Successful OTP confirmation will trigger user state change -> useEffect for navigation
+  }
+
+  if (otpSent) {
+    return (
+      <Form {...otpForm}>
+        <form onSubmit={otpForm.handleSubmit(onOtpSubmit)} className="space-y-6">
+          <p className="text-sm text-muted-foreground">
+            Enter the 6-digit OTP sent to {currentPhoneNumber}.
+          </p>
+          <FormField
+            control={otpForm.control}
+            name="otp"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>One-Time Password</FormLabel>
+                <FormControl>
+                  <InputOTP maxLength={6} {...field}>
+                    <InputOTPGroup className="w-full justify-between">
+                      <InputOTPSlot index={0} />
+                      <InputOTPSlot index={1} />
+                      <InputOTPSlot index={2} />
+                      <InputOTPSlot index={3} />
+                      <InputOTPSlot index={4} />
+                      <InputOTPSlot index={5} />
+                    </InputOTPGroup>
+                  </InputOTP>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14" disabled={isVerifyingOtp}>
+            {isVerifyingOtp ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
+            Verify OTP
+          </Button>
+          <Button variant="link" onClick={() => resetOtpState()} disabled={isVerifyingOtp}>
+            Change phone number or resend OTP
+          </Button>
+        </form>
+      </Form>
+    );
   }
 
   return (
-    <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+    <Form {...phoneForm}>
+      <form onSubmit={phoneForm.handleSubmit(onPhoneSubmit)} className="space-y-6">
         <FormField
-          control={form.control}
+          control={phoneForm.control}
           name="phoneNumber"
           render={({ field }) => (
             <FormItem>
               <FormLabel>Phone Number</FormLabel>
               <FormControl>
-                <Input type="tel" placeholder="Enter your phone number" {...field} className="text-base py-3 px-4 h-12"/>
+                <Input 
+                  type="tel" 
+                  placeholder="Enter your phone number (e.g. +14155552671)" 
+                  {...field} 
+                  className="text-base py-3 px-4 h-12"
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
           )}
         />
-        {/* Password field removed for OTP flow */}
-        {/* "Forgot Password?" link removed as it's not relevant for OTP flow */}
-        <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14 mt-4" disabled={isLoading}>
-          {isLoading ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
-          Login
+        <div id={RECAPTCHA_CONTAINER_ID}></div>
+        <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14 mt-4" disabled={isSendingOtp}>
+          {isSendingOtp ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
+          Send OTP
         </Button>
-         {/* TODO: Add a div here for reCAPTCHA if implementing full Firebase phone auth, e.g., <div id="recaptcha-container-id-login"></div> */}
       </form>
     </Form>
   );
