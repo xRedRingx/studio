@@ -1,6 +1,6 @@
 
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import ProtectedPage from '@/components/layout/ProtectedPage';
 import { useAuth } from '@/hooks/useAuth';
 import type { BarberService, DayAvailability, Appointment, DayOfWeek } from '@/types';
@@ -11,7 +11,7 @@ import TodaysAppointmentsSection from '@/components/barber/TodaysAppointmentsSec
 // Helper to get today's date in YYYY-MM-DD format
 const getTodayDateString = () => new Date().toISOString().split('T')[0];
 
-// Initial dummy data
+// Initial dummy data for services and schedule (these are static)
 const initialServices: BarberService[] = [
   { id: '1', name: "Men's Haircut", price: 30, duration: 30 },
   { id: '2', name: "Beard Trim", price: 15, duration: 15 },
@@ -24,22 +24,36 @@ const initialSchedule: DayAvailability[] = (['Monday', 'Tuesday', 'Wednesday', '
   endTime: '05:00 PM',
 }));
 
-const initialAppointments: Appointment[] = [
-  { id: 'app1', customerName: 'John Doe', serviceName: "Men's Haircut", startTime: '10:00 AM', endTime: '10:30 AM', status: 'upcoming', date: getTodayDateString() },
-  { id: 'app2', customerName: 'Jane Smith', serviceName: "Beard Trim", startTime: '11:00 AM', endTime: '11:15 AM', status: 'upcoming', date: getTodayDateString() },
-  { id: 'app3', customerName: 'Mike Ross', serviceName: "Men's Haircut", startTime: '02:00 PM', endTime: '02:30 PM', status: 'upcoming', date: getTodayDateString() },
-  { id: 'app4', customerName: 'Sarah Connor', serviceName: "Men's Haircut", startTime: '09:00 AM', endTime: '09:30 AM', status: 'completed', date: getTodayDateString() },
-  { id: 'app5', customerName: 'Kyle Reese', serviceName: "Beard Trim", startTime: '04:00 PM', endTime: '04:15 PM', status: 'upcoming', date: getTodayDateString() },
-  // Appointment for another day (should not show in today's list)
-  { id: 'app6', customerName: 'Old Appointment', serviceName: "Men's Haircut", startTime: '10:00 AM', endTime: '10:30 AM', status: 'completed', date: '2023-01-01'},
+// Base structure for appointments that will have today's date dynamically assigned
+const appointmentsForTodayBase: Omit<Appointment, 'id' | 'date'>[] = [
+  { customerName: 'John Doe', serviceName: "Men's Haircut", startTime: '10:00 AM', endTime: '10:30 AM', status: 'upcoming' },
+  { customerName: 'Jane Smith', serviceName: "Beard Trim", startTime: '11:00 AM', endTime: '11:15 AM', status: 'upcoming' },
+  { customerName: 'Mike Ross', serviceName: "Men's Haircut", startTime: '02:00 PM', endTime: '02:30 PM', status: 'upcoming' },
+  { customerName: 'Sarah Connor', serviceName: "Men's Haircut", startTime: '09:00 AM', endTime: '09:30 AM', status: 'completed' },
+  { customerName: 'Kyle Reese', serviceName: "Beard Trim", startTime: '04:00 PM', endTime: '04:15 PM', status: 'upcoming' },
 ];
+
+const appointmentForAnotherDay: Appointment = {
+  id: 'app6', customerName: 'Old Appointment', serviceName: "Men's Haircut", startTime: '10:00 AM', endTime: '10:30 AM', status: 'completed', date: '2023-01-01'
+};
 
 
 export default function BarberDashboardPage() {
   const { user } = useAuth();
   const [services, setServices] = useState<BarberService[]>(initialServices);
   const [schedule, setSchedule] = useState<DayAvailability[]>(initialSchedule);
-  const [appointments, setAppointments] = useState<Appointment[]>(initialAppointments);
+  const [appointments, setAppointments] = useState<Appointment[]>([]); // Initialize as empty
+
+  useEffect(() => {
+    const today = getTodayDateString();
+    const dynamicAppointmentsForToday: Appointment[] = appointmentsForTodayBase.map((app, index) => ({
+      ...app,
+      id: `app${index + 1}`, // Assign IDs dynamically
+      date: today,
+    }));
+    setAppointments([...dynamicAppointmentsForToday, appointmentForAnotherDay]);
+  }, []); // Runs once on mount, client-side
+
 
   // Manage Services Handlers
   const handleAddService = (serviceData: Omit<BarberService, 'id'>) => {
