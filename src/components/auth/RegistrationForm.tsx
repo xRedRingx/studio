@@ -14,17 +14,12 @@ import type { UserRole } from '@/types';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { useState } from 'react';
 
-// Updated schema for phone + password registration
+// Schema for phone + OTP registration (no password here)
 const registrationSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   phoneNumber: z.string().min(10, "Valid phone number is required (e.g., +12223334444 or 10 digits minimum)"),
   email: z.string().email("Invalid email address").optional().or(z.literal('')), // Email remains optional
-  password: z.string().min(6, "Password must be at least 6 characters"),
-  confirmPassword: z.string().min(6, "Password confirmation is required"),
-}).refine(data => data.password === data.confirmPassword, {
-  message: "Passwords do not match",
-  path: ["confirmPassword"], // path of error
 });
 
 type RegistrationFormValues = z.infer<typeof registrationSchema>;
@@ -35,7 +30,7 @@ interface RegistrationFormProps {
 
 export default function RegistrationForm({ role }: RegistrationFormProps) {
   const router = useRouter();
-  const { signUp } = useAuth();
+  const { signUp } = useAuth(); // signUp will handle phone + OTP (simulated)
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -46,22 +41,19 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
       lastName: '',
       phoneNumber: '',
       email: '',
-      password: '',
-      confirmPassword: '',
     },
   });
 
   async function onSubmit(values: RegistrationFormValues) {
     setIsLoading(true);
     try {
-      // Pass role to signUp context function
-      // phoneNumber will be used as 'email' by Firebase auth internally
       await signUp({ ...values, role }); 
       toast({
-        title: "Registration Successful!",
-        description: "You can now log in.",
+        title: "Registration Initiated!",
+        // In a real OTP flow, you'd say something like "OTP sent to your phone."
+        description: "Account created (OTP flow simulated). You can now log in.",
       });
-      router.push(`/${role}/login`); // Redirect to login page after successful registration
+      router.push(`/${role}/login`); 
     } catch (error: any) {
       console.error("Registration failed:", error);
       toast({
@@ -131,36 +123,12 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
             </FormItem>
           )}
         />
-        <FormField
-          control={form.control}
-          name="password"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Password</FormLabel>
-              <FormControl>
-                <Input type="password" placeholder="Enter your password" {...field} className="text-base py-3 px-4 h-12"/>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <FormField
-          control={form.control}
-          name="confirmPassword"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Confirm Password</FormLabel>
-              <FormControl>
-                <Input type="password" placeholder="Confirm your password" {...field} className="text-base py-3 px-4 h-12"/>
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+        {/* Password fields removed for OTP flow */}
         <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14" disabled={isLoading}>
           {isLoading ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
           Register
         </Button>
+        {/* TODO: Add a div here for reCAPTCHA if implementing full Firebase phone auth, e.g., <div id="recaptcha-container-id-register"></div> */}
       </form>
     </Form>
   );

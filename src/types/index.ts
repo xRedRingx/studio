@@ -5,17 +5,14 @@ export type UserRole = 'customer' | 'barber';
 
 export interface FirebaseUser extends FirebaseUserAuth {}
 
-// AppUser now primarily uses phoneNumber for identification in forms,
-// but for Firebase email/password auth, phoneNumber will be passed as 'email'.
-// Password is handled by Firebase, not stored directly in AppUser fields after auth.
+// AppUser for phone + OTP authentication.
+// Password is not stored in the AppUser model as it's handled by OTP.
 export interface AppUser extends FirebaseUser {
   role?: UserRole;
   firstName?: string;
   lastName?: string;
-  // Email is optional and generally not used for login in this setup
-  email?: string | null; 
-  // This phoneNumber from the form will be used as the 'email' for Firebase auth
-  phoneNumber: string; 
+  email?: string | null; // Optional actual email
+  phoneNumber: string; // Primary identifier for login
 }
 
 export interface BarberService {
@@ -43,3 +40,4 @@ export interface Appointment {
   status: 'upcoming' | 'checked-in' | 'completed' | 'next';
   date: string; // YYYY-MM-DD
 }
+
