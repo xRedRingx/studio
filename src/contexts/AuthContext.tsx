@@ -136,7 +136,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     
     const newVerifier = new RecaptchaVerifier(auth, recaptchaContainerId, {
       'size': 'invisible',
-      'remoteConfig': true, // Added based on previous suggestion
+      'remoteConfig': true, 
       'callback': (response: any) => {
         console.log("AuthContext: reCAPTCHA challenge successful (invisible flow):", response);
       },
@@ -191,13 +191,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       let description = "Failed to send OTP. Please check the phone number and try again.";
       
       if (error.code === 'auth/captcha-check-failed') {
-        description = "reCAPTCHA verification failed: Hostname mismatch or invalid token. CRITICAL: Ensure your current app domain (e.g., 'localhost' for local testing, or your deployed domain like 'app-name.web.app') is added to the 'Authorized Domains' list for your reCAPTCHA key in the Google Cloud Console. This is the most common cause for this error.";
+        description = "reCAPTCHA verification failed: Hostname mismatch or invalid token. CRITICAL: Ensure your current app domain (e.g., 'localhost') is in the 'Authorized Domains' list for the reCAPTCHA key in Google Cloud Console. If using Firebase App Check with reCAPTCHA Enterprise, verify the Enterprise key's authorized domains and ensure compatibility with Phone Auth's reCAPTCHA flow. 'Unenforced' in App Check might still cause Firebase Auth to use the Enterprise key.";
+        console.error("AuthContext: auth/captcha-check-failed. Verify reCAPTCHA key's authorized domains in GCP. Check Firebase App Check configuration, especially if reCAPTCHA Enterprise is used, as it might conflict or require specific domain settings for the Enterprise key.", error);
       } else if (error.code === 'auth/invalid-phone-number') {
         description = "The phone number format is invalid. Please use E.164 format (e.g., +12223334444).";
       } else if (error.code === 'auth/too-many-requests') {
-        description = "Too many OTP requests have been made from this device or for this phone number. Please wait a while before trying again. This is a security measure.";
+        description = "Too many OTP requests. Please wait a while before trying again. This is a security measure.";
       } else if (error.code === 'auth/internal-error') {
-        description = "An internal Firebase error occurred. Please verify Firebase & Google Cloud project configuration: reCAPTCHA key type (v2 vs Enterprise - ensure compatibility with Firebase SDK), authorized domains for the reCAPTCHA key in GCP, Phone Auth enabled, and Identity Toolkit API active. Ensure the reCAPTCHA key in Firebase matches the one in GCP.";
+        description = "An internal Firebase error occurred. Please verify Firebase & Google Cloud project configuration: reCAPTCHA key type (v2 vs Enterprise - ensure compatibility with Firebase SDK), authorized domains for the reCAPTCHA key in GCP, Phone Auth enabled, and Identity Toolkit API active. Ensure the reCAPTCHA key in Firebase Authentication settings matches the one in GCP and check its type (e.g. Enterprise vs v2). Also, ensure the correct APIs are enabled in GCP (Identity Toolkit, Firebase, relevant reCAPTCHA API).";
       } else if (error.code === 'auth/network-request-failed') {
         description = "Network error during OTP request. Check internet connection and ensure no browser extensions or network policies are blocking Google services (like reCAPTCHA).";
       } else if (error.message && error.message.includes("reCAPTCHA placeholder element")) {
@@ -205,7 +206,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } else if (error.message) {
         description = error.message;
       }
-      toast({ title: "OTP Send Error", description, variant: "destructive", duration: 9000 });
+      toast({ title: "OTP Send Error", description, variant: "destructive", duration: 12000 });
       setOtpSent(false); 
       
       const verifierToClear = isRegistration ? registerRecaptchaVerifier : loginRecaptchaVerifier;
