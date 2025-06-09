@@ -118,10 +118,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const recaptchaContainer = document.getElementById(recaptchaContainerId);
     if (!recaptchaContainer) {
-      toast({ title: "Setup Error", description: `reCAPTCHA container '${recaptchaContainerId}' not found.`, variant: "destructive" });
+      toast({ title: "Setup Error", description: `reCAPTCHA container '${recaptchaContainerId}' not found. Ensure it's rendered in the DOM.`, variant: "destructive" });
       throw new Error(`reCAPTCHA container '${recaptchaContainerId}' not found.`);
     }
     
+    // Clear previous verifier instance and its DOM manifestation
     if (currentVerifier) {
       try {
         currentVerifier.clear(); 
@@ -130,13 +131,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         console.warn("AuthContext: Error clearing old reCAPTCHA verifier:", e);
       }
     }
+    recaptchaContainer.innerHTML = ''; // Ensure container is empty before rendering new one
     
-    recaptchaContainer.innerHTML = ''; 
     console.log(`AuthContext: Initializing new reCAPTCHA verifier for ${recaptchaContainerId}`);
-    
     const newVerifier = new RecaptchaVerifier(auth, recaptchaContainerId, {
       'size': 'invisible',
-      'remoteConfig': true, 
+      'remoteConfig': true,
       'callback': (response: any) => {
         console.log("AuthContext: reCAPTCHA challenge successful (invisible flow):", response);
       },
@@ -147,7 +147,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       },
       'error-callback': (error: any) => { 
         console.error(`AuthContext: reCAPTCHA error-callback for ${recaptchaContainerId}:`, error);
-        toast({ title: "reCAPTCHA Error", description: `reCAPTCHA process failed. ${error?.message || 'Please try again.'}`, variant: "destructive" });
+        toast({ title: "reCAPTCHA Error", description: `reCAPTCHA process failed: ${error?.message || 'Please try again.'}`, variant: "destructive" });
         setVerifierState(null);
       }
     });
@@ -190,15 +190,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.error(`AuthContext: Error sending OTP (code: ${error.code}, message: ${error.message}):`, error);
       let description = "Failed to send OTP. Please check the phone number and try again.";
       
-      if (error.code === 'auth/captcha-check-failed') {
-        description = "reCAPTCHA verification failed: Hostname mismatch. CRITICAL: Ensure your current app domain (e.g., 'localhost') is in the 'Authorized Domains' list for your reCAPTCHA *Site Key* (the one starting with '6Lc...' configured for Firebase Phone Auth) in Google Cloud Console. This Site Key is distinct from your Firebase Web API Key (which starts with 'AIza...'). If using App Check with reCAPTCHA Enterprise, also verify the Enterprise key's authorized domains in GCP.";
-        console.error("AuthContext: auth/captcha-check-failed. Verify your reCAPTCHA *Site Key's* 'Authorized Domains' in Google Cloud Console. If using Firebase App Check with an Enterprise key, also check that Enterprise key's domain settings.", error);
+      if (error.message && error.message.includes("requests-from-referer") && error.message.includes("are-blocked")) {
+        const referer = error.message.split('referer-')[1]?.split('-are-blocked')[0] || "your app's domain";
+        description = `Firebase API requests from ${referer} are blocked. CRITICAL: Check the "API restrictions" (specifically "HTTP referrers") for your Firebase Web API Key (AIza...) in Google Cloud Console. Add "${referer}" to the allowed list.`;
+        console.error(`AuthContext: Firebase Web API Key restrictions are blocking requests from ${referer}.`);
+      } else if (error.code === 'auth/captcha-check-failed') {
+        description = "reCAPTCHA verification failed: Hostname mismatch or invalid token. CRITICAL: Ensure your app's domain (e.g., 'localhost' or deployed domain) is in the 'Authorized Domains' list for your reCAPTCHA *Site Key* (6Lc...) in Google Cloud Console. If using App Check with reCAPTCHA Enterprise, also verify the Enterprise key's authorized domains and its compatibility with Phone Auth. The Firebase Web API Key (AIza...) is different from the reCAPTCHA Site Key (6Lc...).";
+        console.error("AuthContext: auth/captcha-check-failed. Verify your reCAPTCHA *Site Key's* (6Lc...) 'Authorized Domains' in Google Cloud Console, and check App Check settings if applicable.", error);
       } else if (error.code === 'auth/invalid-phone-number') {
         description = "The phone number format is invalid. Please use E.164 format (e.g., +12223334444).";
       } else if (error.code === 'auth/too-many-requests') {
-        description = "Too many OTP requests. Please wait a while before trying again. This is a security measure.";
+        description = "Too many OTP requests. Please wait a while before trying again. This is a security measure by Firebase to prevent abuse.";
       } else if (error.code === 'auth/internal-error') {
-        description = "An internal Firebase error occurred. Please verify Firebase & Google Cloud project configuration: reCAPTCHA key type (v2 vs Enterprise - ensure compatibility with Firebase SDK and its integration with Identity Platform), authorized domains for the reCAPTCHA *Site Key* in GCP, Phone Auth enabled, and Identity Toolkit API active. Ensure the correct APIs are enabled in GCP (Identity Toolkit, Firebase, relevant reCAPTCHA API).";
+        description = "An internal Firebase error occurred. Please verify Firebase & Google Cloud project configuration: 1. reCAPTCHA key type (v2 vs Enterprise - ensure compatibility with Firebase SDK & Identity Platform integration). 2. Authorized domains for the reCAPTCHA *Site Key* (6Lc...) in GCP. 3. Phone Auth enabled in Firebase. 4. Identity Toolkit API & Firebase API active in GCP. 5. Active billing account on GCP project.";
       } else if (error.code === 'auth/network-request-failed') {
         description = "Network error during OTP request. Check internet connection and ensure no browser extensions or network policies are blocking Google services (like reCAPTCHA).";
       } else if (error.message && error.message.includes("reCAPTCHA placeholder element")) {
@@ -351,6 +355,5 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
-
 
     
