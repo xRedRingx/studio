@@ -60,14 +60,16 @@ export default function LoginForm({ role }: LoginFormProps) {
   }, [user, role, router, resetOtpState]);
 
   useEffect(() => {
+    // Component unmount or role change cleanup
     return () => {
       resetOtpState();
     };
-  }, [resetOtpState, role]);
+  }, [resetOtpState, role]); // Ensure role is a dependency if its change should trigger cleanup
 
   useEffect(() => {
     if (otpSent) {
-      otpForm.reset({ otp: '' }); // Explicitly reset OTP form when OTP view is shown
+      otpForm.reset({ otp: '' }); 
+      otpForm.setValue('otp', '', { shouldValidate: false, shouldDirty: false, shouldTouch: false }); // More forceful reset
     }
   }, [otpSent, otpForm]);
 
@@ -83,8 +85,9 @@ export default function LoginForm({ role }: LoginFormProps) {
 
   const handleTryAgain = () => {
     resetOtpState();
-    phoneForm.reset(); 
-    otpForm.reset();
+    phoneForm.reset({ phoneNumber: ''}); 
+    otpForm.reset({ otp: '' });
+    setCurrentPhoneNumber('');
   }
 
   if (otpSent) {
@@ -101,7 +104,7 @@ export default function LoginForm({ role }: LoginFormProps) {
               <FormItem>
                 <FormLabel>One-Time Password</FormLabel>
                 <FormControl>
-                  <InputOTP maxLength={6} {...field}>
+                  <InputOTP maxLength={6} {...field} autoComplete="one-time-code">
                     <InputOTPGroup>
                       <InputOTPSlot index={0} />
                       <InputOTPSlot index={1} />
@@ -143,6 +146,7 @@ export default function LoginForm({ role }: LoginFormProps) {
                   placeholder="e.g. +14155552671" 
                   {...field} 
                   className="text-base py-3 px-4 h-12"
+                  autoComplete="tel"
                 />
               </FormControl>
               <FormMessage />

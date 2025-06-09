@@ -59,19 +59,24 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
   useEffect(() => {
     if (user && role && pendingRegistrationDetails) { 
       resetOtpState();
+      // Redirect to login after successful registration and OTP confirmation
+      // as user object might be populated by onAuthStateChanged
+      toast({ title: "Registration Complete!", description: "You can now log in with your new account."});
       router.push(`/${role}/login`); 
     }
-  }, [user, role, router, resetOtpState, pendingRegistrationDetails]);
+  }, [user, role, router, resetOtpState, pendingRegistrationDetails, toast]);
 
   useEffect(() => {
+    // Component unmount or role change cleanup
     return () => {
       resetOtpState();
     };
-  }, [resetOtpState, role]);
+  }, [resetOtpState, role]); // Ensure role is a dependency
 
   useEffect(() => {
     if (otpSent) {
-      otpForm.reset({ otp: '' }); // Explicitly reset OTP form when OTP view is shown
+      otpForm.reset({ otp: '' }); 
+      otpForm.setValue('otp', '', { shouldValidate: false, shouldDirty: false, shouldTouch: false }); // More forceful reset
     }
   }, [otpSent, otpForm]);
 
@@ -85,14 +90,16 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
   }
 
   async function onOtpSubmit(values: OtpFormValues) {
+    // confirmOtp will trigger onAuthStateChanged, which then handles user document creation
+    // and eventually the redirect via the other useEffect.
     await confirmOtp(values.otp);
   }
 
   const handleTryAgain = () => {
     resetOtpState();
     setPendingRegistrationDetails(null);
-    userDetailsForm.reset(); 
-    otpForm.reset();
+    userDetailsForm.reset({ firstName: '', lastName: '', phoneNumber: ''}); 
+    otpForm.reset({ otp: '' });
   }
 
   if (otpSent) {
@@ -109,7 +116,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
               <FormItem>
                 <FormLabel>One-Time Password</FormLabel>
                 <FormControl>
-                  <InputOTP maxLength={6} {...field}>
+                  <InputOTP maxLength={6} {...field} autoComplete="one-time-code">
                     <InputOTPGroup>
                       <InputOTPSlot index={0} />
                       <InputOTPSlot index={1} />
@@ -179,6 +186,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
                   placeholder="e.g. +14155552671" 
                   {...field} 
                   className="text-base py-3 px-4 h-12"
+                  autoComplete="tel"
                 />
               </FormControl>
               <FormMessage />
