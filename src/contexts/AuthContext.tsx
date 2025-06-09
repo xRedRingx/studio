@@ -136,7 +136,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     
     const newVerifier = new RecaptchaVerifier(auth, recaptchaContainerId, {
       'size': 'invisible',
-      'remoteConfig': true, 
+      'remoteConfig': true, // Added based on previous suggestion
       'callback': (response: any) => {
         console.log("AuthContext: reCAPTCHA challenge successful (invisible flow):", response);
       },
@@ -191,11 +191,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       let description = "Failed to send OTP. Please check the phone number and try again.";
       
       if (error.code === 'auth/captcha-check-failed') {
-        description = "reCAPTCHA check failed: Hostname mismatch. CRITICAL: Ensure your current app domain (e.g., 'localhost' for local testing, or your deployed domain like 'app-name.web.app') is added to the 'Authorized Domains' list for your reCAPTCHA key in the Google Cloud Console. This is the most common cause for this error.";
+        description = "reCAPTCHA verification failed: Hostname mismatch or invalid token. CRITICAL: Ensure your current app domain (e.g., 'localhost' for local testing, or your deployed domain like 'app-name.web.app') is added to the 'Authorized Domains' list for your reCAPTCHA key in the Google Cloud Console. This is the most common cause for this error.";
       } else if (error.code === 'auth/invalid-phone-number') {
         description = "The phone number format is invalid. Please use E.164 format (e.g., +12223334444).";
       } else if (error.code === 'auth/too-many-requests') {
-        description = "Too many OTP requests. Please try again later.";
+        description = "Too many OTP requests have been made from this device or for this phone number. Please wait a while before trying again. This is a security measure.";
       } else if (error.code === 'auth/internal-error') {
         description = "An internal Firebase error occurred. Please verify Firebase & Google Cloud project configuration: reCAPTCHA key type (v2 vs Enterprise - ensure compatibility with Firebase SDK), authorized domains for the reCAPTCHA key in GCP, Phone Auth enabled, and Identity Toolkit API active. Ensure the reCAPTCHA key in Firebase matches the one in GCP.";
       } else if (error.code === 'auth/network-request-failed') {
