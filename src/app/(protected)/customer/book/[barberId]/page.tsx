@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import ProtectedPage from '@/components/layout/ProtectedPage';
 import { useAuth } from '@/hooks/useAuth';
-import type { AppUser, BarberService, Appointment, DayAvailability, BarberScheduleDoc } from '@/types';
+import type { AppUser, BarberService, Appointment, DayAvailability, BarberScheduleDoc, DayOfWeek } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
@@ -15,7 +15,7 @@ import { firestore } from '@/firebase/config';
 import { collection, doc, getDoc, getDocs, query, where, addDoc, Timestamp, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { AlertCircle, CalendarDays, CheckCircle, ChevronLeft, Clock, DollarSign, Scissors, Users } from 'lucide-react';
+import { AlertCircle, CalendarDays, CheckCircle, ChevronLeft, Clock, DollarSign, Scissors, Users, Info } from 'lucide-react';
 import { APP_NAME } from '@/lib/constants';
 
 type BookingStep = 'selectService' | 'selectDateTime' | 'confirm' | 'confirmed' | 'queued';
@@ -38,6 +38,8 @@ const minutesToTime = (minutes: number): string => {
   const modifier = h < 12 || h === 24 ? 'AM' : 'PM';
   return `${String(hours).padStart(2, '0')}:${String(m).padStart(2, '0')} ${modifier}`;
 };
+
+const daysOfWeekOrder: DayOfWeek[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 
 export default function BookingPage() {
@@ -105,9 +107,16 @@ export default function BookingPage() {
       const scheduleDocRef = doc(firestore, 'barberSchedules', barberId);
       const scheduleDocSnap = await getDoc(scheduleDocRef);
       if (scheduleDocSnap.exists()) {
-        setSchedule((scheduleDocSnap.data() as BarberScheduleDoc).schedule);
+        const barberScheduleDoc = scheduleDocSnap.data() as BarberScheduleDoc;
+        const fetchedSchedule = barberScheduleDoc.schedule;
+        // Ensure all days are present and sorted
+        const sortedFetchedSchedule = daysOfWeekOrder.map(dayName => {
+            const foundDay = fetchedSchedule.find(d => d.day === dayName);
+            return foundDay || { day: dayName, isOpen: false, startTime: '09:00 AM', endTime: '05:00 PM' };
+        });
+        setSchedule(sortedFetchedSchedule);
       } else {
-        const defaultSchedule: DayAvailability[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => ({ day: day as DayAvailability['day'], isOpen: false, startTime: '09:00 AM', endTime: '05:00 PM' }));
+        const defaultSchedule: DayAvailability[] = daysOfWeekOrder.map(day => ({ day: day as DayAvailability['day'], isOpen: false, startTime: '09:00 AM', endTime: '05:00 PM' }));
         setSchedule(defaultSchedule);
       }
 
@@ -173,7 +182,9 @@ export default function BookingPage() {
       if (selectedDate === 'today') {
         const now = new Date();
         const nowMinutes = now.getHours() * 60 + now.getMinutes();
-        if (currentTimeMinutes < nowMinutes) {
+        // Add a small buffer (e.g., 15 minutes) to prevent booking slots too close to the current time
+        const bufferMinutes = 15; 
+        if (currentTimeMinutes < nowMinutes + bufferMinutes) {
           isSlotInFuture = false;
         }
       }
@@ -408,6 +419,31 @@ export default function BookingPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6 p-4 md:p-6">
+              {schedule.length > 0 && (
+                <div className="mb-6 p-4 border rounded-lg bg-card shadow-sm">
+                  <h4 className="text-md font-semibold mb-3 text-foreground flex items-center">
+                    <Info className="h-5 w-5 mr-2 text-primary" />
+                    Barber's Weekly Availability
+                  </h4>
+                  <div className="space-y-1.5">
+                    {daysOfWeekOrder.map(dayName => {
+                      const dayInfo = schedule.find(s => s.day === dayName);
+                      if (!dayInfo) return null; 
+                      return (
+                        <div key={dayInfo.day} className="flex justify-between items-center text-sm">
+                          <span className="text-gray-600">{dayInfo.day}</span>
+                          {dayInfo.isOpen ? (
+                            <span className="font-medium text-[#0088E0]">{dayInfo.startTime} &ndash; {dayInfo.endTime}</span>
+                          ) : (
+                            <span className="text-gray-500">Closed</span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <Label className="text-base font-medium mb-3 block">Select Date</Label>
                 <RadioGroup
@@ -442,7 +478,7 @@ export default function BookingPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-500">No available time slots for the selected service and date.</p>
+                  <p className="text-sm text-gray-500">No available time slots for the selected service and date. Check the barber's weekly availability above or try a different date/service.</p>
                 )}
               </div>
               <div className="flex flex-col sm:flex-row justify-between pt-6 space-y-3 sm:space-y-0 sm:space-x-3">
@@ -563,3 +599,6 @@ export default function BookingPage() {
     </ProtectedPage>
   );
 }
+
+
+    
