@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import { CustomOtpInput } from '@/components/ui/CustomOtpInput';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
 import type { UserRole } from '@/types';
@@ -41,18 +41,12 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
 
   const userDetailsForm = useForm<UserDetailsFormValues>({
     resolver: zodResolver(userDetailsSchema),
-    defaultValues: {
-      firstName: '',
-      lastName: '',
-      phoneNumber: '',
-    },
+    defaultValues: { firstName: '', lastName: '', phoneNumber: '' },
   });
 
   const otpForm = useForm<OtpFormValues>({
     resolver: zodResolver(otpSchema),
-    defaultValues: {
-      otp: '',
-    },
+    defaultValues: { otp: '' },
   });
 
   const otpValue = otpForm.watch('otp');
@@ -70,12 +64,11 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
   }, [user, role, router, resetOtpState, pendingRegistrationDetails, toast]);
 
   useEffect(() => {
-    // Component unmount or role change cleanup
     return () => {
       resetOtpState();
     };
   }, [resetOtpState, role]);
-
+  
   useEffect(() => {
     if (otpSent) {
       otpForm.reset({ otp: '' });
@@ -118,146 +111,102 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
   const handleTryAgain = () => {
     resetOtpState();
     setPendingRegistrationDetails(null);
-    userDetailsForm.reset({
-      firstName: '',
-      lastName: '',
-      phoneNumber: ''
-    });
-    otpForm.reset({ otp: '' });
-  }
+  };
 
-  if (otpSent) {
-    return (
-      <Form {...otpForm}>
-        <form onSubmit={otpForm.handleSubmit(onOtpSubmit)} className="space-y-6">
-          <p className="text-sm text-muted-foreground">
-            Enter the 6-digit OTP sent to {pendingRegistrationDetails?.phoneNumber}.
-          </p>
-          <FormField
-            control={otpForm.control}
-            name="otp"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>One-Time Password</FormLabel>
-                <FormControl>
-                  <InputOTP
-                    maxLength={6}
-                    {...field}
-                    onChange={(value) => {
-                      const cleanValue = value.replace(/\D/g, '').slice(0, 6);
-                      field.onChange(cleanValue);
-                    }}
-                    autoComplete="one-time-code"
-                    pattern="\d*"
-                    inputMode="numeric"
-                  >
-                    <InputOTPGroup>
-                      <InputOTPSlot index={0} />
-                      <InputOTPSlot index={1} />
-                      <InputOTPSlot index={2} />
-                      <InputOTPSlot index={3} />
-                      <InputOTPSlot index={4} />
-                      <InputOTPSlot index={5} />
-                    </InputOTPGroup>
-                  </InputOTP>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <Button
-            type="submit"
-            className="w-full button-tap-target text-lg py-3 h-14"
-            disabled={isVerifyingOtp || !otpValue || otpValue.length !== 6}
-          >
-            {isVerifyingOtp ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
-            Verify OTP & Register
-          </Button>
-          <Button
-            variant="link"
-            onClick={handleTryAgain}
-            disabled={isVerifyingOtp}
-            type="button"
-            className="w-full"
-          >
-            Change details or resend OTP
-          </Button>
-        </form>
-      </Form>
-    );
-  }
-
+  // The main component logic now switches between two completely separate form instances
+  // using the `key` prop. This is the crucial fix for the autofill issue.
   return (
-    <Form {...userDetailsForm}>
-      <form onSubmit={userDetailsForm.handleSubmit(onUserDetailsSubmit)} className="space-y-6">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <FormField
-            control={userDetailsForm.control}
-            name="firstName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>First Name</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="Enter your first name"
-                    {...field}
-                    className="text-base py-3 px-4 h-12"
-                    autoComplete="given-name"
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={userDetailsForm.control}
-            name="lastName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Last Name</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="Enter your last name"
-                    {...field}
-                    className="text-base py-3 px-4 h-12"
-                    autoComplete="family-name"
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        </div>
-        <FormField
-          control={userDetailsForm.control}
-          name="phoneNumber"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Phone Number</FormLabel>
-              <FormControl>
-                <Input
-                  type="tel"
-                  placeholder="e.g. +14155552671"
-                  {...field}
-                  className="text-base py-3 px-4 h-12"
-                  autoComplete="tel"
-                  inputMode="tel"
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-        <div id={RECAPTCHA_CONTAINER_ID}></div>
-        <Button
-          type="submit"
-          className="w-full button-tap-target text-lg py-3 h-14"
-          disabled={isSendingOtp}
-        >
-          {isSendingOtp ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
-          Send OTP
-        </Button>
-      </form>
-    </Form>
+    <div key={otpSent ? 'otp-form' : 'details-form'}>
+      {otpSent ? (
+        <Form {...otpForm}>
+          <form onSubmit={otpForm.handleSubmit(onOtpSubmit)} className="space-y-6">
+            <p className="text-sm text-muted-foreground">
+              Enter the 6-digit OTP sent to {pendingRegistrationDetails?.phoneNumber}.
+            </p>
+            <FormField
+              control={otpForm.control}
+              name="otp"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>One-Time Password</FormLabel>
+                  <FormControl>
+                    <CustomOtpInput {...field} disabled={isVerifyingOtp} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <Button
+              type="submit"
+              className="w-full button-tap-target text-lg py-3 h-14"
+              disabled={isVerifyingOtp || !otpValue || otpValue.length !== 6}
+            >
+              {isVerifyingOtp && <LoadingSpinner className="mr-2 h-5 w-5" />}
+              Verify OTP & Register
+            </Button>
+            <Button
+              variant="link"
+              onClick={handleTryAgain}
+              disabled={isVerifyingOtp}
+              type="button"
+              className="w-full"
+            >
+              Change details or resend OTP
+            </Button>
+          </form>
+        </Form>
+      ) : (
+        <Form {...userDetailsForm}>
+          <form onSubmit={userDetailsForm.handleSubmit(onUserDetailsSubmit)} className="space-y-6">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <FormField
+                control={userDetailsForm.control}
+                name="firstName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>First Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter your first name" {...field} className="text-base py-3 px-4 h-12" autoComplete="given-name" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={userDetailsForm.control}
+                name="lastName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Last Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Enter your last name" {...field} className="text-base py-3 px-4 h-12" autoComplete="family-name" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <FormField
+              control={userDetailsForm.control}
+              name="phoneNumber"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Phone Number</FormLabel>
+                  <FormControl>
+                    <Input type="tel" placeholder="e.g. +14155552671" {...field} className="text-base py-3 px-4 h-12" autoComplete="tel" inputMode="tel" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <div id={RECAPTCHA_CONTAINER_ID}></div>
+            <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14" disabled={isSendingOtp}>
+              {isSendingOtp && <LoadingSpinner className="mr-2 h-5 w-5" />}
+              Send OTP
+            </Button>
+          </form>
+        </Form>
+      )}
+    </div>
   );
 }

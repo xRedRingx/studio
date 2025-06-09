@@ -5,18 +5,16 @@ import ProtectedPage from '@/components/layout/ProtectedPage';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
-import type { Appointment } from '@/types';
+import type { Appointment, AppUser } from '@/types';
 import { firestore } from '@/firebase/config';
 import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { CalendarDays, Clock, Scissors, UserCircle } from 'lucide-react';
+import { CalendarDays, Clock, Scissors, UserCircle, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 
 // Helper to get today's date in YYYY-MM-DD format for filtering
 const getTodayDateString = () => {
-  // This must run client-side to avoid hydration mismatches
-  // if used to filter data that might be pre-rendered with a different "today"
   return new Date().toISOString().split('T')[0];
 };
 
@@ -37,24 +35,23 @@ export default function CustomerDashboardPage() {
   const { toast } = useToast();
   const [myAppointments, setMyAppointments] = useState<Appointment[]>([]);
   const [isLoadingAppointments, setIsLoadingAppointments] = useState(true);
+  const [availableBarbers, setAvailableBarbers] = useState<AppUser[]>([]);
+  const [isLoadingBarbers, setIsLoadingBarbers] = useState(true);
   const [today, setToday] = useState<string | null>(null);
 
   useEffect(() => {
-    // Set today's date string once on the client
     setToday(getTodayDateString());
   }, []);
 
   const fetchMyAppointments = useCallback(async () => {
-    if (!user?.uid || !today) return; // Wait for user and today's date
+    if (!user?.uid || !today) return;
     setIsLoadingAppointments(true);
     try {
       const appointmentsCollection = collection(firestore, 'appointments');
       const q = query(
         appointmentsCollection,
         where('customerId', '==', user.uid),
-        orderBy('date', 'asc'), // Sort by date first (ascending for upcoming)
-        // Firestore doesn't directly support orderBy on time strings like "HH:MM AM/PM" perfectly.
-        // We will sort by startTime client-side after fetching.
+        orderBy('date', 'asc'),
       );
       const querySnapshot = await getDocs(q);
       const fetchedAppointments: Appointment[] = [];
@@ -62,14 +59,13 @@ export default function CustomerDashboardPage() {
         fetchedAppointments.push({ id: doc.id, ...doc.data() } as Appointment);
       });
 
-      // Filter for upcoming appointments (today or future) and sort by time
       const upcomingAppointments = fetchedAppointments
         .filter(app => app.date >= today)
         .sort((a, b) => {
           if (a.date === b.date) {
             return timeToMinutes(a.startTime) - timeToMinutes(b.startTime);
           }
-          return 0; // Already sorted by date by Firestore
+          return 0; 
         });
 
       setMyAppointments(upcomingAppointments);
@@ -81,14 +77,41 @@ export default function CustomerDashboardPage() {
     }
   }, [user?.uid, toast, today]);
 
+  const fetchAvailableBarbers = useCallback(async () => {
+    setIsLoadingBarbers(true);
+    try {
+      const usersCollection = collection(firestore, 'users');
+      const q = query(usersCollection, where('role', '==', 'barber'), orderBy('firstName', 'asc'));
+      const querySnapshot = await getDocs(q);
+      const fetchedBarbers: AppUser[] = [];
+      querySnapshot.forEach((doc) => {
+        // Ensure only essential and safe data is passed
+        const data = doc.data();
+        fetchedBarbers.push({
+          uid: doc.id,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          // Do not fetch sensitive fields like phoneNumber or email for listing
+        } as AppUser); // Cast as AppUser, but only with safe fields
+      });
+      setAvailableBarbers(fetchedBarbers);
+    } catch (error) {
+      console.error("Error fetching barbers:", error);
+      toast({ title: "Error", description: "Could not fetch available barbers.", variant: "destructive" });
+    } finally {
+      setIsLoadingBarbers(false);
+    }
+  }, [toast]);
+
   useEffect(() => {
     if (user?.uid && today) {
       fetchMyAppointments();
     }
-  }, [user?.uid, fetchMyAppointments, today]);
+    fetchAvailableBarbers(); // Fetch barbers regardless of user login for now
+  }, [user?.uid, fetchMyAppointments, fetchAvailableBarbers, today]);
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString + 'T00:00:00'); // Ensure correct parsing by adding time part
+    const date = new Date(dateString + 'T00:00:00'); 
     return date.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   };
 
@@ -98,6 +121,7 @@ export default function CustomerDashboardPage() {
         <h1 className="text-4xl font-headline font-bold">
           Welcome, {user?.firstName || user?.displayName || 'Customer'}!
         </h1>
+        
         <Card>
           <CardHeader>
             <CardTitle>Your Upcoming Appointments</CardTitle>
@@ -112,9 +136,6 @@ export default function CustomerDashboardPage() {
             ) : myAppointments.length === 0 ? (
               <div className="text-center py-6">
                 <p className="text-muted-foreground mb-4">You have no upcoming appointments.</p>
-                 <Button asChild>
-                  <Link href="/customer/dashboard#find-barber">Book New Appointment</Link>
-                </Button>
               </div>
             ) : (
               <div className="space-y-4">
@@ -140,35 +161,45 @@ export default function CustomerDashboardPage() {
                     </CardContent>
                   </Card>
                 ))}
-                <div className="pt-4 text-center">
-                  <Button asChild>
-                     <Link href="/customer/dashboard#find-barber">Book Another Appointment</Link>
-                  </Button>
-                </div>
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* This section can be used to list barbers if "Book New Appointment" scrolls to it */}
-        <div id="find-barber">
-            {/* Placeholder for Barber Listing - for now it's a link target */}
-            {/* In a more advanced setup, the barber list from the book/[barberId] page's parent could be shown here */}
-        </div>
-
-        {/* Existing "Explore Services" Card - can be kept or re-evaluated */}
-        <Card>
+        <Card id="find-barber">
           <CardHeader>
             <CardTitle>Explore Barbers</CardTitle>
             <CardDescription>Discover services offered by our talented barbers.</CardDescription>
           </CardHeader>
           <CardContent>
-             <p className="text-muted-foreground">Our barbers are listed below. Select one to book an appointment.</p>
-             {/* The actual list of barbers would be rendered here, similar to the initial state of this page or a dedicated component */}
-             {/* For now, just guide the user to where they'd find barbers (implicitly the main dashboard if not showing here) */}
-             <Button variant="outline" className="mt-4" asChild>
-                <Link href="/customer/dashboard">Browse Barbers</Link>
-             </Button>
+            {isLoadingBarbers ? (
+              <div className="flex items-center justify-center py-6">
+                <LoadingSpinner className="h-8 w-8 text-primary" />
+                <p className="ml-2">Loading available barbers...</p>
+              </div>
+            ) : availableBarbers.length === 0 ? (
+              <p className="text-muted-foreground">No barbers are currently available.</p>
+            ) : (
+              <div className="space-y-3">
+                {availableBarbers.map(barber => (
+                  <Card key={barber.uid} className="shadow">
+                    <CardContent className="p-4 flex items-center justify-between">
+                      <div>
+                        <h3 className="text-lg font-semibold">
+                          {barber.firstName} {barber.lastName}
+                        </h3>
+                        {/* Could add more barber info here if available, like specialties */}
+                      </div>
+                      <Button asChild variant="outline" size="sm">
+                        <Link href={`/customer/book/${barber.uid}`}>
+                          Book Appointment <ChevronRight className="ml-2 h-4 w-4" />
+                        </Link>
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
