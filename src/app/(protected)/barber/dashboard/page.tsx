@@ -25,9 +25,6 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 
-// Helper to get today's date in YYYY-MM-DD format - remains client-side for filtering
-const getTodayDateString = () => new Date().toISOString().split('T')[0];
-
 const INITIAL_SCHEDULE: DayAvailability[] = (['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as DayOfWeek[]).map(day => ({
   day,
   isOpen: !['Saturday', 'Sunday'].includes(day),
@@ -124,12 +121,12 @@ export default function BarberDashboardPage() {
         const scheduleData = docSnap.data() as BarberScheduleDoc;
         setSchedule(scheduleData.schedule);
       } else {
-        setSchedule(INITIAL_SCHEDULE); // Use default if no schedule saved yet
+        setSchedule(INITIAL_SCHEDULE); 
       }
     } catch (error) {
       console.error("Error fetching schedule:", error);
       toast({ title: "Error", description: "Could not fetch work schedule.", variant: "destructive" });
-      setSchedule(INITIAL_SCHEDULE); // Fallback to initial on error
+      setSchedule(INITIAL_SCHEDULE); 
     } finally {
       setIsLoadingSchedule(false);
     }
@@ -154,7 +151,7 @@ export default function BarberDashboardPage() {
         schedule: schedule,
         updatedAt: Timestamp.now(),
       };
-      await setDoc(scheduleDocRef, scheduleDataToSave, { merge: true }); // merge true will create or update
+      await setDoc(scheduleDocRef, scheduleDataToSave, { merge: true }); 
       toast({ title: "Success", description: "Work schedule saved successfully." });
     } catch (error) {
       console.error("Error saving schedule:", error);
@@ -170,8 +167,6 @@ export default function BarberDashboardPage() {
     setIsLoadingAppointments(true);
     try {
       const appointmentsCollection = collection(firestore, 'appointments');
-      // For now, just fetch all appointments for the barber. Sorting/filtering for "today" happens in TodaysAppointmentsSection.
-      // Consider adding server-side filtering by date in the future for performance.
       const q = query(appointmentsCollection, where('barberId', '==', user.uid), orderBy('date', 'desc'), orderBy('startTime'));
       const querySnapshot = await getDocs(q);
       const fetchedAppointments: Appointment[] = [];
@@ -204,7 +199,6 @@ export default function BarberDashboardPage() {
     }
   };
 
-  // Initial data fetching
   useEffect(() => {
     if (user?.uid) {
       fetchServices();
@@ -217,18 +211,18 @@ export default function BarberDashboardPage() {
   return (
     <ProtectedPage expectedRole="barber">
       <div className="space-y-8">
-        <h1 className="text-4xl font-headline font-bold">
+        <h1 className="text-2xl font-bold font-headline">
           Barber Dashboard, {user?.firstName || user?.displayName || 'Barber'}!
         </h1>
 
         {isLoadingAppointments ? (
           <div className="flex justify-center items-center py-10">
             <LoadingSpinner className="h-8 w-8 text-primary" />
-            <p className="ml-2">Loading appointments...</p>
+            <p className="ml-2 text-base">Loading appointments...</p>
           </div>
         ) : (
           <TodaysAppointmentsSection
-            appointments={appointments} // Pass all fetched appointments
+            appointments={appointments} 
             onUpdateAppointmentStatus={handleUpdateAppointmentStatus}
             isUpdatingAppointment={isUpdatingAppointment}
           />
@@ -237,7 +231,7 @@ export default function BarberDashboardPage() {
         {isLoadingServices ? (
           <div className="flex justify-center items-center py-10">
             <LoadingSpinner className="h-8 w-8 text-primary" />
-            <p className="ml-2">Loading services...</p>
+            <p className="ml-2 text-base">Loading services...</p>
           </div>
         ) : (
           <ManageServicesSection
@@ -251,7 +245,7 @@ export default function BarberDashboardPage() {
         {isLoadingSchedule ? (
            <div className="flex justify-center items-center py-10">
             <LoadingSpinner className="h-8 w-8 text-primary" />
-            <p className="ml-2">Loading schedule...</p>
+            <p className="ml-2 text-base">Loading schedule...</p>
           </div>
         ) : (
           <SetWorkScheduleSection

@@ -19,36 +19,36 @@ export default function RoleSelector() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md shadow-xl">
-        <CardHeader className="text-center">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4 sm:p-6">
+      <Card className="w-full max-w-md shadow-xl border-none">
+        <CardHeader className="text-center p-6">
           <div className="mx-auto mb-6 flex justify-center">
             <BarberFlowLogo className="h-12 w-auto" />
           </div>
-          <CardTitle className="font-headline text-3xl">Welcome to {APP_NAME}!</CardTitle>
-          <CardDescription className="text-lg text-muted-foreground pt-2">
+          <CardTitle className="font-headline text-2xl font-bold">Welcome to {APP_NAME}!</CardTitle>
+          <CardDescription className="text-base text-gray-500 pt-2">
             Please tell us who you are to get started.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6 p-8">
+        <CardContent className="space-y-4 p-6 sm:p-8">
           <Button
             onClick={() => handleRoleSelection('customer')}
-            className="w-full button-tap-target transform py-8 text-xl transition-transform hover:scale-105"
+            className="w-full h-14 rounded-full text-lg transform transition-all duration-200 ease-in-out hover:scale-105"
             variant="outline"
             aria-label="I am a Customer"
           >
-            <User className="mr-3 h-7 w-7" /> I'm a Customer
+            <User className="mr-3 h-6 w-6" /> I'm a Customer
           </Button>
           <Button
             onClick={() => handleRoleSelection('barber')}
-            className="w-full button-tap-target transform py-8 text-xl transition-transform hover:scale-105"
+            className="w-full h-14 rounded-full text-lg transform transition-all duration-200 ease-in-out hover:scale-105"
             aria-label="I am a Barber"
           >
-            <Scissors className="mr-3 h-7 w-7" /> I'm a Barber
+            <Scissors className="mr-3 h-6 w-6" /> I'm a Barber
           </Button>
         </CardContent>
       </Card>
-       <p className="mt-8 text-center text-sm text-muted-foreground">
+       <p className="mt-8 text-center text-sm text-gray-500">
         Your role selection helps us tailor your experience. <br/> This can only be set once.
       </p>
     </div>

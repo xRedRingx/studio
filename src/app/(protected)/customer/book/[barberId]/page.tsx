@@ -9,7 +9,6 @@ import { useAuth } from '@/hooks/useAuth';
 import type { AppUser, BarberService, Appointment, DayAvailability, BarberScheduleDoc } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { firestore } from '@/firebase/config';
@@ -21,7 +20,6 @@ import { APP_NAME } from '@/lib/constants';
 
 type BookingStep = 'selectService' | 'selectDateTime' | 'confirm' | 'confirmed' | 'queued';
 
-// Helper to parse "HH:MM AM/PM" to minutes from midnight
 const timeToMinutes = (timeStr: string): number => {
   const [time, modifier] = timeStr.split(' ');
   let [hours, minutes] = time.split(':').map(Number);
@@ -33,7 +31,6 @@ const timeToMinutes = (timeStr: string): number => {
   return hours * 60 + minutes;
 };
 
-// Helper to format minutes from midnight to "HH:MM AM/PM"
 const minutesToTime = (minutes: number): string => {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
@@ -64,7 +61,6 @@ export default function BookingPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // State for queue view
   const [newlyBookedAppointment, setNewlyBookedAppointment] = useState<Appointment | null>(null);
   const [queuePosition, setQueuePosition] = useState<number | null>(null);
   const [estimatedWaitTime, setEstimatedWaitTime] = useState<number | null>(null);
@@ -92,7 +88,6 @@ export default function BookingPage() {
     if (!barberId) return;
     setIsLoading(true);
     try {
-      // Fetch barber details
       const barberDocRef = doc(firestore, 'users', barberId);
       const barberDocSnap = await getDoc(barberDocRef);
       if (barberDocSnap.exists() && barberDocSnap.data().role === 'barber') {
@@ -103,23 +98,19 @@ export default function BookingPage() {
         return;
       }
 
-      // Fetch services
       const servicesQuery = query(collection(firestore, 'services'), where('barberId', '==', barberId), orderBy('createdAt', 'desc'));
       const servicesSnapshot = await getDocs(servicesQuery);
       setServices(servicesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BarberService)));
 
-      // Fetch schedule
       const scheduleDocRef = doc(firestore, 'barberSchedules', barberId);
       const scheduleDocSnap = await getDoc(scheduleDocRef);
       if (scheduleDocSnap.exists()) {
         setSchedule((scheduleDocSnap.data() as BarberScheduleDoc).schedule);
       } else {
-        // Default to closed all week if no schedule, or handle as needed
         const defaultSchedule: DayAvailability[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => ({ day: day as DayAvailability['day'], isOpen: false, startTime: '09:00 AM', endTime: '05:00 PM' }));
         setSchedule(defaultSchedule);
       }
 
-      // Fetch existing appointments for today and tomorrow to calculate availability
       const todayStr = new Date().toISOString().split('T')[0];
       const tomorrowDate = new Date();
       tomorrowDate.setDate(tomorrowDate.getDate() + 1);
@@ -178,7 +169,6 @@ export default function BookingPage() {
         bookedSlot => currentTimeMinutes < bookedSlot.end && slotEndMinutes > bookedSlot.start
       );
 
-      // Ensure slot is not in the past if selectedDate is today
       let isSlotInFuture = true;
       if (selectedDate === 'today') {
         const now = new Date();
@@ -191,10 +181,10 @@ export default function BookingPage() {
       if (isSlotFree && isSlotInFuture) {
         slots.push(minutesToTime(currentTimeMinutes));
       }
-      currentTimeMinutes += 15; // Check for slots every 15 minutes
+      currentTimeMinutes += 15; 
     }
     setAvailableTimeSlots(slots);
-    setSelectedTimeSlot(null); // Reset selected time slot when service or date changes
+    setSelectedTimeSlot(null); 
   }, [selectedService, selectedDate, schedule, existingAppointments]);
 
 
@@ -229,19 +219,16 @@ export default function BookingPage() {
       const q = query(
         collection(firestore, 'appointments'),
         where('barberId', '==', barberId),
-        where('date', '==', todayStr), // Only today's appointments for queue
+        where('date', '==', todayStr), 
         where('status', 'in', ['upcoming', 'checked-in']),
-        orderBy('startTime') // Firestore string sort for "HH:MM AM/PM" might not be perfect, manual sort after fetch
+        orderBy('startTime') 
       );
   
       const snapshot = await getDocs(q);
       let todaysOpenAppointments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
       
-      // Manual sort for "HH:MM AM/PM" times
       todaysOpenAppointments.sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
 
-      // Add the newly booked appointment to the list if it's for today and not already present
-      // This is important if the Firestore write hasn't propagated to the query yet
       if (bookedAppointment.date === todayStr && !todaysOpenAppointments.find(app => app.id === bookedAppointment.id)) {
           todaysOpenAppointments.push(bookedAppointment);
           todaysOpenAppointments.sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
@@ -254,11 +241,11 @@ export default function BookingPage() {
       let foundCurrentUser = false;
   
       const bookedAppointmentService = services.find(s => s.id === bookedAppointment.serviceId);
-      const bookedAppointmentDuration = bookedAppointmentService?.duration || 30; // Fallback
+      const bookedAppointmentDuration = bookedAppointmentService?.duration || 30; 
 
       for (let i = 0; i < todaysOpenAppointments.length; i++) {
         const app = todaysOpenAppointments[i];
-        const serviceDetails = services.find(s => s.id === app.serviceId) || { duration: 30 }; // Fallback
+        const serviceDetails = services.find(s => s.id === app.serviceId) || { duration: 30 }; 
   
         if (app.id === bookedAppointment.id) {
           position = i + 1;
@@ -267,37 +254,30 @@ export default function BookingPage() {
   
         if (app.status === 'checked-in') {
           servingName = app.customerName;
-          // If this 'checked-in' appointment is before the user, add its duration to wait time
           if (!foundCurrentUser) {
             waitTime += serviceDetails.duration;
           }
         } else if (app.status === 'upcoming') {
-          // If this 'upcoming' appointment is before the user, add its duration
           if (!foundCurrentUser) {
             waitTime += serviceDetails.duration;
           }
-          // Check if user is next after a 'checked-in' appointment or if user is first
           if (servingName && todaysOpenAppointments[i-1]?.status === 'checked-in' && app.id === bookedAppointment.id) {
             userIsNext = true;
           } else if (!servingName && i === 0 && app.id === bookedAppointment.id) {
-            // No one is being served, and current user is the first in upcoming
             userIsNext = true; 
           }
         }
       }
       
-      // If user is first in line and no one is 'checked-in', they are effectively next
       if (position === 1 && !servingName) {
         userIsNext = true;
       }
       
-      // If user is 'checked-in' (shouldn't happen for new booking, but good to handle), wait time is 0
       if (bookedAppointment.status === 'checked-in') {
           waitTime = 0;
-          position = 1; // Or display as "Currently Serving"
-          userIsNext = false; // Not 'next' if being served
+          position = 1; 
+          userIsNext = false; 
       }
-
 
       setQueuePosition(position > 0 ? position : null);
       setEstimatedWaitTime(waitTime);
@@ -308,11 +288,9 @@ export default function BookingPage() {
     } catch (error) {
       console.error("Error calculating queue info:", error);
       toast({ title: "Queue Error", description: "Could not retrieve current queue information.", variant: "destructive" });
-      // Fallback to simple confirmed message if queue calculation fails
       setBookingStep('confirmed');
     }
   };
-
 
   const handleConfirmBooking = async () => {
     if (!user || !selectedService || !selectedTimeSlot || !barber) {
@@ -348,10 +326,10 @@ export default function BookingPage() {
 
       toast({ title: "Booking Confirmed!", description: "Your appointment has been successfully booked." });
       
-      if (finalAppointment.date === getYYYYMMDD('today')) { // Only show queue for today's bookings
+      if (finalAppointment.date === getYYYYMMDD('today')) { 
         await fetchAndCalculateQueueInfo(finalAppointment);
       } else {
-        setBookingStep('confirmed'); // For future bookings, just show simple confirmation
+        setBookingStep('confirmed'); 
       }
 
     } catch (error) {
@@ -368,7 +346,7 @@ export default function BookingPage() {
       <ProtectedPage expectedRole="customer">
         <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center">
           <LoadingSpinner className="h-12 w-12 text-primary" />
-          <p className="ml-3 text-lg">Loading barber details...</p>
+          <p className="ml-3 text-base">Loading barber details...</p>
         </div>
       </ProtectedPage>
     );
@@ -378,8 +356,8 @@ export default function BookingPage() {
     return (
       <ProtectedPage expectedRole="customer">
         <div className="text-center py-10">
-          <h2 className="text-2xl font-semibold text-destructive">Barber not found.</h2>
-          <Button onClick={() => router.push('/customer/dashboard')} className="mt-4">Go Back</Button>
+          <h2 className="text-2xl font-bold text-destructive">Barber not found.</h2>
+          <Button onClick={() => router.push('/customer/dashboard')} className="mt-6 h-14 rounded-full px-8 text-lg">Go Back</Button>
         </div>
       </ProtectedPage>
     );
@@ -389,27 +367,28 @@ export default function BookingPage() {
     switch (bookingStep) {
       case 'selectService':
         return (
-          <Card>
-            <CardHeader>
-              <CardTitle>Step 1: Select a Service</CardTitle>
-              <CardDescription>Choose from the services offered by {barber.firstName || 'this barber'}.</CardDescription>
+          <Card className="border-none shadow-none">
+            <CardHeader className="p-4 md:p-6">
+              <CardTitle className="text-2xl font-bold">Step 1: Select a Service</CardTitle>
+              <CardDescription className="text-sm text-gray-500">Choose from the services offered by {barber.firstName || 'this barber'}.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-3 p-4 md:p-6">
               {services.length === 0 ? (
-                <p className="text-muted-foreground">This barber has not listed any services yet.</p>
+                <p className="text-sm text-gray-500">This barber has not listed any services yet.</p>
               ) : (
                 services.map(service => (
                   <Button
                     key={service.id}
                     variant="outline"
-                    className="w-full justify-start text-left h-auto py-3"
+                    className="w-full justify-start text-left h-auto py-4 px-4 rounded-lg border shadow-sm hover:bg-accent/10"
                     onClick={() => handleServiceSelect(service.id)}
                   >
                     <div className="flex flex-col">
-                      <span className="font-semibold">{service.name}</span>
-                      <span className="text-sm text-muted-foreground">
-                        <DollarSign className="inline h-3 w-3 mr-1" />{service.price.toFixed(2)}
-                        <Clock className="inline h-3 w-3 ml-3 mr-1" />{service.duration} min
+                      <span className="font-semibold text-base">{service.name}</span>
+                      <span className="text-sm text-gray-500 mt-1">
+                        <DollarSign className="inline h-4 w-4 mr-1" />{service.price.toFixed(2)}
+                        <Clock className="inline h-4 w-4 ml-3 mr-1" />
+                        <span className="text-[#0088E0]">{service.duration} min</span>
                       </span>
                     </div>
                   </Button>
@@ -421,18 +400,18 @@ export default function BookingPage() {
 
       case 'selectDateTime':
         return (
-          <Card>
-            <CardHeader>
-              <CardTitle>Step 2: Pick Date & Time</CardTitle>
-              <CardDescription>
-                Selected service: <span className="font-semibold">{selectedService?.name}</span>
+          <Card className="border-none shadow-none">
+            <CardHeader className="p-4 md:p-6">
+              <CardTitle className="text-2xl font-bold">Step 2: Pick Date & Time</CardTitle>
+              <CardDescription className="text-sm text-gray-500">
+                Selected service: <span className="font-semibold text-foreground">{selectedService?.name}</span>
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="space-y-6 p-4 md:p-6">
               <div>
-                <Label className="text-md font-medium mb-2 block">Select Date</Label>
+                <Label className="text-base font-medium mb-3 block">Select Date</Label>
                 <RadioGroup
-                  defaultValue="today"
+                  value={selectedDate}
                   onValueChange={(value: 'today' | 'tomorrow') => handleDateChange(value)}
                   className="flex space-x-4"
                 >
@@ -448,29 +427,29 @@ export default function BookingPage() {
               </div>
 
               <div>
-                <Label className="text-md font-medium mb-2 block">Select Time Slot</Label>
+                <Label className="text-base font-medium mb-3 block">Select Time Slot</Label>
                 {availableTimeSlots.length > 0 ? (
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
                     {availableTimeSlots.map(slot => (
                       <Button
                         key={slot}
                         variant={selectedTimeSlot === slot ? 'default' : 'outline'}
                         onClick={() => handleTimeSlotSelect(slot)}
-                        className="button-tap-target"
+                        className="h-12 rounded-md text-base"
                       >
-                        {slot}
+                        <span className={selectedTimeSlot === slot ? "" : "text-[#0088E0]"}>{slot}</span>
                       </Button>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-muted-foreground">No available time slots for the selected service and date.</p>
+                  <p className="text-sm text-gray-500">No available time slots for the selected service and date.</p>
                 )}
               </div>
-              <div className="flex justify-between pt-4">
-                <Button variant="outline" onClick={() => setBookingStep('selectService')}>
+              <div className="flex flex-col sm:flex-row justify-between pt-6 space-y-3 sm:space-y-0 sm:space-x-3">
+                <Button variant="outline" onClick={() => setBookingStep('selectService')} className="w-full sm:w-auto h-12 rounded-full text-base">
                     <ChevronLeft className="mr-2 h-4 w-4" /> Back to Services
                 </Button>
-                <Button onClick={handleProceedToConfirm} disabled={!selectedTimeSlot || !selectedService}>
+                <Button onClick={handleProceedToConfirm} disabled={!selectedTimeSlot || !selectedService} className="w-full sm:w-auto h-12 rounded-full text-base">
                   Proceed to Confirmation
                 </Button>
               </div>
@@ -480,25 +459,25 @@ export default function BookingPage() {
 
       case 'confirm':
         return (
-          <Card>
-            <CardHeader>
-              <CardTitle>Step 3: Confirm Booking</CardTitle>
-              <CardDescription>Please review your appointment details.</CardDescription>
+          <Card className="border-none shadow-none">
+            <CardHeader className="p-4 md:p-6">
+              <CardTitle className="text-2xl font-bold">Step 3: Confirm Booking</CardTitle>
+              <CardDescription className="text-sm text-gray-500">Please review your appointment details.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2 text-lg">
+            <CardContent className="space-y-3 p-4 md:p-6">
+              <div className="space-y-2 text-base">
                 <p><Scissors className="inline mr-2 h-5 w-5 text-primary" /> Service: <span className="font-semibold">{selectedService?.name}</span></p>
                 <p><Users className="inline mr-2 h-5 w-5 text-primary" /> With: <span className="font-semibold">{barber.firstName} {barber.lastName}</span></p>
                 <p><CalendarDays className="inline mr-2 h-5 w-5 text-primary" /> Date: <span className="font-semibold">{getDisplayDate(selectedDate)}</span></p>
-                <p><Clock className="inline mr-2 h-5 w-5 text-primary" /> Time: <span className="font-semibold">{selectedTimeSlot}</span></p>
+                <p><Clock className="inline mr-2 h-5 w-5 text-primary" /> Time: <span className="font-semibold text-[#0088E0]">{selectedTimeSlot}</span></p>
                 <p><DollarSign className="inline mr-2 h-5 w-5 text-primary" /> Price: <span className="font-semibold">${selectedService?.price.toFixed(2)}</span></p>
               </div>
-              <div className="flex justify-between pt-6">
-                <Button variant="outline" onClick={() => setBookingStep('selectDateTime')}>
-                     <ChevronLeft className="mr-2 h-4 w-4" /> Back to Time Selection
+              <div className="flex flex-col sm:flex-row justify-between pt-8 space-y-3 sm:space-y-0 sm:space-x-3">
+                <Button variant="outline" onClick={() => setBookingStep('selectDateTime')} className="w-full sm:w-auto h-12 rounded-full text-base">
+                     <ChevronLeft className="mr-2 h-4 w-4" /> Back
                 </Button>
-                <Button onClick={handleConfirmBooking} className="w-full md:w-auto text-lg py-3 px-6 button-tap-target" disabled={isSubmitting}>
-                  {isSubmitting ? <LoadingSpinner className="mr-2" /> : null}
+                <Button onClick={handleConfirmBooking} className="w-full sm:w-auto h-14 rounded-full text-lg" disabled={isSubmitting}>
+                  {isSubmitting ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
                   Confirm Booking
                 </Button>
               </div>
@@ -508,17 +487,17 @@ export default function BookingPage() {
 
         case 'confirmed':
             return (
-              <Card className="text-center">
+              <Card className="text-center border-none shadow-none p-4 md:p-6">
                 <CardHeader>
                   <CheckCircle className="mx-auto h-16 w-16 text-green-500 mb-4" />
-                  <CardTitle className="text-3xl">Booking Confirmed!</CardTitle>
+                  <CardTitle className="text-2xl font-bold">Booking Confirmed!</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3 text-lg">
+                <CardContent className="space-y-2 text-base">
                   <p>Your appointment for <span className="font-semibold">{newlyBookedAppointment?.serviceName}</span></p>
                   <p>with <span className="font-semibold">{barber.firstName} {barber.lastName}</span></p>
-                  <p>on <span className="font-semibold">{newlyBookedAppointment ? getDisplayDate(newlyBookedAppointment.date === getYYYYMMDD('today') ? 'today' : 'tomorrow') : ''} at {newlyBookedAppointment?.startTime}</span></p>
+                  <p>on <span className="font-semibold">{newlyBookedAppointment ? getDisplayDate(newlyBookedAppointment.date === getYYYYMMDD('today') ? 'today' : 'tomorrow') : ''} at <span className="text-[#0088E0]">{newlyBookedAppointment?.startTime}</span></span></p>
                   <p>has been successfully booked.</p>
-                  <Button onClick={() => router.push('/customer/dashboard')} className="mt-6 text-lg py-3 px-6">
+                  <Button onClick={() => router.push('/customer/dashboard')} className="mt-8 w-full max-w-xs mx-auto h-14 rounded-full text-lg">
                     Back to Dashboard
                   </Button>
                 </CardContent>
@@ -527,34 +506,34 @@ export default function BookingPage() {
         
         case 'queued':
             return (
-                <Card className="text-center">
+                <Card className="text-center border-none shadow-none p-4 md:p-6">
                 <CardHeader>
                     {isCurrentUserNext && <AlertCircle className="mx-auto h-16 w-16 text-primary mb-4" />}
                     {!isCurrentUserNext && queuePosition && <Users className="mx-auto h-16 w-16 text-primary mb-4" />}
-                    <CardTitle className="text-3xl">
+                    <CardTitle className="text-2xl font-bold">
                     {isCurrentUserNext ? "You're Next!" : (queuePosition ? `You are #${queuePosition} in line` : "Queue Information")}
                     </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3 text-lg">
+                <CardContent className="space-y-2 text-base">
                     {newlyBookedAppointment && (
                     <>
                         <p>For your <span className="font-semibold">{newlyBookedAppointment.serviceName}</span> appointment</p>
-                        <p>at <span className="font-semibold">{newlyBookedAppointment.startTime}</span> today.</p>
+                        <p>at <span className="font-semibold text-[#0088E0]">{newlyBookedAppointment.startTime}</span> today.</p>
                     </>
                     )}
                     {estimatedWaitTime !== null && estimatedWaitTime > 0 && !isCurrentUserNext && (
                     <p className="font-semibold text-primary">Estimated wait: ~{estimatedWaitTime} minutes</p>
                     )}
                     {currentlyServingCustomerName && (
-                    <p className="text-muted-foreground"><span className="font-medium text-foreground">{currentlyServingCustomerName}</span> is currently being served.</p>
+                    <p className="text-sm text-gray-500"><span className="font-medium text-foreground">{currentlyServingCustomerName}</span> is currently being served.</p>
                     )}
                     {!currentlyServingCustomerName && queuePosition === 1 && (
-                         <p className="text-muted-foreground">You are at the front of the queue.</p>
+                         <p className="text-sm text-gray-500">You are at the front of the queue.</p>
                     )}
-                    <p className="text-xs text-muted-foreground pt-2">
-                        Note: Queue information is based on current bookings and may change. It does not update in real-time on this screen.
+                    <p className="text-xs text-gray-500 pt-4">
+                        Note: Queue information is based on current bookings and may change.
                     </p>
-                    <Button onClick={() => router.push('/customer/dashboard')} className="mt-6 text-lg py-3 px-6">
+                    <Button onClick={() => router.push('/customer/dashboard')} className="mt-8 w-full max-w-xs mx-auto h-14 rounded-full text-lg">
                     Back to Dashboard
                     </Button>
                 </CardContent>
@@ -568,13 +547,13 @@ export default function BookingPage() {
 
   return (
     <ProtectedPage expectedRole="customer">
-      <div className="space-y-8">
+      <div className="space-y-6">
         <div className="flex items-center justify-between">
-            <h1 className="text-3xl font-headline font-bold">
+            <h1 className="text-2xl font-bold font-headline">
             Book with {barber.firstName || APP_NAME}
             </h1>
             { bookingStep !== 'selectService' && bookingStep !== 'queued' && bookingStep !== 'confirmed' && (
-                 <Button variant="link" onClick={() => router.push('/customer/dashboard')} className="text-sm">
+                 <Button variant="link" onClick={() => router.push('/customer/dashboard')} className="text-sm text-primary">
                     Cancel & Go Back
                 </Button>
             )}
@@ -584,4 +563,3 @@ export default function BookingPage() {
     </ProtectedPage>
   );
 }
-

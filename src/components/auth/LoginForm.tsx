@@ -59,12 +59,16 @@ export default function LoginForm({ role }: LoginFormProps) {
   useEffect(() => {
     return () => {
       resetOtpState();
+      // Clear any existing reCAPTCHA verifiers when the component unmounts
+      const recaptchaContainer = document.getElementById(RECAPTCHA_CONTAINER_ID);
+      if (recaptchaContainer) recaptchaContainer.innerHTML = '';
     };
-  }, [resetOtpState, role]);
+  }, [resetOtpState]);
   
   useEffect(() => {
     if (otpSent) {
       otpForm.reset({ otp: '' });
+      otpForm.setValue('otp', '', { shouldValidate: false, shouldDirty: false, shouldTouch: false });
     }
   }, [otpSent, otpForm]);
 
@@ -74,11 +78,7 @@ export default function LoginForm({ role }: LoginFormProps) {
       await sendOtp(values.phoneNumber, RECAPTCHA_CONTAINER_ID, false);
     } catch (error) {
       console.error('Error sending OTP:', error);
-      toast({
-        title: "Error",
-        description: "Failed to send OTP. Please try again.",
-        variant: "destructive"
-      });
+      // Toast is handled by AuthContext
     }
   }
 
@@ -87,11 +87,7 @@ export default function LoginForm({ role }: LoginFormProps) {
       await confirmOtp(values.otp);
     } catch (error) {
       console.error('Error verifying OTP:', error);
-      toast({
-        title: "Error",
-        description: "Invalid OTP. Please try again.",
-        variant: "destructive"
-      });
+      // Toast is handled by AuthContext
       otpForm.reset({ otp: '' });
     }
   }
@@ -99,16 +95,18 @@ export default function LoginForm({ role }: LoginFormProps) {
   const handleTryAgain = () => {
     resetOtpState();
     setCurrentPhoneNumber('');
+    phoneForm.reset({phoneNumber: ''});
+    otpForm.reset({otp: ''});
+    const recaptchaContainer = document.getElementById(RECAPTCHA_CONTAINER_ID);
+    if (recaptchaContainer) recaptchaContainer.innerHTML = '';
   };
 
-  // The main component logic now switches between two completely separate form instances
-  // using the `key` prop. This is the crucial fix for the autofill issue.
   return (
     <div key={otpSent ? 'otp-form' : 'login-form'}>
       {otpSent ? (
         <Form {...otpForm}>
-          <form onSubmit={otpForm.handleSubmit(onOtpSubmit)} className="space-y-6">
-            <p className="text-sm text-muted-foreground">
+          <form onSubmit={otpForm.handleSubmit(onOtpSubmit)} className="space-y-6 mt-6">
+            <p className="text-sm text-gray-500">
               Enter the 6-digit OTP sent to {currentPhoneNumber}.
             </p>
             <FormField
@@ -116,9 +114,9 @@ export default function LoginForm({ role }: LoginFormProps) {
               name="otp"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>One-Time Password</FormLabel>
+                  <FormLabel className="text-base">One-Time Password</FormLabel>
                   <FormControl>
-                    <CustomOtpInput {...field} disabled={isVerifyingOtp} />
+                    <CustomOtpInput {...field} disabled={isVerifyingOtp} autoComplete="one-time-code" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -126,7 +124,7 @@ export default function LoginForm({ role }: LoginFormProps) {
             />
             <Button
               type="submit"
-              className="w-full button-tap-target text-lg py-3 h-14"
+              className="w-full h-14 rounded-full text-lg"
               disabled={isVerifyingOtp || !otpValue || otpValue.length !== 6}
             >
               {isVerifyingOtp && <LoadingSpinner className="mr-2 h-5 w-5" />}
@@ -137,7 +135,7 @@ export default function LoginForm({ role }: LoginFormProps) {
               onClick={handleTryAgain}
               disabled={isVerifyingOtp}
               type="button"
-              className="w-full"
+              className="w-full text-primary"
             >
               Change phone number or resend OTP
             </Button>
@@ -145,22 +143,22 @@ export default function LoginForm({ role }: LoginFormProps) {
         </Form>
       ) : (
         <Form {...phoneForm}>
-          <form onSubmit={phoneForm.handleSubmit(onPhoneSubmit)} className="space-y-6">
+          <form onSubmit={phoneForm.handleSubmit(onPhoneSubmit)} className="space-y-6 mt-6">
             <FormField
               control={phoneForm.control}
               name="phoneNumber"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Phone Number</FormLabel>
+                  <FormLabel className="text-base">Phone Number</FormLabel>
                   <FormControl>
-                    <Input type="tel" placeholder="e.g. +14155552671" {...field} className="text-base py-3 px-4 h-12" autoComplete="tel" inputMode="tel" />
+                    <Input type="tel" placeholder="e.g. +14155552671" {...field} className="text-base h-12" autoComplete="tel" inputMode="tel" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            <div id={RECAPTCHA_CONTAINER_ID}></div>
-            <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14 mt-4" disabled={isSendingOtp}>
+            <div id={RECAPTCHA_CONTAINER_ID} className="my-4 flex justify-center"></div>
+            <Button type="submit" className="w-full h-14 rounded-full text-lg" disabled={isSendingOtp}>
               {isSendingOtp && <LoadingSpinner className="mr-2 h-5 w-5" />}
               Send OTP
             </Button>

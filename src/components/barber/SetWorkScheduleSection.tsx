@@ -14,7 +14,7 @@ interface SetWorkScheduleSectionProps {
   isSaving: boolean;
 }
 
-const daysOfWeek: DayOfWeek[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const daysOfWeekOrder: DayOfWeek[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 export default function SetWorkScheduleSection({ schedule, onUpdateSchedule, onSaveChanges, isSaving }: SetWorkScheduleSectionProps) {
   
@@ -23,21 +23,21 @@ export default function SetWorkScheduleSection({ schedule, onUpdateSchedule, onS
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Set Work Schedule</CardTitle>
-        <CardDescription>Manage your weekly availability and operating hours.</CardDescription>
+    <Card className="border-none shadow-lg rounded-xl overflow-hidden">
+      <CardHeader className="p-6">
+        <CardTitle className="text-2xl font-bold">Set Work Schedule</CardTitle>
+        <CardDescription className="text-sm text-gray-500 mt-1">Manage your weekly availability and operating hours.</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {daysOfWeek.map((day) => (
+      <CardContent className="space-y-4 p-6">
+        {daysOfWeekOrder.map((day) => (
           <DayScheduleInput
             key={day}
             dayAvailability={getDayAvailability(day)}
             onUpdate={onUpdateSchedule}
           />
         ))}
-        <div className="pt-4 flex justify-end">
-            <Button onClick={onSaveChanges} disabled={isSaving}>
+        <div className="pt-6 flex justify-end">
+            <Button onClick={onSaveChanges} disabled={isSaving} className="h-12 rounded-full px-6 text-base">
               {isSaving && <LoadingSpinner className="mr-2 h-4 w-4" />}
               {isSaving ? 'Saving...' : 'Save Schedule Changes'}
             </Button>

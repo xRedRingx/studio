@@ -52,7 +52,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
   const otpValue = otpForm.watch('otp');
 
   useEffect(() => {
-    if (user && role && pendingRegistrationDetails) {
+    if (user && role && pendingRegistrationDetails) { // User object created after OTP confirm
       resetOtpState();
       toast({
         title: "Registration Complete!",
@@ -66,12 +66,16 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
   useEffect(() => {
     return () => {
       resetOtpState();
+      // Clear any existing reCAPTCHA verifiers when the component unmounts
+      const recaptchaContainer = document.getElementById(RECAPTCHA_CONTAINER_ID);
+      if (recaptchaContainer) recaptchaContainer.innerHTML = '';
     };
-  }, [resetOtpState, role]);
+  }, [resetOtpState]);
   
   useEffect(() => {
     if (otpSent) {
       otpForm.reset({ otp: '' });
+      otpForm.setValue('otp', '', { shouldValidate: false, shouldDirty: false, shouldTouch: false });
     }
   }, [otpSent, otpForm]);
 
@@ -85,11 +89,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
       });
     } catch (error) {
       console.error('Error sending OTP:', error);
-      toast({
-        title: "Error",
-        description: "Failed to send OTP. Please try again.",
-        variant: "destructive"
-      });
+      // Toast is handled by AuthContext
       setPendingRegistrationDetails(null);
     }
   }
@@ -97,13 +97,10 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
   async function onOtpSubmit(values: OtpFormValues) {
     try {
       await confirmOtp(values.otp);
+      // Redirection or success toast is handled by the useEffect watching `user`
     } catch (error) {
       console.error('Error verifying OTP:', error);
-      toast({
-        title: "Error",
-        description: "Invalid OTP. Please try again.",
-        variant: "destructive"
-      });
+      // Toast is handled by AuthContext
       otpForm.reset({ otp: '' });
     }
   }
@@ -111,16 +108,18 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
   const handleTryAgain = () => {
     resetOtpState();
     setPendingRegistrationDetails(null);
+    userDetailsForm.reset({firstName: '', lastName: '', phoneNumber: ''});
+    otpForm.reset({otp: ''});
+    const recaptchaContainer = document.getElementById(RECAPTCHA_CONTAINER_ID);
+    if (recaptchaContainer) recaptchaContainer.innerHTML = '';
   };
 
-  // The main component logic now switches between two completely separate form instances
-  // using the `key` prop. This is the crucial fix for the autofill issue.
   return (
     <div key={otpSent ? 'otp-form' : 'details-form'}>
       {otpSent ? (
         <Form {...otpForm}>
-          <form onSubmit={otpForm.handleSubmit(onOtpSubmit)} className="space-y-6">
-            <p className="text-sm text-muted-foreground">
+          <form onSubmit={otpForm.handleSubmit(onOtpSubmit)} className="space-y-6 mt-6">
+            <p className="text-sm text-gray-500">
               Enter the 6-digit OTP sent to {pendingRegistrationDetails?.phoneNumber}.
             </p>
             <FormField
@@ -128,9 +127,9 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
               name="otp"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>One-Time Password</FormLabel>
+                  <FormLabel className="text-base">One-Time Password</FormLabel>
                   <FormControl>
-                    <CustomOtpInput {...field} disabled={isVerifyingOtp} />
+                    <CustomOtpInput {...field} disabled={isVerifyingOtp} autoComplete="one-time-code"/>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -138,7 +137,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
             />
             <Button
               type="submit"
-              className="w-full button-tap-target text-lg py-3 h-14"
+              className="w-full h-14 rounded-full text-lg"
               disabled={isVerifyingOtp || !otpValue || otpValue.length !== 6}
             >
               {isVerifyingOtp && <LoadingSpinner className="mr-2 h-5 w-5" />}
@@ -149,7 +148,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
               onClick={handleTryAgain}
               disabled={isVerifyingOtp}
               type="button"
-              className="w-full"
+              className="w-full text-primary"
             >
               Change details or resend OTP
             </Button>
@@ -157,16 +156,16 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
         </Form>
       ) : (
         <Form {...userDetailsForm}>
-          <form onSubmit={userDetailsForm.handleSubmit(onUserDetailsSubmit)} className="space-y-6">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <form onSubmit={userDetailsForm.handleSubmit(onUserDetailsSubmit)} className="space-y-6 mt-6">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
               <FormField
                 control={userDetailsForm.control}
                 name="firstName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>First Name</FormLabel>
+                    <FormLabel className="text-base">First Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="Enter your first name" {...field} className="text-base py-3 px-4 h-12" autoComplete="given-name" />
+                      <Input placeholder="Enter first name" {...field} className="text-base h-12" autoComplete="given-name" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -177,9 +176,9 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
                 name="lastName"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Last Name</FormLabel>
+                    <FormLabel className="text-base">Last Name</FormLabel>
                     <FormControl>
-                      <Input placeholder="Enter your last name" {...field} className="text-base py-3 px-4 h-12" autoComplete="family-name" />
+                      <Input placeholder="Enter last name" {...field} className="text-base h-12" autoComplete="family-name" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -191,16 +190,16 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
               name="phoneNumber"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Phone Number</FormLabel>
+                  <FormLabel className="text-base">Phone Number</FormLabel>
                   <FormControl>
-                    <Input type="tel" placeholder="e.g. +14155552671" {...field} className="text-base py-3 px-4 h-12" autoComplete="tel" inputMode="tel" />
+                    <Input type="tel" placeholder="e.g. +14155552671" {...field} className="text-base h-12" autoComplete="tel" inputMode="tel" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            <div id={RECAPTCHA_CONTAINER_ID}></div>
-            <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14" disabled={isSendingOtp}>
+            <div id={RECAPTCHA_CONTAINER_ID} className="my-4 flex justify-center"></div>
+            <Button type="submit" className="w-full h-14 rounded-full text-lg" disabled={isSendingOtp}>
               {isSendingOtp && <LoadingSpinner className="mr-2 h-5 w-5" />}
               Send OTP
             </Button>

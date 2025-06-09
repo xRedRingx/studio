@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
-import { LogOut, User as UserIcon, Phone, Mail } from "lucide-react"; // Added Phone and Mail icons
+import { LogOut, User as UserIcon, Phone, Mail, Settings, LayoutDashboard } from "lucide-react"; 
 import { useRouter } from "next/navigation";
 
 export default function UserNav() {
@@ -44,50 +44,56 @@ export default function UserNav() {
     ? `${user.firstName} ${user.lastName}` 
     : user.displayName || user.phoneNumber || 'User';
 
-  // Prioritize phone number for display, as email is no longer actively collected
   const contactInfo = user.phoneNumber; 
-  const displayEmail = user.email; // Still check if an old email exists
+  const displayEmail = user.email;
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-          <Avatar className="h-10 w-10">
+          <Avatar className="h-10 w-10 border-2 border-primary/50">
             <AvatarImage src={user.photoURL || undefined} alt={displayName || "User avatar"} />
-            <AvatarFallback>{getInitials(displayName, user.phoneNumber)}</AvatarFallback>
+            <AvatarFallback className="text-base">{getInitials(displayName, user.phoneNumber)}</AvatarFallback>
           </Avatar>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-56" align="end" forceMount>
-        <DropdownMenuLabel className="font-normal">
+      <DropdownMenuContent className="w-64 rounded-lg shadow-xl mt-2" align="end" forceMount>
+        <DropdownMenuLabel className="font-normal p-3">
           <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium leading-none">{displayName}</p>
+            <p className="text-base font-semibold leading-none">{displayName}</p>
             {contactInfo && (
-              <p className="text-xs leading-none text-muted-foreground flex items-center">
-                <Phone className="mr-1.5 h-3 w-3" />
+              <p className="text-sm text-gray-500 flex items-center pt-0.5">
+                <Phone className="mr-2 h-4 w-4 text-gray-400" />
                 {contactInfo}
               </p>
             )}
-            {/* Conditionally display email if it exists (e.g., for older accounts) */}
             {displayEmail && (
-              <p className="text-xs leading-none text-muted-foreground flex items-center pt-0.5">
-                <Mail className="mr-1.5 h-3 w-3" />
+              <p className="text-sm text-gray-500 flex items-center pt-0.5">
+                <Mail className="mr-2 h-4 w-4 text-gray-400" />
                 {displayEmail}
               </p>
             )}
-            {role && <p className="text-xs leading-none text-muted-foreground capitalize pt-1">Role: {role}</p>}
+            {role && <p className="text-xs text-gray-500 capitalize pt-1">Role: {role}</p>}
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem onClick={() => router.push(`/${role}/dashboard`)}>
-            <UserIcon className="mr-2 h-4 w-4" />
+          <DropdownMenuItem onClick={() => router.push(`/${role}/dashboard`)} className="text-base py-2.5 px-3">
+            <LayoutDashboard className="mr-2 h-4 w-4" />
             <span>Dashboard</span>
           </DropdownMenuItem>
-          {/* Add more items like Profile, Settings etc. here */}
+          {/* Placeholder for future items */}
+          {/* <DropdownMenuItem className="text-base py-2.5 px-3">
+            <UserIcon className="mr-2 h-4 w-4" />
+            <span>Profile</span>
+          </DropdownMenuItem>
+          <DropdownMenuItem className="text-base py-2.5 px-3">
+            <Settings className="mr-2 h-4 w-4" />
+            <span>Settings</span>
+          </DropdownMenuItem> */}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleSignOut}>
+        <DropdownMenuItem onClick={handleSignOut} className="text-base py-2.5 px-3 text-destructive focus:text-destructive focus:bg-destructive/10">
           <LogOut className="mr-2 h-4 w-4" />
           <span>Log out</span>
         </DropdownMenuItem>
