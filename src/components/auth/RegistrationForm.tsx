@@ -20,7 +20,7 @@ const RECAPTCHA_CONTAINER_ID = 'recaptcha-container-register';
 const userDetailsSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  phoneNumber: z.string().min(10, "Valid phone number is required (e.g., +12223334444 or 10 digits)"),
+  phoneNumber: z.string().regex(/^\+[1-9]\d{1,14}$/, "Phone number must be in E.164 format (e.g., +12223334444)"),
 });
 type UserDetailsFormValues = z.infer<typeof userDetailsSchema>;
 
@@ -58,14 +58,13 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
 
   useEffect(() => {
     // If user becomes authenticated (meaning registration & OTP confirm successful), redirect
-    if (user && role) {
+    if (user && role && pendingRegistrationDetails) { // Check pendingRegistrationDetails to ensure it's from this flow
       resetOtpState();
-      router.push(`/${role}/login`); // Redirect to login after successful registration
-      toast({ title: "Registration Successful!", description: "You can now log in with your phone number." });
+      router.push(`/${role}/login`); 
+      // Toast for success is now handled in AuthContext after createUserDocument
     }
-  }, [user, role, router, toast, resetOtpState]);
+  }, [user, role, router, resetOtpState, pendingRegistrationDetails]);
 
-  // Cleanup OTP state if component unmounts or role changes
   useEffect(() => {
     return () => {
       resetOtpState();
@@ -82,9 +81,14 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
   }
 
   async function onOtpSubmit(values: OtpFormValues) {
-    // pendingRegistrationDetails should be set in AuthContext now.
-    // confirmOtp in AuthContext will handle creating the user document.
     await confirmOtp(values.otp);
+  }
+
+  const handleTryAgain = () => {
+    resetOtpState();
+    setPendingRegistrationDetails(null);
+    userDetailsForm.reset(); // Optionally reset user details form
+    otpForm.reset();
   }
 
   if (otpSent) {
@@ -120,7 +124,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
             {isVerifyingOtp ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
             Verify OTP & Register
           </Button>
-          <Button variant="link" onClick={() => resetOtpState()} disabled={isVerifyingOtp}>
+          <Button variant="link" onClick={handleTryAgain} disabled={isVerifyingOtp}>
             Change details or resend OTP
           </Button>
         </form>
@@ -168,7 +172,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
               <FormControl>
                 <Input 
                   type="tel" 
-                  placeholder="Enter phone number (e.g. +14155552671)" 
+                  placeholder="e.g. +14155552671" 
                   {...field} 
                   className="text-base py-3 px-4 h-12"
                 />
@@ -177,6 +181,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
             </FormItem>
           )}
         />
+        {/* This div is used by Firebase RecaptchaVerifier */}
         <div id={RECAPTCHA_CONTAINER_ID}></div>
         <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14" disabled={isSendingOtp}>
           {isSendingOtp ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}

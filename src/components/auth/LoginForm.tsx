@@ -2,7 +2,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useRouter } from 'next/navigation';
@@ -18,7 +18,7 @@ import LoadingSpinner from '@/components/ui/loading-spinner';
 const RECAPTCHA_CONTAINER_ID = 'recaptcha-container-login';
 
 const phoneSchema = z.object({
-  phoneNumber: z.string().min(10, "Valid phone number is required (e.g., +12223334444 or 10 digits)"),
+  phoneNumber: z.string().regex(/^\+[1-9]\d{1,14}$/, "Phone number must be in E.164 format (e.g., +12223334444)"),
 });
 type PhoneFormValues = z.infer<typeof phoneSchema>;
 
@@ -53,14 +53,12 @@ export default function LoginForm({ role }: LoginFormProps) {
   });
   
   useEffect(() => {
-    // If user becomes authenticated, redirect to dashboard
     if (user && role) {
-      resetOtpState(); // Clean up OTP state
+      resetOtpState(); 
       router.push(`/${role}/dashboard`);
     }
   }, [user, role, router, resetOtpState]);
 
-  // Cleanup OTP state if component unmounts or role changes
   useEffect(() => {
     return () => {
       resetOtpState();
@@ -70,13 +68,17 @@ export default function LoginForm({ role }: LoginFormProps) {
 
   async function onPhoneSubmit(values: PhoneFormValues) {
     setCurrentPhoneNumber(values.phoneNumber);
-    // The recaptchaContainerId is passed to sendOtp
     await sendOtp(values.phoneNumber, RECAPTCHA_CONTAINER_ID, false);
   }
 
   async function onOtpSubmit(values: OtpFormValues) {
     await confirmOtp(values.otp);
-    // Successful OTP confirmation will trigger user state change -> useEffect for navigation
+  }
+
+  const handleTryAgain = () => {
+    resetOtpState();
+    phoneForm.reset(); // Optionally reset phone form too
+    otpForm.reset();
   }
 
   if (otpSent) {
@@ -112,7 +114,7 @@ export default function LoginForm({ role }: LoginFormProps) {
             {isVerifyingOtp ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
             Verify OTP
           </Button>
-          <Button variant="link" onClick={() => resetOtpState()} disabled={isVerifyingOtp}>
+          <Button variant="link" onClick={handleTryAgain} disabled={isVerifyingOtp}>
             Change phone number or resend OTP
           </Button>
         </form>
@@ -132,7 +134,7 @@ export default function LoginForm({ role }: LoginFormProps) {
               <FormControl>
                 <Input 
                   type="tel" 
-                  placeholder="Enter your phone number (e.g. +14155552671)" 
+                  placeholder="e.g. +14155552671" 
                   {...field} 
                   className="text-base py-3 px-4 h-12"
                 />
@@ -141,7 +143,8 @@ export default function LoginForm({ role }: LoginFormProps) {
             </FormItem>
           )}
         />
-        <div id={RECAPTCHA_CONTAINER_ID}></div>
+        {/* This div is used by Firebase RecaptchaVerifier */}
+        <div id={RECAPTCHA_CONTAINER_ID}></div> 
         <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14 mt-4" disabled={isSendingOtp}>
           {isSendingOtp ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
           Send OTP
