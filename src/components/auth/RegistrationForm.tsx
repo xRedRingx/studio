@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -59,8 +58,6 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
   useEffect(() => {
     if (user && role && pendingRegistrationDetails) { 
       resetOtpState();
-      // Redirect to login after successful registration and OTP confirmation
-      // as user object might be populated by onAuthStateChanged
       toast({ title: "Registration Complete!", description: "You can now log in with your new account."});
       router.push(`/${role}/login`); 
     }
@@ -71,35 +68,58 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
     return () => {
       resetOtpState();
     };
-  }, [resetOtpState, role]); // Ensure role is a dependency
+  }, [resetOtpState, role]);
 
+  // Fixed: More explicit OTP form reset when OTP is sent
   useEffect(() => {
     if (otpSent) {
-      otpForm.reset({ otp: '' }); 
-      otpForm.setValue('otp', '', { shouldValidate: false, shouldDirty: false, shouldTouch: false }); // More forceful reset
+      // Reset the form after a small delay to ensure proper cleanup
+      const timer = setTimeout(() => {
+        otpForm.reset();
+        otpForm.setValue('otp', '');
+      }, 100);
+      
+      return () => clearTimeout(timer);
     }
   }, [otpSent, otpForm]);
 
   async function onUserDetailsSubmit(values: UserDetailsFormValues) {
-    setPendingRegistrationDetails(values);
-    await sendOtp(values.phoneNumber, RECAPTCHA_CONTAINER_ID, true, { 
-      firstName: values.firstName, 
-      lastName: values.lastName, 
-      role: role 
-    });
+    try {
+      setPendingRegistrationDetails(values);
+      await sendOtp(values.phoneNumber, RECAPTCHA_CONTAINER_ID, true, { 
+        firstName: values.firstName, 
+        lastName: values.lastName, 
+        role: role 
+      });
+    } catch (error) {
+      console.error('Error sending OTP:', error);
+      toast({ 
+        title: "Error", 
+        description: "Failed to send OTP. Please try again.",
+        variant: "destructive"
+      });
+    }
   }
 
   async function onOtpSubmit(values: OtpFormValues) {
-    // confirmOtp will trigger onAuthStateChanged, which then handles user document creation
-    // and eventually the redirect via the other useEffect.
-    await confirmOtp(values.otp);
+    try {
+      await confirmOtp(values.otp);
+    } catch (error) {
+      console.error('Error verifying OTP:', error);
+      toast({ 
+        title: "Error", 
+        description: "Invalid OTP. Please try again.",
+        variant: "destructive"
+      });
+    }
   }
 
   const handleTryAgain = () => {
     resetOtpState();
     setPendingRegistrationDetails(null);
-    userDetailsForm.reset({ firstName: '', lastName: '', phoneNumber: ''}); 
-    otpForm.reset({ otp: '' });
+    userDetailsForm.reset(); 
+    otpForm.reset();
+    otpForm.setValue('otp', ''); // Explicitly clear OTP field
   }
 
   if (otpSent) {
@@ -116,7 +136,11 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
               <FormItem>
                 <FormLabel>One-Time Password</FormLabel>
                 <FormControl>
-                  <InputOTP maxLength={6} {...field} autoComplete="one-time-code">
+                  <InputOTP 
+                    maxLength={6} 
+                    {...field}
+                    autoComplete="one-time-code"
+                  >
                     <InputOTPGroup>
                       <InputOTPSlot index={0} />
                       <InputOTPSlot index={1} />
@@ -131,7 +155,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
               </FormItem>
             )}
           />
-          <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14" disabled={isVerifyingOtp}>
+          <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14" disabled={isVerifyingOtp || !otpForm.watch('otp') || otpForm.watch('otp').length !== 6}>
             {isVerifyingOtp ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
             Verify OTP & Register
           </Button>

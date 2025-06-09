@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -64,29 +63,53 @@ export default function LoginForm({ role }: LoginFormProps) {
     return () => {
       resetOtpState();
     };
-  }, [resetOtpState, role]); // Ensure role is a dependency if its change should trigger cleanup
+  }, [resetOtpState, role]);
 
+  // Fixed: More explicit OTP form reset when OTP is sent
   useEffect(() => {
     if (otpSent) {
-      otpForm.reset({ otp: '' }); 
-      otpForm.setValue('otp', '', { shouldValidate: false, shouldDirty: false, shouldTouch: false }); // More forceful reset
+      // Reset the form after a small delay to ensure proper cleanup
+      const timer = setTimeout(() => {
+        otpForm.reset();
+        otpForm.setValue('otp', '');
+      }, 100);
+      
+      return () => clearTimeout(timer);
     }
   }, [otpSent, otpForm]);
 
-
   async function onPhoneSubmit(values: PhoneFormValues) {
-    setCurrentPhoneNumber(values.phoneNumber);
-    await sendOtp(values.phoneNumber, RECAPTCHA_CONTAINER_ID, false);
+    try {
+      setCurrentPhoneNumber(values.phoneNumber);
+      await sendOtp(values.phoneNumber, RECAPTCHA_CONTAINER_ID, false);
+    } catch (error) {
+      console.error('Error sending OTP:', error);
+      toast({ 
+        title: "Error", 
+        description: "Failed to send OTP. Please try again.",
+        variant: "destructive"
+      });
+    }
   }
 
   async function onOtpSubmit(values: OtpFormValues) {
-    await confirmOtp(values.otp);
+    try {
+      await confirmOtp(values.otp);
+    } catch (error) {
+      console.error('Error verifying OTP:', error);
+      toast({ 
+        title: "Error", 
+        description: "Invalid OTP. Please try again.",
+        variant: "destructive"
+      });
+    }
   }
 
   const handleTryAgain = () => {
     resetOtpState();
-    phoneForm.reset({ phoneNumber: ''}); 
-    otpForm.reset({ otp: '' });
+    phoneForm.reset(); 
+    otpForm.reset();
+    otpForm.setValue('otp', ''); // Explicitly clear OTP field
     setCurrentPhoneNumber('');
   }
 
@@ -104,7 +127,11 @@ export default function LoginForm({ role }: LoginFormProps) {
               <FormItem>
                 <FormLabel>One-Time Password</FormLabel>
                 <FormControl>
-                  <InputOTP maxLength={6} {...field} autoComplete="one-time-code">
+                  <InputOTP 
+                    maxLength={6} 
+                    {...field}
+                    autoComplete="one-time-code"
+                  >
                     <InputOTPGroup>
                       <InputOTPSlot index={0} />
                       <InputOTPSlot index={1} />
@@ -119,7 +146,7 @@ export default function LoginForm({ role }: LoginFormProps) {
               </FormItem>
             )}
           />
-          <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14" disabled={isVerifyingOtp}>
+          <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14" disabled={isVerifyingOtp || !otpForm.watch('otp') || otpForm.watch('otp').length !== 6}>
             {isVerifyingOtp ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
             Verify OTP
           </Button>
