@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -52,7 +53,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
   const otpValue = otpForm.watch('otp');
 
   useEffect(() => {
-    if (user && role && pendingRegistrationDetails) { // User object created after OTP confirm
+    if (user && role && pendingRegistrationDetails) { 
       resetOtpState();
       toast({
         title: "Registration Complete!",
@@ -66,7 +67,6 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
   useEffect(() => {
     return () => {
       resetOtpState();
-      // Clear any existing reCAPTCHA verifiers when the component unmounts
       const recaptchaContainer = document.getElementById(RECAPTCHA_CONTAINER_ID);
       if (recaptchaContainer) recaptchaContainer.innerHTML = '';
     };
@@ -89,7 +89,6 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
       });
     } catch (error) {
       console.error('Error sending OTP:', error);
-      // Toast is handled by AuthContext
       setPendingRegistrationDetails(null);
     }
   }
@@ -97,10 +96,8 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
   async function onOtpSubmit(values: OtpFormValues) {
     try {
       await confirmOtp(values.otp);
-      // Redirection or success toast is handled by the useEffect watching `user`
     } catch (error) {
       console.error('Error verifying OTP:', error);
-      // Toast is handled by AuthContext
       otpForm.reset({ otp: '' });
     }
   }
@@ -157,12 +154,12 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
       ) : (
         <Form {...userDetailsForm}>
           <form onSubmit={userDetailsForm.handleSubmit(onUserDetailsSubmit)} className="space-y-6 mt-6">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
               <FormField
                 control={userDetailsForm.control}
                 name="firstName"
                 render={({ field }) => (
-                  <FormItem>
+                  <FormItem className="sm:col-span-2 md:col-span-1">
                     <FormLabel className="text-base">First Name</FormLabel>
                     <FormControl>
                       <Input placeholder="Enter first name" {...field} className="text-base h-12" autoComplete="given-name" />
@@ -175,7 +172,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
                 control={userDetailsForm.control}
                 name="lastName"
                 render={({ field }) => (
-                  <FormItem>
+                  <FormItem className="sm:col-span-2 md:col-span-1">
                     <FormLabel className="text-base">Last Name</FormLabel>
                     <FormControl>
                       <Input placeholder="Enter last name" {...field} className="text-base h-12" autoComplete="family-name" />

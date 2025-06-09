@@ -413,7 +413,7 @@ export default function BookingPage() {
                 <RadioGroup
                   value={selectedDate}
                   onValueChange={(value: 'today' | 'tomorrow') => handleDateChange(value)}
-                  className="flex space-x-4"
+                  className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-4"
                 >
                   <div className="flex items-center space-x-2">
                     <RadioGroupItem value="today" id="today" />
@@ -429,7 +429,7 @@ export default function BookingPage() {
               <div>
                 <Label className="text-base font-medium mb-3 block">Select Time Slot</Label>
                 {availableTimeSlots.length > 0 ? (
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                     {availableTimeSlots.map(slot => (
                       <Button
                         key={slot}

@@ -40,7 +40,7 @@ export default function DayScheduleInput({ dayAvailability, onUpdate }: DaySched
         </div>
       </CardHeader>
       {isOpen && (
-        <CardContent className="pt-2 pb-4 px-4 space-y-3 md:space-y-0 md:flex md:space-x-4 items-end">
+        <CardContent className="pt-2 pb-4 px-4 space-y-3 md:flex md:space-x-4 md:space-y-0 items-end">
           <div className="flex-1">
             <Label htmlFor={`startTime-${day}`} className="text-sm text-gray-500 mb-1 block">Start Time</Label>
             <Select

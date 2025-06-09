@@ -63,7 +63,6 @@ export default function CustomerDashboardPage() {
           if (a.date === b.date) {
             return timeToMinutes(a.startTime) - timeToMinutes(b.startTime);
           }
-          // For sorting across different dates, direct string comparison is fine if date is YYYY-MM-DD
           return a.date.localeCompare(b.date);
         });
 
@@ -108,7 +107,7 @@ export default function CustomerDashboardPage() {
   }, [user?.uid, fetchMyAppointments, fetchAvailableBarbers, today]);
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString + 'T00:00:00'); // Ensure correct parsing for YYYY-MM-DD
+    const date = new Date(dateString + 'T00:00:00'); 
     return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   };
 
@@ -120,11 +119,11 @@ export default function CustomerDashboardPage() {
         </h1>
         
         <Card className="border-none shadow-lg rounded-xl overflow-hidden">
-          <CardHeader className="p-6">
+          <CardHeader className="p-4 md:p-6">
             <CardTitle className="text-2xl font-bold">Your Upcoming Appointments</CardTitle>
             <CardDescription className="text-sm text-gray-500 mt-1">View and manage your upcoming appointments.</CardDescription>
           </CardHeader>
-          <CardContent className="p-6">
+          <CardContent className="p-4 md:p-6">
             {isLoadingAppointments ? (
               <div className="flex items-center justify-center py-6">
                 <LoadingSpinner className="h-8 w-8 text-primary" />
@@ -138,7 +137,7 @@ export default function CustomerDashboardPage() {
               <div className="space-y-4">
                 {myAppointments.map(app => (
                   <Card key={app.id} className="shadow-md rounded-lg border overflow-hidden">
-                    <CardContent className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                    <CardContent className="p-4 grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-4 items-center">
                       <div className="md:col-span-2 space-y-1">
                         <h3 className="text-base font-semibold text-primary flex items-center">
                           <Scissors className="mr-2 h-5 w-5" /> {app.serviceName}
@@ -147,7 +146,7 @@ export default function CustomerDashboardPage() {
                           <UserCircle className="mr-2 h-4 w-4" /> With: {app.barberName}
                         </p>
                       </div>
-                      <div className="space-y-1 text-sm md:text-right">
+                      <div className="space-y-1 text-sm text-left md:text-right">
                         <p className="font-medium flex items-center md:justify-end text-base">
                           <CalendarDays className="mr-2 h-4 w-4" /> {formatDate(app.date)}
                         </p>
@@ -164,11 +163,11 @@ export default function CustomerDashboardPage() {
         </Card>
 
         <Card id="find-barber" className="border-none shadow-lg rounded-xl overflow-hidden">
-          <CardHeader className="p-6">
+          <CardHeader className="p-4 md:p-6">
             <CardTitle className="text-2xl font-bold">Explore Barbers</CardTitle>
             <CardDescription className="text-sm text-gray-500 mt-1">Discover services offered by our talented barbers.</CardDescription>
           </CardHeader>
-          <CardContent className="p-6">
+          <CardContent className="p-4 md:p-6">
             {isLoadingBarbers ? (
               <div className="flex items-center justify-center py-6">
                 <LoadingSpinner className="h-8 w-8 text-primary" />
@@ -180,13 +179,13 @@ export default function CustomerDashboardPage() {
               <div className="space-y-4">
                 {availableBarbers.map(barber => (
                   <Card key={barber.uid} className="shadow-md rounded-lg border">
-                    <CardContent className="p-4 flex items-center justify-between">
+                    <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                       <div>
                         <h3 className="text-base font-semibold">
                           {barber.firstName} {barber.lastName}
                         </h3>
                       </div>
-                      <Button asChild variant="outline" size="sm" className="rounded-full h-10 px-4 text-base">
+                      <Button asChild variant="outline" size="sm" className="rounded-full h-10 px-4 text-base w-full sm:w-auto">
                         <Link href={`/customer/book/${barber.uid}`}>
                           Book <ChevronRight className="ml-2 h-4 w-4" />
                         </Link>

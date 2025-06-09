@@ -1,3 +1,4 @@
+
 import type { ReactNode } from 'react';
 import ProtectedPage from '@/components/layout/ProtectedPage';
 import { BarberFlowLogo } from '@/components/icons/BarberFlowLogo';
@@ -16,8 +17,8 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
         <main className="flex-1 container py-6 md:py-8 px-4 md:px-6">
           {children}
         </main>
-        <footer className="py-6 md:px-8 md:py-0 border-t bg-background">
-            <div className="container flex flex-col items-center justify-between gap-4 md:h-20 md:flex-row  px-4 md:px-6">
+        <footer className="py-6 md:py-0 border-t bg-background">
+            <div className="container flex flex-col items-center justify-center md:justify-between gap-4 md:h-20 md:flex-row px-4 md:px-6">
                 <p className="text-balance text-center text-sm text-gray-500 md:text-left">
                     Built for BarberFlow.
                 </p>
