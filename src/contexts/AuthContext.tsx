@@ -2,7 +2,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { 
   onAuthStateChanged,
   signInWithPhoneNumber,
@@ -53,7 +53,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const { toast } = useToast();
 
-  // Store verifier instances in state to manage their lifecycle
   const [loginRecaptchaVerifier, setLoginRecaptchaVerifier] = useState<RecaptchaVerifier | null>(null);
   const [registerRecaptchaVerifier, setRegisterRecaptchaVerifier] = useState<RecaptchaVerifier | null>(null);
 
@@ -75,7 +74,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             ...(firebaseUser as unknown as FirebaseUser), 
             ...appUserData,
             phoneNumber: appUserData.phoneNumber || firebaseUser.phoneNumber || '', 
-            email: null, // Ensure email is null as per previous changes
+            email: null,
           };
           setUser(appUser);
           if (appUser.role && !role) { 
@@ -110,12 +109,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setRoleState(newRole);
   };
   
-  const initializeRecaptchaVerifier = async (
+  const initializeRecaptchaVerifier = useCallback(async (
     recaptchaContainerId: string, 
     isRegistration: boolean
   ): Promise<RecaptchaVerifier> => {
     let currentVerifier = isRegistration ? registerRecaptchaVerifier : loginRecaptchaVerifier;
-    const setVerifier = isRegistration ? setRegisterRecaptchaVerifier : setLoginRecaptchaVerifier;
+    const setVerifierState = isRegistration ? setRegisterRecaptchaVerifier : setLoginRecaptchaVerifier;
 
     const recaptchaContainer = document.getElementById(recaptchaContainerId);
     if (!recaptchaContainer) {
@@ -123,50 +122,49 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       throw new Error(`reCAPTCHA container '${recaptchaContainerId}' not found.`);
     }
     
-    // Clear previous verifier if it exists and is attached to a different element or needs reset
     if (currentVerifier) {
       try {
-        currentVerifier.clear(); // Clears the reCAPTCHA widget
+        currentVerifier.clear(); 
         console.log(`Cleared existing reCAPTCHA verifier for ${recaptchaContainerId}`);
       } catch (e) {
-        console.warn("Error clearing old reCAPTCHA verifier, it might have been for a different element or already cleared:", e);
+        console.warn("Error clearing old reCAPTCHA verifier:", e);
       }
     }
     
-    // Ensure the container is empty before rendering a new one
     recaptchaContainer.innerHTML = ''; 
-
     console.log(`Initializing new reCAPTCHA verifier for ${recaptchaContainerId}`);
+    
     const newVerifier = new RecaptchaVerifier(auth, recaptchaContainerId, {
-      'size': 'invisible', 
+      'size': 'invisible',
+      'remoteConfig': true, // Added this option
       'callback': (response: any) => {
         console.log("reCAPTCHA challenge successful (invisible flow):", response);
       },
       'expired-callback': () => {
+        console.warn("reCAPTCHA expired for", recaptchaContainerId);
         toast({ title: "reCAPTCHA Expired", description: "Please try sending the OTP again.", variant: "destructive" });
-        setVerifier(null); // Reset verifier state
+        setVerifierState(null); 
       },
-      'error-callback': (error: any) => { // Added error-callback
-        console.error("reCAPTCHA error-callback:", error);
+      'error-callback': (error: any) => { 
+        console.error("reCAPTCHA error-callback for", recaptchaContainerId, ":", error);
         toast({ title: "reCAPTCHA Error", description: `reCAPTCHA process failed. ${error?.message || 'Please try again.'}`, variant: "destructive" });
-        setVerifier(null);
+        setVerifierState(null);
       }
     });
     
-    setVerifier(newVerifier); // Store the new verifier instance in state
-
     try {
       await newVerifier.render(); 
       console.log(`reCAPTCHA verifier rendered for ${recaptchaContainerId}`);
+      setVerifierState(newVerifier); 
     } catch (renderError: any) {
-      console.error("Error rendering reCAPTCHA:", renderError);
-      toast({ title: "reCAPTCHA Render Error", description: `Could not render reCAPTCHA. ${renderError.message || 'Check console and Firebase/GCP setup (authorized domains).'}`, variant: "destructive" });
-      setVerifier(null); // Nullify on error
+      console.error("Error rendering reCAPTCHA for", recaptchaContainerId, ":", renderError);
+      toast({ title: "reCAPTCHA Render Error", description: `Could not render reCAPTCHA. ${renderError.message || 'Check console and Firebase/GCP setup (authorized domains, API key type).'}`, variant: "destructive" });
+      setVerifierState(null); 
       throw renderError; 
     }
     
     return newVerifier;
-  };
+  }, [auth, toast, loginRecaptchaVerifier, registerRecaptchaVerifier]); 
   
   const sendOtp = async (
     phoneNumber: string, 
@@ -176,7 +174,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   ) => {
     setIsSendingOtp(true);
     setOtpSent(false); 
-    console.log(`Attempting to send OTP to: ${phoneNumber}. Is Registration: ${isRegistration}`);
+    console.log(`Attempting to send OTP to: ${phoneNumber}. Is Registration: ${isRegistration}. Using container: ${recaptchaContainerId}`);
+    console.log("Verifying phone number format (E.164 expected):", phoneNumber);
 
     try {
       const verifier = await initializeRecaptchaVerifier(recaptchaContainerId, isRegistration);
@@ -195,9 +194,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } else if (error.code === 'auth/too-many-requests') {
         description = "Too many OTP requests. Please try again later.";
       } else if (error.code === 'auth/internal-error') {
-        description = "An internal Firebase error occurred. Please ensure reCAPTCHA is correctly configured in your Firebase & Google Cloud project (especially authorized domains for your reCAPTCHA key) and that Phone Auth is enabled with all necessary APIs. Check browser console for details.";
+        description = "An internal Firebase error occurred. Critical: Please verify Firebase & Google Cloud project configuration: reCAPTCHA key type (v2 vs Enterprise), authorized domains for the reCAPTCHA key in GCP, Phone Auth enabled, and Identity Toolkit API active. Ensure the reCAPTCHA key in Firebase matches the one in GCP.";
       } else if (error.code === 'auth/network-request-failed') {
-        description = "Network error during OTP request. Please check your internet connection and ensure no browser extensions are blocking Google services.";
+        description = "Network error during OTP request. Please check your internet connection and ensure no browser extensions or network policies are blocking Google services.";
       } else if (error.message && error.message.includes("reCAPTCHA placeholder element")) {
         description = `reCAPTCHA setup error: Could not find element '${recaptchaContainerId}'. Ensure it's rendered.`;
       } else if (error.message) {
@@ -207,12 +206,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setOtpSent(false); 
       
       const verifierToClear = isRegistration ? registerRecaptchaVerifier : loginRecaptchaVerifier;
+      const setVerifierState = isRegistration ? setRegisterRecaptchaVerifier : setLoginRecaptchaVerifier;
       if (verifierToClear) {
         try {
           verifierToClear.clear();
         } catch(e) { console.warn("Error clearing verifier during sendOtp error handling:", e); }
       }
-      if (isRegistration) setRegisterRecaptchaVerifier(null); else setLoginRecaptchaVerifier(null);
+      setVerifierState(null);
 
     } finally {
       setIsSendingOtp(false);
@@ -270,8 +270,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           if (appUser.role) setRoleContextAndStorage(appUser.role);
           toast({ title: "Login Successful!", description: "You've been successfully logged in." });
         } else {
-           console.error("User document not found after OTP confirmation for login.");
-           toast({ title: "Login Error", description: "User profile not found. Please contact support.", variant: "destructive" });
+           console.error("User document not found after OTP confirmation for login. This may occur if registration failed to create the document or if it's a login for a non-existent user.");
+           toast({ title: "Login Error", description: "User profile not found. If you're new, please ensure registration completed. Otherwise, contact support.", variant: "destructive" });
         }
       }
       setOtpSent(false); 
@@ -283,7 +283,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } else if (error.code === 'auth/code-expired') {
         description = "The OTP has expired. Please request a new one.";
       } else if (error.code === 'auth/internal-error') {
-        description = "An internal Firebase error occurred during OTP verification. Please try again or contact support if the issue persists.";
+        description = "An internal Firebase error occurred during OTP verification. Please try again or contact support if the issue persists. Double-check project configurations.";
       } else if (error.message) {
         description = error.message;
       }
@@ -293,7 +293,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
   
-  const resetOtpState = () => {
+  const resetOtpState = useCallback(() => {
+    console.log("Resetting OTP state and verifiers.");
     setOtpSent(false);
     setConfirmationResult(null);
     setIsSendingOtp(false);
@@ -301,26 +302,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setPendingUserDetails(null);
     
     if (loginRecaptchaVerifier) {
-      try { loginRecaptchaVerifier.clear(); } catch(e) { console.warn("Error clearing login verifier:", e); }
+      try { 
+        loginRecaptchaVerifier.clear(); 
+        console.log("Login reCAPTCHA verifier cleared.");
+      } catch(e) { console.warn("Error clearing login verifier:", e); }
       setLoginRecaptchaVerifier(null);
     }
     if (registerRecaptchaVerifier) {
-      try { registerRecaptchaVerifier.clear(); } catch(e) { console.warn("Error clearing register verifier:", e); }
+      try { 
+        registerRecaptchaVerifier.clear(); 
+        console.log("Register reCAPTCHA verifier cleared.");
+      } catch(e) { console.warn("Error clearing register verifier:", e); }
       setRegisterRecaptchaVerifier(null);
     }
     
-    // Attempt to remove the reCAPTCHA badge if it's visible
-    const recaptchaBadge = document.querySelector('.grecaptcha-badge');
-    if (recaptchaBadge && recaptchaBadge.parentElement) {
-      // recaptchaBadge.parentElement.style.display = 'none'; // This might hide it
-      // Or more aggressively: recaptchaBadge.parentElement.remove(); but this could break subsequent attempts
-    }
-  };
+    // This might not always work or be necessary if verifier.clear() is effective
+    // const recaptchaBadge = document.querySelector('.grecaptcha-badge');
+    // if (recaptchaBadge && recaptchaBadge.parentElement) {
+    //   recaptchaBadge.parentElement.style.display = 'none';
+    // }
+  }, [loginRecaptchaVerifier, registerRecaptchaVerifier]);
 
   const signOutUser = () => {
     return firebaseSignOut(auth).then(() => {
       setUser(null);
-      // Do not reset role from localStorage on sign out
       resetOtpState(); 
     });
   };
