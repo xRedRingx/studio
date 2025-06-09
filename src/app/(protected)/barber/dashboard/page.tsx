@@ -32,6 +32,50 @@ const INITIAL_SCHEDULE: DayAvailability[] = (['Monday', 'Tuesday', 'Wednesday', 
   endTime: '05:00 PM',
 }));
 
+// Helper to convert Firestore Timestamps in an object to ISO strings
+const convertTimestampsToISO = (data: any) => {
+  if (data === null || typeof data !== 'object') {
+    return data;
+  }
+  if (data instanceof Timestamp) {
+    return data.toDate().toISOString();
+  }
+  if (Array.isArray(data)) {
+    return data.map(convertTimestampsToISO);
+  }
+  const newData: { [key: string]: any } = {};
+  for (const key in data) {
+    newData[key] = convertTimestampsToISO(data[key]);
+  }
+  return newData;
+};
+
+// Helper to convert ISO strings in an object back to Timestamps (if needed, for now mainly for consistency if re-saving)
+const convertISOToTimestamps = (data: any): any => {
+    if (data === null || typeof data !== 'object') {
+      if (typeof data === 'string' && /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z/.test(data)) {
+        try {
+            return Timestamp.fromDate(new Date(data));
+        } catch (e) { /* ignore, not a valid date string for Timestamp */ }
+      }
+      return data;
+    }
+    if (Array.isArray(data)) {
+      return data.map(convertISOToTimestamps);
+    }
+    const newData: { [key: string]: any } = {};
+    for (const key in data) {
+      newData[key] = convertISOToTimestamps(data[key]);
+    }
+    return newData;
+  };
+
+
+const LS_SERVICES_KEY = 'barber_dashboard_services';
+const LS_SCHEDULE_KEY = 'barber_dashboard_schedule';
+const LS_APPOINTMENTS_KEY = 'barber_dashboard_appointments';
+
+
 export default function BarberDashboardPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -45,6 +89,27 @@ export default function BarberDashboardPage() {
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
   const [isLoadingAppointments, setIsLoadingAppointments] = useState(true);
   const [isUpdatingAppointment, setIsUpdatingAppointment] = useState(false);
+
+  useEffect(() => {
+    // Load from localStorage on initial mount
+    if (typeof window !== 'undefined') {
+      const cachedServices = localStorage.getItem(LS_SERVICES_KEY);
+      if (cachedServices) {
+        setServices(convertISOToTimestamps(JSON.parse(cachedServices)));
+        setIsLoadingServices(false);
+      }
+      const cachedSchedule = localStorage.getItem(LS_SCHEDULE_KEY);
+      if (cachedSchedule) {
+        setSchedule(JSON.parse(cachedSchedule)); // Schedule doesn't have timestamps
+        setIsLoadingSchedule(false);
+      }
+      const cachedAppointments = localStorage.getItem(LS_APPOINTMENTS_KEY);
+      if (cachedAppointments) {
+        setAppointments(convertISOToTimestamps(JSON.parse(cachedAppointments)));
+        setIsLoadingAppointments(false);
+      }
+    }
+  }, []);
 
 
   // --- Services ---
@@ -60,6 +125,9 @@ export default function BarberDashboardPage() {
         fetchedServices.push({ id: doc.id, ...doc.data() } as BarberService);
       });
       setServices(fetchedServices);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(LS_SERVICES_KEY, JSON.stringify(convertTimestampsToISO(fetchedServices)));
+      }
     } catch (error) {
       console.error("Error fetching services:", error);
       toast({ title: "Error", description: "Could not fetch services.", variant: "destructive" });
@@ -77,7 +145,14 @@ export default function BarberDashboardPage() {
       const now = Timestamp.now();
       const newServiceData = { ...serviceData, barberId: user.uid, createdAt: now, updatedAt: now };
       const docRef = await addDoc(collection(firestore, 'services'), newServiceData);
-      setServices((prev) => [{ ...newServiceData, id: docRef.id }, ...prev]);
+      const newServiceEntry = { ...newServiceData, id: docRef.id };
+      setServices((prev) => {
+        const updated = [newServiceEntry, ...prev];
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(LS_SERVICES_KEY, JSON.stringify(convertTimestampsToISO(updated)));
+        }
+        return updated;
+      });
       toast({ title: "Success", description: "Service added successfully." });
     } catch (error) {
       console.error("Error adding service:", error);
@@ -90,7 +165,13 @@ export default function BarberDashboardPage() {
       const serviceRef = doc(firestore, 'services', serviceId);
       const updatedServiceData = { ...serviceData, updatedAt: Timestamp.now() };
       await updateDoc(serviceRef, updatedServiceData);
-      setServices((prev) => prev.map(s => s.id === serviceId ? { ...s, ...updatedServiceData } : s));
+      setServices((prev) => {
+        const updated = prev.map(s => s.id === serviceId ? { ...s, ...updatedServiceData } : s);
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(LS_SERVICES_KEY, JSON.stringify(convertTimestampsToISO(updated)));
+        }
+        return updated;
+      });
       toast({ title: "Success", description: "Service updated successfully." });
     } catch (error) {
       console.error("Error updating service:", error);
@@ -102,7 +183,13 @@ export default function BarberDashboardPage() {
     try {
       const serviceRef = doc(firestore, 'services', serviceId);
       await deleteDoc(serviceRef);
-      setServices((prev) => prev.filter(s => s.id !== serviceId));
+      setServices((prev) => {
+        const updated = prev.filter(s => s.id !== serviceId);
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(LS_SERVICES_KEY, JSON.stringify(convertTimestampsToISO(updated)));
+        }
+        return updated;
+      });
       toast({ title: "Success", description: "Service deleted successfully." });
     } catch (error) {
       console.error("Error deleting service:", error);
@@ -117,11 +204,14 @@ export default function BarberDashboardPage() {
     try {
       const scheduleDocRef = doc(firestore, 'barberSchedules', user.uid);
       const docSnap = await getDoc(scheduleDocRef);
+      let newSchedule = INITIAL_SCHEDULE;
       if (docSnap.exists()) {
         const scheduleData = docSnap.data() as BarberScheduleDoc;
-        setSchedule(scheduleData.schedule);
-      } else {
-        setSchedule(INITIAL_SCHEDULE); 
+        newSchedule = scheduleData.schedule;
+      }
+      setSchedule(newSchedule);
+       if (typeof window !== 'undefined') {
+        localStorage.setItem(LS_SCHEDULE_KEY, JSON.stringify(newSchedule)); // Schedule doesn't have timestamps
       }
     } catch (error) {
       console.error("Error fetching schedule:", error);
@@ -148,10 +238,13 @@ export default function BarberDashboardPage() {
       const scheduleDocRef = doc(firestore, 'barberSchedules', user.uid);
       const scheduleDataToSave: BarberScheduleDoc = {
         barberId: user.uid,
-        schedule: schedule,
+        schedule: schedule, // this is the current state
         updatedAt: Timestamp.now(),
       };
-      await setDoc(scheduleDocRef, scheduleDataToSave, { merge: true }); 
+      await setDoc(scheduleDocRef, scheduleDataToSave, { merge: true });
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(LS_SCHEDULE_KEY, JSON.stringify(schedule)); // Save current schedule state
+      }
       toast({ title: "Success", description: "Work schedule saved successfully." });
     } catch (error) {
       console.error("Error saving schedule:", error);
@@ -174,6 +267,9 @@ export default function BarberDashboardPage() {
         fetchedAppointments.push({ id: doc.id, ...doc.data() } as Appointment);
       });
       setAppointments(fetchedAppointments);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(LS_APPOINTMENTS_KEY, JSON.stringify(convertTimestampsToISO(fetchedAppointments)));
+      }
     } catch (error) {
       console.error("Error fetching appointments:", error);
       toast({ title: "Error", description: "Could not fetch appointments.", variant: "destructive" });
@@ -186,10 +282,15 @@ export default function BarberDashboardPage() {
     setIsUpdatingAppointment(true);
     try {
       const appointmentRef = doc(firestore, 'appointments', appointmentId);
-      await updateDoc(appointmentRef, { status: status, updatedAt: Timestamp.now() });
-      setAppointments((prev) =>
-        prev.map((app) => (app.id === appointmentId ? { ...app, status, updatedAt: Timestamp.now() } : app))
-      );
+      const newUpdatedAt = Timestamp.now();
+      await updateDoc(appointmentRef, { status: status, updatedAt: newUpdatedAt });
+      setAppointments((prev) => {
+        const updated = prev.map((app) => (app.id === appointmentId ? { ...app, status, updatedAt: newUpdatedAt } : app));
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(LS_APPOINTMENTS_KEY, JSON.stringify(convertTimestampsToISO(updated)));
+        }
+        return updated;
+      });
       toast({ title: "Success", description: `Appointment status updated to ${status}.` });
     } catch (error) {
       console.error("Error updating appointment status:", error);
@@ -200,12 +301,18 @@ export default function BarberDashboardPage() {
   };
 
   useEffect(() => {
-    if (user?.uid) {
+    if (user?.uid && initialLoadComplete) { // Only fetch if initial load from localStorage is done or not applicable
       fetchServices();
       fetchSchedule();
       fetchAppointments();
     }
-  }, [user?.uid, fetchServices, fetchSchedule, fetchAppointments]);
+  }, [user?.uid, fetchServices, fetchSchedule, fetchAppointments, initialLoadComplete]);
+
+  // State to track if initial localStorage load attempt is done
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  useEffect(() => {
+    setInitialLoadComplete(true);
+  }, []);
 
 
   return (
@@ -215,7 +322,7 @@ export default function BarberDashboardPage() {
           Barber Dashboard, {user?.firstName || user?.displayName || 'Barber'}!
         </h1>
 
-        {isLoadingAppointments ? (
+        {(isLoadingAppointments && !appointments.length) ? (
           <div className="flex justify-center items-center py-10">
             <LoadingSpinner className="h-8 w-8 text-primary" />
             <p className="ml-2 text-base">Loading appointments...</p>
@@ -228,7 +335,7 @@ export default function BarberDashboardPage() {
           />
         )}
         
-        {isLoadingServices ? (
+        {(isLoadingServices && !services.length) ? (
           <div className="flex justify-center items-center py-10">
             <LoadingSpinner className="h-8 w-8 text-primary" />
             <p className="ml-2 text-base">Loading services...</p>
@@ -242,7 +349,7 @@ export default function BarberDashboardPage() {
           />
         )}
 
-        {isLoadingSchedule ? (
+        {(isLoadingSchedule && schedule.every(s => s.startTime === INITIAL_SCHEDULE[0].startTime)) ? ( // Check against initial default
            <div className="flex justify-center items-center py-10">
             <LoadingSpinner className="h-8 w-8 text-primary" />
             <p className="ml-2 text-base">Loading schedule...</p>

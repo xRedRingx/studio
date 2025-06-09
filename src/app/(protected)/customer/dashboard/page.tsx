@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import type { Appointment, AppUser } from '@/types';
 import { firestore } from '@/firebase/config';
-import { collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, Timestamp } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { CalendarDays, Clock, Scissors, UserCircle, ChevronRight } from 'lucide-react';
@@ -28,6 +28,48 @@ const timeToMinutes = (timeStr: string): number => {
   return hours * 60 + minutes;
 };
 
+// Helper to convert Firestore Timestamps in an object to ISO strings
+const convertTimestampsToISO = (data: any) => {
+  if (data === null || typeof data !== 'object') {
+    return data;
+  }
+  if (data instanceof Timestamp) {
+    return data.toDate().toISOString();
+  }
+  if (Array.isArray(data)) {
+    return data.map(convertTimestampsToISO);
+  }
+  const newData: { [key: string]: any } = {};
+  for (const key in data) {
+    newData[key] = convertTimestampsToISO(data[key]);
+  }
+  return newData;
+};
+
+// Helper to convert ISO strings in an object back to Timestamps
+const convertISOToTimestamps = (data: any): any => {
+    if (data === null || typeof data !== 'object') {
+      if (typeof data === 'string' && /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z/.test(data)) {
+         try {
+            return Timestamp.fromDate(new Date(data));
+        } catch (e) { /* ignore, not a valid date string for Timestamp */ }
+      }
+      return data;
+    }
+    if (Array.isArray(data)) {
+      return data.map(convertISOToTimestamps);
+    }
+    const newData: { [key: string]: any } = {};
+    for (const key in data) {
+      newData[key] = convertISOToTimestamps(data[key]);
+    }
+    return newData;
+  };
+
+const LS_MY_APPOINTMENTS_KEY = 'customer_dashboard_my_appointments';
+const LS_AVAILABLE_BARBERS_KEY = 'customer_dashboard_available_barbers';
+
+
 export default function CustomerDashboardPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -36,9 +78,24 @@ export default function CustomerDashboardPage() {
   const [availableBarbers, setAvailableBarbers] = useState<AppUser[]>([]);
   const [isLoadingBarbers, setIsLoadingBarbers] = useState(true);
   const [today, setToday] = useState<string | null>(null);
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
 
   useEffect(() => {
     setToday(getTodayDateString());
+    // Load from localStorage on initial mount
+    if (typeof window !== 'undefined') {
+        const cachedMyAppointments = localStorage.getItem(LS_MY_APPOINTMENTS_KEY);
+        if (cachedMyAppointments) {
+            setMyAppointments(convertISOToTimestamps(JSON.parse(cachedMyAppointments)));
+            setIsLoadingAppointments(false);
+        }
+        const cachedAvailableBarbers = localStorage.getItem(LS_AVAILABLE_BARBERS_KEY);
+        if (cachedAvailableBarbers) {
+            setAvailableBarbers(JSON.parse(cachedAvailableBarbers)); // AppUser doesn't have Timestamps directly
+            setIsLoadingBarbers(false);
+        }
+        setInitialLoadComplete(true);
+    }
   }, []);
 
   const fetchMyAppointments = useCallback(async () => {
@@ -67,6 +124,9 @@ export default function CustomerDashboardPage() {
         });
 
       setMyAppointments(upcomingAppointments);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(LS_MY_APPOINTMENTS_KEY, JSON.stringify(convertTimestampsToISO(upcomingAppointments)));
+      }
     } catch (error) {
       console.error("Error fetching appointments:", error);
       toast({ title: "Error", description: "Could not fetch your appointments.", variant: "destructive" });
@@ -86,11 +146,18 @@ export default function CustomerDashboardPage() {
         const data = doc.data();
         fetchedBarbers.push({
           uid: doc.id,
+          id: doc.id, // Ensure 'id' field consistent with AppUser type if needed
           firstName: data.firstName,
           lastName: data.lastName,
+          role: data.role,
+          phoneNumber: data.phoneNumber,
+          // Add other AppUser fields if necessary, ensure they are serializable or handled
         } as AppUser); 
       });
       setAvailableBarbers(fetchedBarbers);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(LS_AVAILABLE_BARBERS_KEY, JSON.stringify(fetchedBarbers));
+      }
     } catch (error) {
       console.error("Error fetching barbers:", error);
       toast({ title: "Error", description: "Could not fetch available barbers.", variant: "destructive" });
@@ -100,11 +167,13 @@ export default function CustomerDashboardPage() {
   }, [toast]);
 
   useEffect(() => {
-    if (user?.uid && today) {
-      fetchMyAppointments();
+    if (initialLoadComplete) {
+        if (user?.uid && today) {
+          fetchMyAppointments();
+        }
+        fetchAvailableBarbers();
     }
-    fetchAvailableBarbers(); 
-  }, [user?.uid, fetchMyAppointments, fetchAvailableBarbers, today]);
+  }, [user?.uid, fetchMyAppointments, fetchAvailableBarbers, today, initialLoadComplete]);
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString + 'T00:00:00'); 
@@ -124,7 +193,7 @@ export default function CustomerDashboardPage() {
             <CardDescription className="text-sm text-gray-500 mt-1">View and manage your upcoming appointments.</CardDescription>
           </CardHeader>
           <CardContent className="p-4 md:p-6">
-            {isLoadingAppointments ? (
+            {(isLoadingAppointments && !myAppointments.length) ? (
               <div className="flex items-center justify-center py-6">
                 <LoadingSpinner className="h-8 w-8 text-primary" />
                 <p className="ml-3 text-base">Loading your appointments...</p>
@@ -168,7 +237,7 @@ export default function CustomerDashboardPage() {
             <CardDescription className="text-sm text-gray-500 mt-1">Discover services offered by our talented barbers.</CardDescription>
           </CardHeader>
           <CardContent className="p-4 md:p-6">
-            {isLoadingBarbers ? (
+            {(isLoadingBarbers && !availableBarbers.length) ? (
               <div className="flex items-center justify-center py-6">
                 <LoadingSpinner className="h-8 w-8 text-primary" />
                 <p className="ml-3 text-base">Loading available barbers...</p>
