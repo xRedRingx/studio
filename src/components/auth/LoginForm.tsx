@@ -65,6 +65,12 @@ export default function LoginForm({ role }: LoginFormProps) {
     };
   }, [resetOtpState, role]);
 
+  useEffect(() => {
+    if (otpSent) {
+      otpForm.reset({ otp: '' }); // Explicitly reset OTP form when OTP view is shown
+    }
+  }, [otpSent, otpForm]);
+
 
   async function onPhoneSubmit(values: PhoneFormValues) {
     setCurrentPhoneNumber(values.phoneNumber);

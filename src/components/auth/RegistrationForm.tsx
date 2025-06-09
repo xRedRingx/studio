@@ -69,6 +69,12 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
     };
   }, [resetOtpState, role]);
 
+  useEffect(() => {
+    if (otpSent) {
+      otpForm.reset({ otp: '' }); // Explicitly reset OTP form when OTP view is shown
+    }
+  }, [otpSent, otpForm]);
+
   async function onUserDetailsSubmit(values: UserDetailsFormValues) {
     setPendingRegistrationDetails(values);
     await sendOtp(values.phoneNumber, RECAPTCHA_CONTAINER_ID, true, { 
