@@ -17,8 +17,8 @@ import LoadingSpinner from '@/components/ui/loading-spinner';
 const RECAPTCHA_CONTAINER_ID = 'recaptcha-container-register';
 
 const userDetailsSchema = z.object({
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
+  firstName: z.string().min(1, "First name is required").max(50, "First name must be less than 50 characters"),
+  lastName: z.string().min(1, "Last name is required").max(50, "Last name must be less than 50 characters"),
   phoneNumber: z.string().regex(/^\+[1-9]\d{1,14}$/, "Phone number must be in E.164 format (e.g., +12223334444)"),
 });
 type UserDetailsFormValues = z.infer<typeof userDetailsSchema>;
@@ -58,7 +58,11 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
   useEffect(() => {
     if (user && role && pendingRegistrationDetails) { 
       resetOtpState();
-      toast({ title: "Registration Complete!", description: "You can now log in with your new account."});
+      toast({ 
+        title: "Registration Complete!", 
+        description: "You can now log in with your new account.",
+        variant: "default"
+      });
       router.push(`/${role}/login`); 
     }
   }, [user, role, router, resetOtpState, pendingRegistrationDetails, toast]);
@@ -70,16 +74,15 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
     };
   }, [resetOtpState, role]);
 
-  // Fixed: More explicit OTP form reset when OTP is sent
+  // Fixed: Properly reset OTP form when OTP is sent
   useEffect(() => {
     if (otpSent) {
-      // Reset the form after a small delay to ensure proper cleanup
-      const timer = setTimeout(() => {
-        otpForm.reset();
-        otpForm.setValue('otp', '');
-      }, 100);
-      
-      return () => clearTimeout(timer);
+      // Clear the OTP form completely
+      otpForm.reset({ otp: '' });
+      // Force clear the field value
+      otpForm.setValue('otp', '');
+      // Clear any field errors
+      otpForm.clearErrors('otp');
     }
   }, [otpSent, otpForm]);
 
@@ -98,6 +101,8 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
         description: "Failed to send OTP. Please try again.",
         variant: "destructive"
       });
+      // Reset pending details on error
+      setPendingRegistrationDetails(null);
     }
   }
 
@@ -111,16 +116,31 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
         description: "Invalid OTP. Please try again.",
         variant: "destructive"
       });
+      // Reset OTP field on error
+      otpForm.reset({ otp: '' });
+      otpForm.setValue('otp', '');
     }
   }
 
   const handleTryAgain = () => {
     resetOtpState();
     setPendingRegistrationDetails(null);
-    userDetailsForm.reset(); 
-    otpForm.reset();
-    otpForm.setValue('otp', ''); // Explicitly clear OTP field
+    userDetailsForm.reset({ 
+      firstName: '', 
+      lastName: '', 
+      phoneNumber: '' 
+    }); 
+    otpForm.reset({ otp: '' });
+    otpForm.setValue('otp', '');
+    otpForm.clearErrors();
   }
+
+  // Handle OTP input changes to ensure only digits
+  const handleOtpChange = (value: string) => {
+    // Only allow digits and limit to 6 characters
+    const cleanValue = value.replace(/\D/g, '').slice(0, 6);
+    otpForm.setValue('otp', cleanValue);
+  };
 
   if (otpSent) {
     return (
@@ -138,7 +158,11 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
                 <FormControl>
                   <InputOTP 
                     maxLength={6} 
-                    {...field}
+                    value={field.value || ''}
+                    onChange={(value) => {
+                      handleOtpChange(value);
+                      field.onChange(value);
+                    }}
                     autoComplete="one-time-code"
                   >
                     <InputOTPGroup>
@@ -155,11 +179,21 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
               </FormItem>
             )}
           />
-          <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14" disabled={isVerifyingOtp || !otpForm.watch('otp') || otpForm.watch('otp').length !== 6}>
+          <Button 
+            type="submit" 
+            className="w-full button-tap-target text-lg py-3 h-14" 
+            disabled={isVerifyingOtp || !otpForm.watch('otp') || otpForm.watch('otp').length !== 6}
+          >
             {isVerifyingOtp ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
             Verify OTP & Register
           </Button>
-          <Button variant="link" onClick={handleTryAgain} disabled={isVerifyingOtp} type="button">
+          <Button 
+            variant="link" 
+            onClick={handleTryAgain} 
+            disabled={isVerifyingOtp} 
+            type="button"
+            className="w-full"
+          >
             Change details or resend OTP
           </Button>
         </form>
@@ -178,7 +212,12 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
               <FormItem>
                 <FormLabel>First Name</FormLabel>
                 <FormControl>
-                  <Input placeholder="Enter your first name" {...field} className="text-base py-3 px-4 h-12"/>
+                  <Input 
+                    placeholder="Enter your first name" 
+                    {...field} 
+                    className="text-base py-3 px-4 h-12"
+                    autoComplete="given-name"
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -191,7 +230,12 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
               <FormItem>
                 <FormLabel>Last Name</FormLabel>
                 <FormControl>
-                  <Input placeholder="Enter your last name" {...field} className="text-base py-3 px-4 h-12"/>
+                  <Input 
+                    placeholder="Enter your last name" 
+                    {...field} 
+                    className="text-base py-3 px-4 h-12"
+                    autoComplete="family-name"
+                  />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -218,7 +262,11 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
           )}
         />
         <div id={RECAPTCHA_CONTAINER_ID}></div>
-        <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14" disabled={isSendingOtp}>
+        <Button 
+          type="submit" 
+          className="w-full button-tap-target text-lg py-3 h-14" 
+          disabled={isSendingOtp}
+        >
           {isSendingOtp ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
           Send OTP
         </Button>

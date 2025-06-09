@@ -65,16 +65,15 @@ export default function LoginForm({ role }: LoginFormProps) {
     };
   }, [resetOtpState, role]);
 
-  // Fixed: More explicit OTP form reset when OTP is sent
+  // Fixed: Properly reset OTP form when OTP is sent
   useEffect(() => {
     if (otpSent) {
-      // Reset the form after a small delay to ensure proper cleanup
-      const timer = setTimeout(() => {
-        otpForm.reset();
-        otpForm.setValue('otp', '');
-      }, 100);
-      
-      return () => clearTimeout(timer);
+      // Clear the OTP form completely
+      otpForm.reset({ otp: '' });
+      // Force clear the field value
+      otpForm.setValue('otp', '');
+      // Clear any field errors
+      otpForm.clearErrors('otp');
     }
   }, [otpSent, otpForm]);
 
@@ -102,16 +101,27 @@ export default function LoginForm({ role }: LoginFormProps) {
         description: "Invalid OTP. Please try again.",
         variant: "destructive"
       });
+      // Reset OTP field on error
+      otpForm.reset({ otp: '' });
+      otpForm.setValue('otp', '');
     }
   }
 
   const handleTryAgain = () => {
     resetOtpState();
-    phoneForm.reset(); 
-    otpForm.reset();
-    otpForm.setValue('otp', ''); // Explicitly clear OTP field
+    phoneForm.reset({ phoneNumber: '' }); 
+    otpForm.reset({ otp: '' });
+    otpForm.setValue('otp', '');
+    otpForm.clearErrors();
     setCurrentPhoneNumber('');
   }
+
+  // Handle OTP input changes to ensure only digits
+  const handleOtpChange = (value: string) => {
+    // Only allow digits and limit to 6 characters
+    const cleanValue = value.replace(/\D/g, '').slice(0, 6);
+    otpForm.setValue('otp', cleanValue);
+  };
 
   if (otpSent) {
     return (
@@ -129,7 +139,11 @@ export default function LoginForm({ role }: LoginFormProps) {
                 <FormControl>
                   <InputOTP 
                     maxLength={6} 
-                    {...field}
+                    value={field.value || ''}
+                    onChange={(value) => {
+                      handleOtpChange(value);
+                      field.onChange(value);
+                    }}
                     autoComplete="one-time-code"
                   >
                     <InputOTPGroup>
@@ -146,11 +160,21 @@ export default function LoginForm({ role }: LoginFormProps) {
               </FormItem>
             )}
           />
-          <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14" disabled={isVerifyingOtp || !otpForm.watch('otp') || otpForm.watch('otp').length !== 6}>
+          <Button 
+            type="submit" 
+            className="w-full button-tap-target text-lg py-3 h-14" 
+            disabled={isVerifyingOtp || !otpForm.watch('otp') || otpForm.watch('otp').length !== 6}
+          >
             {isVerifyingOtp ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
             Verify OTP
           </Button>
-          <Button variant="link" onClick={handleTryAgain} disabled={isVerifyingOtp} type="button">
+          <Button 
+            variant="link" 
+            onClick={handleTryAgain} 
+            disabled={isVerifyingOtp} 
+            type="button"
+            className="w-full"
+          >
             Change phone number or resend OTP
           </Button>
         </form>
@@ -181,7 +205,11 @@ export default function LoginForm({ role }: LoginFormProps) {
           )}
         />
         <div id={RECAPTCHA_CONTAINER_ID}></div> 
-        <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14 mt-4" disabled={isSendingOtp}>
+        <Button 
+          type="submit" 
+          className="w-full button-tap-target text-lg py-3 h-14 mt-4" 
+          disabled={isSendingOtp}
+        >
           {isSendingOtp ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
           Send OTP
         </Button>
