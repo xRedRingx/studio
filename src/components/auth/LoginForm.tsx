@@ -77,7 +77,7 @@ export default function LoginForm({ role }: LoginFormProps) {
 
   const handleTryAgain = () => {
     resetOtpState();
-    phoneForm.reset(); // Optionally reset phone form too
+    phoneForm.reset(); 
     otpForm.reset();
   }
 
@@ -96,7 +96,7 @@ export default function LoginForm({ role }: LoginFormProps) {
                 <FormLabel>One-Time Password</FormLabel>
                 <FormControl>
                   <InputOTP maxLength={6} {...field}>
-                    <InputOTPGroup className="w-full justify-between">
+                    <InputOTPGroup>
                       <InputOTPSlot index={0} />
                       <InputOTPSlot index={1} />
                       <InputOTPSlot index={2} />
@@ -114,7 +114,7 @@ export default function LoginForm({ role }: LoginFormProps) {
             {isVerifyingOtp ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
             Verify OTP
           </Button>
-          <Button variant="link" onClick={handleTryAgain} disabled={isVerifyingOtp}>
+          <Button variant="link" onClick={handleTryAgain} disabled={isVerifyingOtp} type="button">
             Change phone number or resend OTP
           </Button>
         </form>
@@ -143,7 +143,6 @@ export default function LoginForm({ role }: LoginFormProps) {
             </FormItem>
           )}
         />
-        {/* This div is used by Firebase RecaptchaVerifier */}
         <div id={RECAPTCHA_CONTAINER_ID}></div> 
         <Button type="submit" className="w-full button-tap-target text-lg py-3 h-14 mt-4" disabled={isSendingOtp}>
           {isSendingOtp ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
