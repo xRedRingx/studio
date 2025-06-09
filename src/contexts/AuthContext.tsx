@@ -85,7 +85,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
              await createUserDocument(firebaseUser, pendingUserDetails.firstName, pendingUserDetails.lastName, pendingUserDetails.role);
              setPendingUserDetails(null); 
            } else {
-            console.warn("Authenticated user document not found in Firestore and no pending details for user:", firebaseUser.uid);
+            console.warn("AuthContext: Authenticated user document not found in Firestore and no pending details for user:", firebaseUser.uid);
             const minimalAppUser: AppUser = {
               ...(firebaseUser as unknown as FirebaseUser), 
               phoneNumber: firebaseUser.phoneNumber || 'UNKNOWN_PHONE',
@@ -125,28 +125,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (currentVerifier) {
       try {
         currentVerifier.clear(); 
-        console.log(`Cleared existing reCAPTCHA verifier for ${recaptchaContainerId}`);
+        console.log(`AuthContext: Cleared existing reCAPTCHA verifier for ${recaptchaContainerId}`);
       } catch (e) {
-        console.warn("Error clearing old reCAPTCHA verifier:", e);
+        console.warn("AuthContext: Error clearing old reCAPTCHA verifier:", e);
       }
     }
     
     recaptchaContainer.innerHTML = ''; 
-    console.log(`Initializing new reCAPTCHA verifier for ${recaptchaContainerId}`);
+    console.log(`AuthContext: Initializing new reCAPTCHA verifier for ${recaptchaContainerId}`);
     
     const newVerifier = new RecaptchaVerifier(auth, recaptchaContainerId, {
       'size': 'invisible',
-      'remoteConfig': true, // Added this option
+      'remoteConfig': true, 
       'callback': (response: any) => {
-        console.log("reCAPTCHA challenge successful (invisible flow):", response);
+        console.log("AuthContext: reCAPTCHA challenge successful (invisible flow):", response);
       },
       'expired-callback': () => {
-        console.warn("reCAPTCHA expired for", recaptchaContainerId);
+        console.warn("AuthContext: reCAPTCHA expired for", recaptchaContainerId);
         toast({ title: "reCAPTCHA Expired", description: "Please try sending the OTP again.", variant: "destructive" });
         setVerifierState(null); 
       },
       'error-callback': (error: any) => { 
-        console.error("reCAPTCHA error-callback for", recaptchaContainerId, ":", error);
+        console.error(`AuthContext: reCAPTCHA error-callback for ${recaptchaContainerId}:`, error);
         toast({ title: "reCAPTCHA Error", description: `reCAPTCHA process failed. ${error?.message || 'Please try again.'}`, variant: "destructive" });
         setVerifierState(null);
       }
@@ -154,10 +154,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     
     try {
       await newVerifier.render(); 
-      console.log(`reCAPTCHA verifier rendered for ${recaptchaContainerId}`);
+      console.log(`AuthContext: reCAPTCHA verifier rendered for ${recaptchaContainerId}`);
       setVerifierState(newVerifier); 
     } catch (renderError: any) {
-      console.error("Error rendering reCAPTCHA for", recaptchaContainerId, ":", renderError);
+      console.error(`AuthContext: Error rendering reCAPTCHA for ${recaptchaContainerId}:`, renderError);
       toast({ title: "reCAPTCHA Render Error", description: `Could not render reCAPTCHA. ${renderError.message || 'Check console and Firebase/GCP setup (authorized domains, API key type).'}`, variant: "destructive" });
       setVerifierState(null); 
       throw renderError; 
@@ -174,8 +174,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   ) => {
     setIsSendingOtp(true);
     setOtpSent(false); 
-    console.log(`Attempting to send OTP to: ${phoneNumber}. Is Registration: ${isRegistration}. Using container: ${recaptchaContainerId}`);
-    console.log("Verifying phone number format (E.164 expected):", phoneNumber);
+    console.log(`AuthContext: Attempting to send OTP to: ${phoneNumber}. Is Registration: ${isRegistration}. Using container: ${recaptchaContainerId}`);
+    console.log("AuthContext: Verifying phone number format (E.164 expected):", phoneNumber);
 
     try {
       const verifier = await initializeRecaptchaVerifier(recaptchaContainerId, isRegistration);
@@ -187,22 +187,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       toast({ title: "OTP Sent", description: `An OTP has been sent to ${phoneNumber}.` });
     } catch (error: any) {
-      console.error("Error sending OTP:", error, "Code:", error.code, "Message:", error.message);
+      console.error(`AuthContext: Error sending OTP (code: ${error.code}, message: ${error.message}):`, error);
       let description = "Failed to send OTP. Please check the phone number and try again.";
-      if (error.code === 'auth/invalid-phone-number') {
+      
+      if (error.code === 'auth/captcha-check-failed') {
+        description = "reCAPTCHA check failed: Hostname mismatch. CRITICAL: Ensure your current app domain (e.g., 'localhost' for local testing, or your deployed domain like 'app-name.web.app') is added to the 'Authorized Domains' list for your reCAPTCHA key in the Google Cloud Console. This is the most common cause for this error.";
+      } else if (error.code === 'auth/invalid-phone-number') {
         description = "The phone number format is invalid. Please use E.164 format (e.g., +12223334444).";
       } else if (error.code === 'auth/too-many-requests') {
         description = "Too many OTP requests. Please try again later.";
       } else if (error.code === 'auth/internal-error') {
-        description = "An internal Firebase error occurred. Critical: Please verify Firebase & Google Cloud project configuration: reCAPTCHA key type (v2 vs Enterprise), authorized domains for the reCAPTCHA key in GCP, Phone Auth enabled, and Identity Toolkit API active. Ensure the reCAPTCHA key in Firebase matches the one in GCP.";
+        description = "An internal Firebase error occurred. Please verify Firebase & Google Cloud project configuration: reCAPTCHA key type (v2 vs Enterprise - ensure compatibility with Firebase SDK), authorized domains for the reCAPTCHA key in GCP, Phone Auth enabled, and Identity Toolkit API active. Ensure the reCAPTCHA key in Firebase matches the one in GCP.";
       } else if (error.code === 'auth/network-request-failed') {
-        description = "Network error during OTP request. Please check your internet connection and ensure no browser extensions or network policies are blocking Google services.";
+        description = "Network error during OTP request. Check internet connection and ensure no browser extensions or network policies are blocking Google services (like reCAPTCHA).";
       } else if (error.message && error.message.includes("reCAPTCHA placeholder element")) {
         description = `reCAPTCHA setup error: Could not find element '${recaptchaContainerId}'. Ensure it's rendered.`;
       } else if (error.message) {
         description = error.message;
       }
-      toast({ title: "OTP Send Error", description, variant: "destructive" });
+      toast({ title: "OTP Send Error", description, variant: "destructive", duration: 9000 });
       setOtpSent(false); 
       
       const verifierToClear = isRegistration ? registerRecaptchaVerifier : loginRecaptchaVerifier;
@@ -210,7 +213,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (verifierToClear) {
         try {
           verifierToClear.clear();
-        } catch(e) { console.warn("Error clearing verifier during sendOtp error handling:", e); }
+        } catch(e) { console.warn("AuthContext: Error clearing verifier during sendOtp error handling:", e); }
       }
       setVerifierState(null);
 
@@ -270,13 +273,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           if (appUser.role) setRoleContextAndStorage(appUser.role);
           toast({ title: "Login Successful!", description: "You've been successfully logged in." });
         } else {
-           console.error("User document not found after OTP confirmation for login. This may occur if registration failed to create the document or if it's a login for a non-existent user.");
+           console.error("AuthContext: User document not found after OTP confirmation for login. This may occur if registration failed to create the document or if it's a login for a non-existent user.");
            toast({ title: "Login Error", description: "User profile not found. If you're new, please ensure registration completed. Otherwise, contact support.", variant: "destructive" });
         }
       }
       setOtpSent(false); 
     } catch (error: any) {
-      console.error("Error confirming OTP:", error, "Code:", error.code, "Message:", error.message);
+      console.error(`AuthContext: Error confirming OTP (code: ${error.code}, message: ${error.message}):`, error);
       let description = "Invalid OTP or an error occurred. Please try again.";
       if (error.code === 'auth/invalid-verification-code') {
         description = "The OTP entered is invalid. Please check and try again.";
@@ -294,7 +297,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
   
   const resetOtpState = useCallback(() => {
-    console.log("Resetting OTP state and verifiers.");
+    console.log("AuthContext: Resetting OTP state and verifiers.");
     setOtpSent(false);
     setConfirmationResult(null);
     setIsSendingOtp(false);
@@ -304,23 +307,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (loginRecaptchaVerifier) {
       try { 
         loginRecaptchaVerifier.clear(); 
-        console.log("Login reCAPTCHA verifier cleared.");
-      } catch(e) { console.warn("Error clearing login verifier:", e); }
+        console.log("AuthContext: Login reCAPTCHA verifier cleared.");
+      } catch(e) { console.warn("AuthContext: Error clearing login verifier:", e); }
       setLoginRecaptchaVerifier(null);
     }
     if (registerRecaptchaVerifier) {
       try { 
         registerRecaptchaVerifier.clear(); 
-        console.log("Register reCAPTCHA verifier cleared.");
-      } catch(e) { console.warn("Error clearing register verifier:", e); }
+        console.log("AuthContext: Register reCAPTCHA verifier cleared.");
+      } catch(e) { console.warn("AuthContext: Error clearing register verifier:", e); }
       setRegisterRecaptchaVerifier(null);
     }
     
-    // This might not always work or be necessary if verifier.clear() is effective
-    // const recaptchaBadge = document.querySelector('.grecaptcha-badge');
-    // if (recaptchaBadge && recaptchaBadge.parentElement) {
-    //   recaptchaBadge.parentElement.style.display = 'none';
-    // }
   }, [loginRecaptchaVerifier, registerRecaptchaVerifier]);
 
   const signOutUser = () => {
