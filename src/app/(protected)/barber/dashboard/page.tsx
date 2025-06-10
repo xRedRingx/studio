@@ -90,6 +90,13 @@ export default function BarberDashboardPage() {
   const [isLoadingAppointments, setIsLoadingAppointments] = useState(true);
   const [isUpdatingAppointment, setIsUpdatingAppointment] = useState(false);
 
+  // State to track if initial localStorage load attempt is done
+  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+
+  useEffect(() => {
+    setInitialLoadComplete(true);
+  }, []);
+
   useEffect(() => {
     // Load from localStorage on initial mount
     if (typeof window !== 'undefined') {
@@ -307,12 +314,6 @@ export default function BarberDashboardPage() {
       fetchAppointments();
     }
   }, [user?.uid, fetchServices, fetchSchedule, fetchAppointments, initialLoadComplete]);
-
-  // State to track if initial localStorage load attempt is done
-  const [initialLoadComplete, setInitialLoadComplete] = useState(false);
-  useEffect(() => {
-    setInitialLoadComplete(true);
-  }, []);
 
 
   return (
