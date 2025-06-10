@@ -148,9 +148,11 @@ export default function BarberDashboardPage() {
       toast({ title: "Error", description: "You must be logged in to add services.", variant: "destructive" });
       return;
     }
+    console.log("Attempting to add service. Current user:", user);
     try {
       const now = Timestamp.now();
       const newServiceData = { ...serviceData, barberId: user.uid, createdAt: now, updatedAt: now };
+      console.log("Data for new service:", JSON.stringify(newServiceData, null, 2));
       const docRef = await addDoc(collection(firestore, 'services'), newServiceData);
       const newServiceEntry = { ...newServiceData, id: docRef.id };
       setServices((prev) => {
@@ -163,14 +165,16 @@ export default function BarberDashboardPage() {
       toast({ title: "Success", description: "Service added successfully." });
     } catch (error) {
       console.error("Error adding service:", error);
-      toast({ title: "Error", description: "Could not add service.", variant: "destructive" });
+      toast({ title: "Error", description: "Could not add service. Check console for details.", variant: "destructive" });
     }
   };
 
   const handleUpdateService = async (serviceId: string, serviceData: Omit<BarberService, 'id' | 'barberId' | 'createdAt' | 'updatedAt'>) => {
+    console.log("Attempting to update service. Current user:", user);
     try {
       const serviceRef = doc(firestore, 'services', serviceId);
       const updatedServiceData = { ...serviceData, updatedAt: Timestamp.now() };
+      console.log("Data for updating service " + serviceId + ":", JSON.stringify(updatedServiceData, null, 2));
       await updateDoc(serviceRef, updatedServiceData);
       setServices((prev) => {
         const updated = prev.map(s => s.id === serviceId ? { ...s, ...updatedServiceData } : s);
@@ -182,7 +186,7 @@ export default function BarberDashboardPage() {
       toast({ title: "Success", description: "Service updated successfully." });
     } catch (error) {
       console.error("Error updating service:", error);
-      toast({ title: "Error", description: "Could not update service.", variant: "destructive" });
+      toast({ title: "Error", description: "Could not update service. Check console for details.", variant: "destructive" });
     }
   };
 
@@ -223,7 +227,7 @@ export default function BarberDashboardPage() {
     } catch (error) {
       console.error("Error fetching schedule:", error);
       toast({ title: "Error", description: "Could not fetch work schedule.", variant: "destructive" });
-      setSchedule(INITIAL_SCHEDULE); 
+      setSchedule(INITIAL_SCHEDULE);
     } finally {
       setIsLoadingSchedule(false);
     }
@@ -241,6 +245,7 @@ export default function BarberDashboardPage() {
       return;
     }
     setIsSavingSchedule(true);
+    console.log("Attempting to save schedule. Current user:", user);
     try {
       const scheduleDocRef = doc(firestore, 'barberSchedules', user.uid);
       const scheduleDataToSave: BarberScheduleDoc = {
@@ -248,6 +253,7 @@ export default function BarberDashboardPage() {
         schedule: schedule, // this is the current state
         updatedAt: Timestamp.now(),
       };
+      console.log("Data for saving schedule:", JSON.stringify(scheduleDataToSave, null, 2));
       await setDoc(scheduleDocRef, scheduleDataToSave, { merge: true });
       if (typeof window !== 'undefined') {
         localStorage.setItem(LS_SCHEDULE_KEY, JSON.stringify(schedule)); // Save current schedule state
@@ -255,7 +261,7 @@ export default function BarberDashboardPage() {
       toast({ title: "Success", description: "Work schedule saved successfully." });
     } catch (error) {
       console.error("Error saving schedule:", error);
-      toast({ title: "Error", description: "Could not save work schedule.", variant: "destructive" });
+      toast({ title: "Error", description: "Could not save work schedule. Check console for details.", variant: "destructive" });
     } finally {
       setIsSavingSchedule(false);
     }
@@ -287,9 +293,11 @@ export default function BarberDashboardPage() {
 
   const handleUpdateAppointmentStatus = async (appointmentId: string, status: Appointment['status']) => {
     setIsUpdatingAppointment(true);
+    console.log("Attempting to update appointment status. Current user:", user);
     try {
       const appointmentRef = doc(firestore, 'appointments', appointmentId);
       const newUpdatedAt = Timestamp.now();
+      console.log("Data for updating appointment " + appointmentId + " status to " + status + ":", { status: status, updatedAt: newUpdatedAt });
       await updateDoc(appointmentRef, { status: status, updatedAt: newUpdatedAt });
       setAppointments((prev) => {
         const updated = prev.map((app) => (app.id === appointmentId ? { ...app, status, updatedAt: newUpdatedAt } : app));
@@ -301,7 +309,7 @@ export default function BarberDashboardPage() {
       toast({ title: "Success", description: `Appointment status updated to ${status}.` });
     } catch (error) {
       console.error("Error updating appointment status:", error);
-      toast({ title: "Error", description: "Could not update appointment status.", variant: "destructive" });
+      toast({ title: "Error", description: "Could not update appointment status. Check console for details.", variant: "destructive" });
     } finally {
       setIsUpdatingAppointment(false);
     }
@@ -330,12 +338,12 @@ export default function BarberDashboardPage() {
           </div>
         ) : (
           <TodaysAppointmentsSection
-            appointments={appointments} 
+            appointments={appointments}
             onUpdateAppointmentStatus={handleUpdateAppointmentStatus}
             isUpdatingAppointment={isUpdatingAppointment}
           />
         )}
-        
+
         {(isLoadingServices && !services.length) ? (
           <div className="flex justify-center items-center py-10">
             <LoadingSpinner className="h-8 w-8 text-primary" />
