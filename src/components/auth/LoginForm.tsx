@@ -15,7 +15,7 @@ import LoadingSpinner from '@/components/ui/loading-spinner';
 
 const loginSchema = z.object({
   phoneNumber: z.string().regex(/^\+[1-9]\d{1,14}$/, "Phone number must be in E.164 format (e.g., +12223334444)"),
-  password: z.string().min(1, "Password is required"), // Basic validation, can be enhanced
+  password: z.string().min(1, "Password is required"),
 });
 type LoginFormValues = z.infer<typeof loginSchema>;
 
@@ -25,7 +25,7 @@ interface LoginFormProps {
 
 export default function LoginForm({ role }: LoginFormProps) {
   const router = useRouter();
-  const { user, signInWithPhoneNumberAndPassword, isProcessingAuth } = useAuth();
+  const { user, signInWithPhoneAndPassword, isProcessingAuth } = useAuth();
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -40,13 +40,12 @@ export default function LoginForm({ role }: LoginFormProps) {
 
   async function onSubmit(values: LoginFormValues) {
     try {
-      await signInWithPhoneNumberAndPassword(values.phoneNumber, values.password);
-      // Successful login will trigger onAuthStateChanged,
-      // which then redirects via the useEffect above.
+      await signInWithPhoneAndPassword(values.phoneNumber, values.password);
+      // Successful login will update AuthContext and trigger useEffect for redirect
     } catch (error) {
-      // Error is handled by toast in AuthContext
+      // Error is handled by toast in AuthContext or caught here if specific form action is needed
       console.error('Login form error:', error);
-      form.resetField("password"); // Clear password field on login error
+      form.resetField("password");
     }
   }
 

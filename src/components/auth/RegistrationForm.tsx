@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useAuth } from '@/hooks/useAuth';
-import type { UserRole } from '@/types';
+import type { UserRole, AppUser } from '@/types';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 
 const userDetailsSchema = z.object({
@@ -21,7 +21,7 @@ const userDetailsSchema = z.object({
   confirmPassword: z.string().min(6, "Confirm password must be at least 6 characters"),
 }).refine(data => data.password === data.confirmPassword, {
   message: "Passwords don't match",
-  path: ["confirmPassword"], // path of error
+  path: ["confirmPassword"],
 });
 
 type UserDetailsFormValues = z.infer<typeof userDetailsSchema>;
@@ -32,7 +32,7 @@ interface RegistrationFormProps {
 
 export default function RegistrationForm({ role }: RegistrationFormProps) {
   const router = useRouter();
-  const { registerWithPhoneNumberAndPassword, isProcessingAuth, user } = useAuth();
+  const { user, registerWithDetails, isProcessingAuth } = useAuth();
 
   const form = useForm<UserDetailsFormValues>({
     resolver: zodResolver(userDetailsSchema),
@@ -47,26 +47,25 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
 
   useEffect(() => {
     if (user && role) {
-      // If user is created and logged in, redirect them to their login page, then dashboard
-      router.push(`/${role}/login`);
+      router.push(`/${role}/dashboard`);
     }
   }, [user, role, router]);
 
   async function onSubmit(values: UserDetailsFormValues) {
     try {
-      await registerWithPhoneNumberAndPassword({
+      const userDetailsForApi: Omit<AppUser, 'uid' | 'createdAt' | 'updatedAt' | 'displayName' | 'photoURL' | 'emailVerified'> & { password_original_do_not_use: string } = {
         firstName: values.firstName,
         lastName: values.lastName,
         phoneNumber: values.phoneNumber,
-        password_original_do_not_use: values.password,
+        password_original_do_not_use: values.password, // Pass original password
         role: role,
-      });
-      // Successful registration will trigger onAuthStateChanged,
-      // which then redirects via the useEffect above.
-      // Optionally, add a success toast here if not handled in AuthContext
+      };
+      await registerWithDetails(userDetailsForApi);
+      // Successful registration will update AuthContext and trigger useEffect for redirect
     } catch (error) {
-      // Error is handled by toast in AuthContext, but can add form-specific logic if needed
+      // Errors are typically handled by toast in AuthContext or caught here if specific form action is needed
       console.error('Registration form error:', error);
+      // Example: form.setError("root", { message: "An unexpected error occurred." });
     }
   }
 
