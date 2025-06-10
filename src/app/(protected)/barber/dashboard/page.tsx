@@ -94,16 +94,17 @@ export default function BarberDashboardPage() {
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
 
   useEffect(() => {
+    // This effect runs once on mount to indicate localStorage check can proceed.
     setInitialLoadComplete(true);
   }, []);
 
   useEffect(() => {
-    // Load from localStorage on initial mount
-    if (typeof window !== 'undefined') {
+    // Load from localStorage on initial mount if initialLoadComplete is true
+    if (typeof window !== 'undefined' && initialLoadComplete) {
       const cachedServices = localStorage.getItem(LS_SERVICES_KEY);
       if (cachedServices) {
         setServices(convertISOToTimestamps(JSON.parse(cachedServices)));
-        setIsLoadingServices(false);
+        setIsLoadingServices(false); // Potentially set to false if cache is considered sufficient initially
       }
       const cachedSchedule = localStorage.getItem(LS_SCHEDULE_KEY);
       if (cachedSchedule) {
@@ -116,7 +117,7 @@ export default function BarberDashboardPage() {
         setIsLoadingAppointments(false);
       }
     }
-  }, []);
+  }, [initialLoadComplete]);
 
 
   // --- Services ---
@@ -170,6 +171,10 @@ export default function BarberDashboardPage() {
   };
 
   const handleUpdateService = async (serviceId: string, serviceData: Omit<BarberService, 'id' | 'barberId' | 'createdAt' | 'updatedAt'>) => {
+    if (!user?.uid) {
+      toast({ title: "Error", description: "You must be logged in to update services.", variant: "destructive" });
+      return;
+    }
     console.log("Attempting to update service. Current user:", user);
     try {
       const serviceRef = doc(firestore, 'services', serviceId);
@@ -191,6 +196,10 @@ export default function BarberDashboardPage() {
   };
 
   const handleDeleteService = async (serviceId: string) => {
+    if (!user?.uid) {
+      toast({ title: "Error", description: "You must be logged in to delete services.", variant: "destructive" });
+      return;
+    }
     try {
       const serviceRef = doc(firestore, 'services', serviceId);
       await deleteDoc(serviceRef);
@@ -273,7 +282,7 @@ export default function BarberDashboardPage() {
     setIsLoadingAppointments(true);
     try {
       const appointmentsCollection = collection(firestore, 'appointments');
-      const q = query(appointmentsCollection, where('barberId', '==', user.uid), orderBy('date', 'desc'), orderBy('startTime'));
+      const q = query(appointmentsCollection, where('barberId', '==', user.uid), orderBy('date', 'asc'), orderBy('startTime'));
       const querySnapshot = await getDocs(q);
       const fetchedAppointments: Appointment[] = [];
       querySnapshot.forEach((doc) => {
@@ -292,6 +301,10 @@ export default function BarberDashboardPage() {
   }, [user?.uid, toast]);
 
   const handleUpdateAppointmentStatus = async (appointmentId: string, status: Appointment['status']) => {
+    if (!user?.uid) {
+      toast({ title: "Error", description: "You must be logged in to update appointments.", variant: "destructive" });
+      return;
+    }
     setIsUpdatingAppointment(true);
     console.log("Attempting to update appointment status. Current user:", user);
     try {
@@ -316,7 +329,7 @@ export default function BarberDashboardPage() {
   };
 
   useEffect(() => {
-    if (user?.uid && initialLoadComplete) { // Only fetch if initial load from localStorage is done or not applicable
+    if (user?.uid && initialLoadComplete) { 
       fetchServices();
       fetchSchedule();
       fetchAppointments();
