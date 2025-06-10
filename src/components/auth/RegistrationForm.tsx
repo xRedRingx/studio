@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -65,17 +64,14 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
   }, [user, role, router, resetOtpState, pendingRegistrationDetails, toast]);
 
   useEffect(() => {
-    // This cleanup runs when the component unmounts.
     return () => {
-      resetOtpState(); // resetOtpState now handles clearing the verifier and its DOM container.
+      resetOtpState();
     };
   }, [resetOtpState]);
 
   useEffect(() => {
     if (otpSent) {
       otpForm.reset({ otp: '' });
-      // Ensure visual and form state is pristine for OTP input
-      otpForm.setValue('otp', '', { shouldValidate: false, shouldDirty: false, shouldTouch: false });
     }
   }, [otpSent, otpForm]);
 
@@ -103,107 +99,108 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
   }
 
   const handleTryAgain = () => {
-    resetOtpState(); // This will clear verifier and its DOM container
+    resetOtpState();
     setPendingRegistrationDetails(null);
-    userDetailsForm.reset({firstName: '', lastName: '', phoneNumber: ''});
-    otpForm.reset({otp: ''});
   };
 
   return (
-    <div key={otpSent ? 'otp-form' : 'details-form'}>
-      {/* Persistent reCAPTCHA container */}
-      <div id={RECAPTCHA_CONTAINER_ID} className={`my-4 flex justify-center ${otpSent ? 'hidden' : ''}`}></div>
+    <>
+      {/* This reCAPTCHA container is always in the DOM but hidden when not needed. */}
+      {/* This prevents the "element has been removed" error. */}
+      <div id={RECAPTCHA_CONTAINER_ID} style={{ display: otpSent ? 'none' : 'block' }}></div>
 
-      {otpSent ? (
-        <Form {...otpForm}>
-          <form onSubmit={otpForm.handleSubmit(onOtpSubmit)} className="space-y-6 mt-6">
-            <p className="text-sm text-gray-500">
-              Enter the 6-digit OTP sent to {pendingRegistrationDetails?.phoneNumber}.
-            </p>
-            <FormField
-              control={otpForm.control}
-              name="otp"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-base">One-Time Password</FormLabel>
-                  <FormControl>
-                    <CustomOtpInput {...field} disabled={isVerifyingOtp} autoComplete="one-time-code"/>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <Button
-              type="submit"
-              className="w-full h-14 rounded-full text-lg"
-              disabled={isVerifyingOtp || !otpValue || otpValue.length !== 6}
-            >
-              {isVerifyingOtp && <LoadingSpinner className="mr-2 h-5 w-5" />}
-              Verify OTP & Register
-            </Button>
-            <Button
-              variant="link"
-              onClick={handleTryAgain}
-              disabled={isVerifyingOtp}
-              type="button"
-              className="w-full text-primary"
-            >
-              Change details or resend OTP
-            </Button>
-          </form>
-        </Form>
-      ) : (
-        <Form {...userDetailsForm}>
-          <form onSubmit={userDetailsForm.handleSubmit(onUserDetailsSubmit)} className="space-y-6 mt-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+      {/* This key forces the form container to re-mount, which fixes the OTP autofill bug. */}
+      <div key={otpSent ? 'otp-form' : 'details-form'}>
+        {otpSent ? (
+          <Form {...otpForm}>
+            <form onSubmit={otpForm.handleSubmit(onOtpSubmit)} className="space-y-6 mt-6">
+              <p className="text-sm text-gray-500">
+                Enter the 6-digit OTP sent to {pendingRegistrationDetails?.phoneNumber}.
+              </p>
               <FormField
-                control={userDetailsForm.control}
-                name="firstName"
+                control={otpForm.control}
+                name="otp"
                 render={({ field }) => (
-                  <FormItem className="sm:col-span-2 md:col-span-1">
-                    <FormLabel className="text-base">First Name</FormLabel>
+                  <FormItem>
+                    <FormLabel className="text-base">One-Time Password</FormLabel>
                     <FormControl>
-                      <Input placeholder="Enter first name" {...field} className="text-base h-12" autoComplete="given-name" />
+                      <CustomOtpInput {...field} disabled={isVerifyingOtp} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+              <Button
+                type="submit"
+                className="w-full h-14 rounded-full text-lg"
+                disabled={isVerifyingOtp || !otpValue || otpValue.length !== 6}
+              >
+                {isVerifyingOtp && <LoadingSpinner className="mr-2 h-5 w-5" />}
+                Verify OTP & Register
+              </Button>
+              <Button
+                variant="link"
+                onClick={handleTryAgain}
+                disabled={isVerifyingOtp}
+                type="button"
+                className="w-full text-primary"
+              >
+                Change details or resend OTP
+              </Button>
+            </form>
+          </Form>
+        ) : (
+          <Form {...userDetailsForm}>
+            <form onSubmit={userDetailsForm.handleSubmit(onUserDetailsSubmit)} className="space-y-6 mt-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                <FormField
+                  control={userDetailsForm.control}
+                  name="firstName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-base">First Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter first name" {...field} className="text-base h-12" autoComplete="given-name" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={userDetailsForm.control}
+                  name="lastName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-base">Last Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter last name" {...field} className="text-base h-12" autoComplete="family-name" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
               <FormField
                 control={userDetailsForm.control}
-                name="lastName"
+                name="phoneNumber"
                 render={({ field }) => (
-                  <FormItem className="sm:col-span-2 md:col-span-1">
-                    <FormLabel className="text-base">Last Name</FormLabel>
+                  <FormItem>
+                    <FormLabel className="text-base">Phone Number</FormLabel>
                     <FormControl>
-                      <Input placeholder="Enter last name" {...field} className="text-base h-12" autoComplete="family-name" />
+                      <Input type="tel" placeholder="e.g. +14155552671" {...field} className="text-base h-12" autoComplete="tel" inputMode="tel" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            </div>
-            <FormField
-              control={userDetailsForm.control}
-              name="phoneNumber"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-base">Phone Number</FormLabel>
-                  <FormControl>
-                    <Input type="tel" placeholder="e.g. +14155552671" {...field} className="text-base h-12" autoComplete="tel" inputMode="tel" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            {/* reCAPTCHA container is now outside this conditional block, rendered above */}
-            <Button type="submit" className="w-full h-14 rounded-full text-lg" disabled={isSendingOtp}>
-              {isSendingOtp && <LoadingSpinner className="mr-2 h-5 w-5" />}
-              Send OTP
-            </Button>
-          </form>
-        </Form>
-      )}
-    </div>
+              <Button type="submit" className="w-full h-14 rounded-full text-lg" disabled={isSendingOtp}>
+                {isSendingOtp && <LoadingSpinner className="mr-2 h-5 w-5" />}
+                Send OTP
+              </Button>
+            </form>
+          </Form>
+        )}
+      </div>
+    </>
   );
 }
