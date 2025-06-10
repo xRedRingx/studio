@@ -16,7 +16,8 @@ import LoadingSpinner from '@/components/ui/loading-spinner';
 const userDetailsSchema = z.object({
   firstName: z.string().min(1, "First name is required").max(50, "First name must be less than 50 characters"),
   lastName: z.string().min(1, "Last name is required").max(50, "Last name must be less than 50 characters"),
-  phoneNumber: z.string().regex(/^\+[1-9]\d{1,14}$/, "Phone number must be in E.164 format (e.g., +12223334444)"),
+  email: z.string().email("Invalid email address"),
+  phoneNumber: z.string().regex(/^\+[1-9]\d{1,14}$/, "Phone number must be in E.164 format (e.g., +12223334444)").optional().or(z.literal('')),
   password: z.string().min(6, "Password must be at least 6 characters"),
   confirmPassword: z.string().min(6, "Confirm password must be at least 6 characters"),
 }).refine(data => data.password === data.confirmPassword, {
@@ -32,13 +33,14 @@ interface RegistrationFormProps {
 
 export default function RegistrationForm({ role }: RegistrationFormProps) {
   const router = useRouter();
-  const { user, registerWithDetails, isProcessingAuth } = useAuth();
+  const { user, registerWithEmailAndPassword, isProcessingAuth } = useAuth();
 
   const form = useForm<UserDetailsFormValues>({
     resolver: zodResolver(userDetailsSchema),
     defaultValues: {
       firstName: '',
       lastName: '',
+      email: '',
       phoneNumber: '',
       password: '',
       confirmPassword: '',
@@ -56,16 +58,14 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
       const userDetailsForApi: Omit<AppUser, 'uid' | 'createdAt' | 'updatedAt' | 'displayName' | 'photoURL' | 'emailVerified'> & { password_original_do_not_use: string } = {
         firstName: values.firstName,
         lastName: values.lastName,
-        phoneNumber: values.phoneNumber,
-        password_original_do_not_use: values.password, // Pass original password
+        email: values.email,
+        phoneNumber: values.phoneNumber || null,
+        password_original_do_not_use: values.password, 
         role: role,
       };
-      await registerWithDetails(userDetailsForApi);
-      // Successful registration will update AuthContext and trigger useEffect for redirect
+      await registerWithEmailAndPassword(userDetailsForApi);
     } catch (error) {
-      // Errors are typically handled by toast in AuthContext or caught here if specific form action is needed
       console.error('Registration form error:', error);
-      // Example: form.setError("root", { message: "An unexpected error occurred." });
     }
   }
 
@@ -102,10 +102,23 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
         </div>
         <FormField
           control={form.control}
+          name="email"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel className="text-base">Email Address</FormLabel>
+              <FormControl>
+                <Input type="email" placeholder="e.g. user@example.com" {...field} className="text-base h-12" autoComplete="email" inputMode="email" disabled={isProcessingAuth} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <FormField
+          control={form.control}
           name="phoneNumber"
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="text-base">Phone Number</FormLabel>
+              <FormLabel className="text-base">Phone Number (Optional)</FormLabel>
               <FormControl>
                 <Input type="tel" placeholder="e.g. +14155552671" {...field} className="text-base h-12" autoComplete="tel" inputMode="tel" disabled={isProcessingAuth} />
               </FormControl>

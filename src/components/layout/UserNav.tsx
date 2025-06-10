@@ -27,25 +27,25 @@ export default function UserNav() {
 
   if (!user) return null;
 
-  const getInitials = (name?: string | null, fallbackName?: string | null) => {
-    const targetName = name || fallbackName;
-    if (!targetName) return "?";
-    const names = targetName.split(' ');
-    if (names.length > 1 && names[0] && names[names.length - 1]) {
-      return `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
+  const getInitials = (firstName?: string | null, lastName?: string | null, email?: string | null) => {
+    if (firstName && lastName) {
+      return `${firstName[0]}${lastName[0]}`.toUpperCase();
     }
-    if (targetName && targetName.length > 0) {
-      return targetName.substring(0, 2).toUpperCase();
+    if (firstName) {
+      return firstName.substring(0, 2).toUpperCase();
+    }
+    if (email) {
+      return email.substring(0, 2).toUpperCase();
     }
     return "?";
   };
   
   const displayName = user.firstName && user.lastName 
     ? `${user.firstName} ${user.lastName}` 
-    : user.displayName || user.phoneNumber || 'User';
+    : user.displayName || user.email || 'User';
 
-  const contactInfo = user.phoneNumber; 
   const displayEmail = user.email;
+  const displayPhoneNumber = user.phoneNumber;
 
   return (
     <DropdownMenu>
@@ -53,7 +53,7 @@ export default function UserNav() {
         <Button variant="ghost" className="relative h-10 w-10 rounded-full">
           <Avatar className="h-10 w-10 border-2 border-primary/50">
             <AvatarImage src={user.photoURL || undefined} alt={displayName || "User avatar"} />
-            <AvatarFallback className="text-base">{getInitials(displayName, user.phoneNumber)}</AvatarFallback>
+            <AvatarFallback className="text-base">{getInitials(user.firstName, user.lastName, user.email)}</AvatarFallback>
           </Avatar>
         </Button>
       </DropdownMenuTrigger>
@@ -61,16 +61,16 @@ export default function UserNav() {
         <DropdownMenuLabel className="font-normal p-3">
           <div className="flex flex-col space-y-1">
             <p className="text-base font-semibold leading-none">{displayName}</p>
-            {contactInfo && (
-              <p className="text-sm text-gray-500 flex items-center pt-0.5">
-                <Phone className="mr-2 h-4 w-4 text-gray-400" />
-                {contactInfo}
-              </p>
-            )}
             {displayEmail && (
               <p className="text-sm text-gray-500 flex items-center pt-0.5">
                 <Mail className="mr-2 h-4 w-4 text-gray-400" />
                 {displayEmail}
+              </p>
+            )}
+            {displayPhoneNumber && (
+              <p className="text-sm text-gray-500 flex items-center pt-0.5">
+                <Phone className="mr-2 h-4 w-4 text-gray-400" />
+                {displayPhoneNumber}
               </p>
             )}
             {role && <p className="text-xs text-gray-500 capitalize pt-1">Role: {role}</p>}

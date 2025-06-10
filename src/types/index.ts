@@ -7,22 +7,21 @@ export type UserRole = 'customer' | 'barber';
 // This interface might still be useful for other Firebase services, but not primary auth.
 export interface FirebaseUser extends FirebaseUserAuth {}
 
-// AppUser will now represent the user data stored in Firestore, including the password (for prototype).
+// AppUser will now represent the user data stored in Firestore.
+// Firebase Auth will manage the core user identity (uid, email, emailVerified, photoURL, displayName from Firebase profile).
 export interface AppUser {
-  uid: string; // Document ID in Firestore, can be auto-generated or derived
+  uid: string; // Firebase Auth UID
   role?: UserRole;
   firstName?: string;
   lastName?: string;
-  phoneNumber: string;
-  password?: string; // Storing password directly for prototype - NOT SECURE FOR PRODUCTION
-  email?: string | null; // Optional: if you decide to collect it later
-  createdAt?: Timestamp;
-  updatedAt?: Timestamp;
-  // Remove Firebase Auth specific fields if they are no longer sourced from there
-  // e.g., photoURL, displayName (if not explicitly set from our fields)
-  displayName?: string | null;
-  photoURL?: string | null;
-  emailVerified?: boolean;
+  email: string; // Primary identifier from Firebase Auth
+  phoneNumber?: string | null; // Optional, stored in Firestore
+  createdAt?: Timestamp; // Firestore timestamp
+  updatedAt?: Timestamp; // Firestore timestamp
+  // Fields from Firebase Auth user object that we might merge for convenience
+  displayName?: string | null; // Firebase Auth display name
+  photoURL?: string | null; // Firebase Auth photo URL
+  emailVerified?: boolean; // Firebase Auth email verification status
 }
 
 export interface BarberService {

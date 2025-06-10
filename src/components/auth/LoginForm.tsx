@@ -14,7 +14,7 @@ import type { UserRole } from '@/types';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 
 const loginSchema = z.object({
-  phoneNumber: z.string().regex(/^\+[1-9]\d{1,14}$/, "Phone number must be in E.164 format (e.g., +12223334444)"),
+  email: z.string().email("Invalid email address"),
   password: z.string().min(1, "Password is required"),
 });
 type LoginFormValues = z.infer<typeof loginSchema>;
@@ -25,11 +25,11 @@ interface LoginFormProps {
 
 export default function LoginForm({ role }: LoginFormProps) {
   const router = useRouter();
-  const { user, signInWithPhoneAndPassword, isProcessingAuth } = useAuth();
+  const { user, signInWithEmailAndPassword, isProcessingAuth } = useAuth();
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { phoneNumber: '', password: '' },
+    defaultValues: { email: '', password: '' },
   });
 
   useEffect(() => {
@@ -40,10 +40,8 @@ export default function LoginForm({ role }: LoginFormProps) {
 
   async function onSubmit(values: LoginFormValues) {
     try {
-      await signInWithPhoneAndPassword(values.phoneNumber, values.password);
-      // Successful login will update AuthContext and trigger useEffect for redirect
+      await signInWithEmailAndPassword(values.email, values.password);
     } catch (error) {
-      // Error is handled by toast in AuthContext or caught here if specific form action is needed
       console.error('Login form error:', error);
       form.resetField("password");
     }
@@ -54,12 +52,12 @@ export default function LoginForm({ role }: LoginFormProps) {
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 mt-6">
         <FormField
           control={form.control}
-          name="phoneNumber"
+          name="email"
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="text-base">Phone Number</FormLabel>
+              <FormLabel className="text-base">Email Address</FormLabel>
               <FormControl>
-                <Input type="tel" placeholder="e.g. +14155552671" {...field} className="text-base h-12" autoComplete="tel" inputMode="tel" disabled={isProcessingAuth} />
+                <Input type="email" placeholder="e.g. user@example.com" {...field} className="text-base h-12" autoComplete="email" inputMode="email" disabled={isProcessingAuth} />
               </FormControl>
               <FormMessage />
             </FormItem>
