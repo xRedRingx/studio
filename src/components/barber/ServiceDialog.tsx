@@ -22,8 +22,15 @@ import LoadingSpinner from '@/components/ui/loading-spinner';
 
 const serviceSchema = z.object({
   name: z.string().min(1, 'Service name is required').max(100, 'Service name is too long'),
-  price: z.coerce.number().min(0, 'Price must be a non-negative number').max(10000, 'Price seems too high'),
-  duration: z.coerce.number().min(5, 'Duration must be at least 5 minutes').max(720, 'Duration is too long (max 12 hours)').int('Duration must be a whole number'),
+  price: z.coerce.number()
+    .finite({ message: 'Price must be a valid number.' })
+    .min(0, 'Price must be a non-negative number.')
+    .max(10000, 'Price seems too high.'),
+  duration: z.coerce.number()
+    .finite({ message: 'Duration must be a valid number.' })
+    .int('Duration must be a whole number.')
+    .min(5, 'Duration must be at least 5 minutes.')
+    .max(720, 'Duration is too long (max 12 hours).'),
 });
 
 type ServiceFormValues = Omit<BarberService, 'id' | 'barberId' | 'createdAt' | 'updatedAt'>;
