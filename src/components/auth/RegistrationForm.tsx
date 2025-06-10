@@ -53,7 +53,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
   const otpValue = otpForm.watch('otp');
 
   useEffect(() => {
-    if (user && role && pendingRegistrationDetails) { 
+    if (user && role && pendingRegistrationDetails) {
       resetOtpState();
       toast({
         title: "Registration Complete!",
@@ -65,16 +65,16 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
   }, [user, role, router, resetOtpState, pendingRegistrationDetails, toast]);
 
   useEffect(() => {
+    // This cleanup runs when the component unmounts.
     return () => {
-      resetOtpState();
-      const recaptchaContainer = document.getElementById(RECAPTCHA_CONTAINER_ID);
-      if (recaptchaContainer) recaptchaContainer.innerHTML = '';
+      resetOtpState(); // resetOtpState now handles clearing the verifier and its DOM container.
     };
   }, [resetOtpState]);
-  
+
   useEffect(() => {
     if (otpSent) {
       otpForm.reset({ otp: '' });
+      // Ensure visual and form state is pristine for OTP input
       otpForm.setValue('otp', '', { shouldValidate: false, shouldDirty: false, shouldTouch: false });
     }
   }, [otpSent, otpForm]);
@@ -103,16 +103,17 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
   }
 
   const handleTryAgain = () => {
-    resetOtpState();
+    resetOtpState(); // This will clear verifier and its DOM container
     setPendingRegistrationDetails(null);
     userDetailsForm.reset({firstName: '', lastName: '', phoneNumber: ''});
     otpForm.reset({otp: ''});
-    const recaptchaContainer = document.getElementById(RECAPTCHA_CONTAINER_ID);
-    if (recaptchaContainer) recaptchaContainer.innerHTML = '';
   };
 
   return (
     <div key={otpSent ? 'otp-form' : 'details-form'}>
+      {/* Persistent reCAPTCHA container */}
+      <div id={RECAPTCHA_CONTAINER_ID} className={`my-4 flex justify-center ${otpSent ? 'hidden' : ''}`}></div>
+
       {otpSent ? (
         <Form {...otpForm}>
           <form onSubmit={otpForm.handleSubmit(onOtpSubmit)} className="space-y-6 mt-6">
@@ -195,7 +196,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
                 </FormItem>
               )}
             />
-            <div id={RECAPTCHA_CONTAINER_ID} className="my-4 flex justify-center"></div>
+            {/* reCAPTCHA container is now outside this conditional block, rendered above */}
             <Button type="submit" className="w-full h-14 rounded-full text-lg" disabled={isSendingOtp}>
               {isSendingOtp && <LoadingSpinner className="mr-2 h-5 w-5" />}
               Send OTP

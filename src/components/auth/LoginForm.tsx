@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -57,17 +58,16 @@ export default function LoginForm({ role }: LoginFormProps) {
   }, [user, role, router, resetOtpState]);
 
   useEffect(() => {
+    // This cleanup runs when the component unmounts.
     return () => {
-      resetOtpState();
-      // Clear any existing reCAPTCHA verifiers when the component unmounts
-      const recaptchaContainer = document.getElementById(RECAPTCHA_CONTAINER_ID);
-      if (recaptchaContainer) recaptchaContainer.innerHTML = '';
+      resetOtpState(); // resetOtpState now handles clearing the verifier and its DOM container.
     };
   }, [resetOtpState]);
-  
+
   useEffect(() => {
     if (otpSent) {
       otpForm.reset({ otp: '' });
+      // Ensure visual and form state is pristine for OTP input
       otpForm.setValue('otp', '', { shouldValidate: false, shouldDirty: false, shouldTouch: false });
     }
   }, [otpSent, otpForm]);
@@ -93,16 +93,22 @@ export default function LoginForm({ role }: LoginFormProps) {
   }
 
   const handleTryAgain = () => {
-    resetOtpState();
+    resetOtpState(); // This will clear verifier and its DOM container
     setCurrentPhoneNumber('');
     phoneForm.reset({phoneNumber: ''});
     otpForm.reset({otp: ''});
-    const recaptchaContainer = document.getElementById(RECAPTCHA_CONTAINER_ID);
-    if (recaptchaContainer) recaptchaContainer.innerHTML = '';
   };
 
   return (
     <div key={otpSent ? 'otp-form' : 'login-form'}>
+      {/* Persistent reCAPTCHA container, its content managed by reCAPTCHA library & resetOtpState */}
+      {/* It's only relevant for the phone submission step, so conditionally render or hide if needed,
+          but ensure it exists in DOM if reCAPTCHA might still interact with it.
+          For `size: 'invisible'`, it doesn't take up visual space unless a challenge is shown.
+          The `resetOtpState` will clear its innerHTML when trying again or unmounting.
+      */}
+      <div id={RECAPTCHA_CONTAINER_ID} className={`my-4 flex justify-center ${otpSent ? 'hidden' : ''}`}></div>
+
       {otpSent ? (
         <Form {...otpForm}>
           <form onSubmit={otpForm.handleSubmit(onOtpSubmit)} className="space-y-6 mt-6">
@@ -157,7 +163,7 @@ export default function LoginForm({ role }: LoginFormProps) {
                 </FormItem>
               )}
             />
-            <div id={RECAPTCHA_CONTAINER_ID} className="my-4 flex justify-center"></div>
+            {/* reCAPTCHA container is now outside this conditional block, rendered above */}
             <Button type="submit" className="w-full h-14 rounded-full text-lg" disabled={isSendingOtp}>
               {isSendingOtp && <LoadingSpinner className="mr-2 h-5 w-5" />}
               Send OTP
