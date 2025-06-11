@@ -2,7 +2,8 @@
 // config.ts
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore, CACHE_SIZE_UNLIMITED, memoryLocalCache, persistentLocalCache } from 'firebase/firestore'; // Import cache options
+// Import initializeFirestore for settings, and also getFirestore if it's needed elsewhere without re-init
+import { initializeFirestore, CACHE_SIZE_UNLIMITED, memoryLocalCache, persistentLocalCache } from 'firebase/firestore';
 
 
 const firebaseConfig = {
@@ -20,9 +21,8 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 
 // Initialize Firestore with local cache settings
-// Using persistentLocalCache for web, with memoryLocalCache as a fallback if persistence isn't available.
-// CACHE_SIZE_UNLIMITED allows the cache to grow as needed.
-const firestore = getFirestore(app, {
+// Using initializeFirestore to apply settings correctly.
+const firestore = initializeFirestore(app, {
   localCache: persistentLocalCache({ cacheSizeBytes: CACHE_SIZE_UNLIMITED }),
   // Or for in-memory only:
   // localCache: memoryLocalCache({ cacheSizeBytes: CACHE_SIZE_UNLIMITED })
@@ -30,3 +30,4 @@ const firestore = getFirestore(app, {
 
 
 export { app, auth, firestore };
+
