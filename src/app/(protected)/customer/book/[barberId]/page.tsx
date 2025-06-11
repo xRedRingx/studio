@@ -681,26 +681,38 @@ export default function BookingPage() {
                     {isCurrentUserNext ? "You're Next!" : (queuePosition ? `You are #${queuePosition} in line` : "Queue Information")}
                     </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-2 text-base">
-                    {newlyBookedAppointment && (
-                    <>
-                        <p>For your <span className="font-semibold">{newlyBookedAppointment.serviceName}</span> appointment</p>
-                        <p>at <span className="font-semibold text-[#0088E0]">{newlyBookedAppointment.startTime}</span> today.</p>
-                    </>
+                <CardContent className="space-y-3 text-base">
+                    {newlyBookedAppointment && barber && (
+                    <div className="pb-2 mb-3 border-b border-gray-200">
+                        <p className="text-lg font-semibold">Your Appointment Details:</p>
+                        <p><span className="font-medium">{newlyBookedAppointment.serviceName}</span></p>
+                        <p>With: <span className="font-medium">{barber.firstName} {barber.lastName}</span></p>
+                        <p>Time: <span className="font-medium text-[#0088E0]">{newlyBookedAppointment.startTime}</span> today.</p>
+                    </div>
                     )}
-                    {estimatedWaitTime !== null && estimatedWaitTime > 0 && !isCurrentUserNext && (
-                    <p className="font-semibold text-primary">Estimated wait: ~{estimatedWaitTime} minutes</p>
-                    )}
-                    {currentlyServingCustomerName && (
-                    <p className="text-sm text-gray-500"><span className="font-medium text-foreground">{currentlyServingCustomerName}</span> is currently being served.</p>
-                    )}
-                    {!currentlyServingCustomerName && queuePosition === 1 && (
-                         <p className="text-sm text-gray-500">You are at the front of the queue.</p>
-                    )}
+
+                    <div className="space-y-1">
+                        {isCurrentUserNext && (
+                             <p className="text-lg font-semibold text-green-600">You are next in line!</p>
+                        )}
+                        {queuePosition && !isCurrentUserNext && (
+                             <p className="text-md">Your position in line: <span className="font-bold text-primary">#{queuePosition}</span></p>
+                        )}
+                        {estimatedWaitTime !== null && estimatedWaitTime > 0 && !isCurrentUserNext && (
+                        <p className="text-md">Estimated wait: <span className="font-semibold text-primary">~{estimatedWaitTime} minutes</span></p>
+                        )}
+                        {currentlyServingCustomerName && (
+                        <p className="text-sm text-gray-600">Currently serving: <span className="font-medium text-foreground">{currentlyServingCustomerName}</span>.</p>
+                        )}
+                        {!currentlyServingCustomerName && queuePosition === 1 && !isCurrentUserNext && (
+                             <p className="text-sm text-gray-600">You are at the front of the queue. The barber will call you shortly.</p>
+                        )}
+                    </div>
+
                     <p className="text-xs text-gray-500 pt-4">
                         Note: Queue information is based on current bookings and may change.
                     </p>
-                    <Button onClick={() => router.push('/customer/dashboard')} className="mt-8 w-full max-w-xs mx-auto h-14 rounded-full text-lg">
+                    <Button onClick={() => router.push('/customer/dashboard')} className="mt-6 w-full max-w-xs mx-auto h-14 rounded-full text-lg">
                     Back to Dashboard
                     </Button>
                 </CardContent>
@@ -730,3 +742,4 @@ export default function BookingPage() {
     </ProtectedPage>
   );
 }
+
