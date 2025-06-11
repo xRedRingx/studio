@@ -56,6 +56,19 @@ const formatSelectedDateForDisplay = (date: Date): string => {
   return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 };
 
+const getWeekBoundaries = (date: Date): { weekStart: Date, weekEnd: Date } => {
+  const d = new Date(date); // Clone to avoid modifying the original date
+  const day = d.getDay(); // Sunday - 0, Monday - 1, ..., Saturday - 6
+  const diffToMonday = d.getDate() - day + (day === 0 ? -6 : 1);
+  const weekStart = new Date(d.getFullYear(), d.getMonth(), diffToMonday);
+  weekStart.setHours(0, 0, 0, 0);
+
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  weekEnd.setHours(23, 59, 59, 999);
+  return { weekStart, weekEnd };
+};
+
 
 export default function BookingPage() {
   const { user } = useAuth();
@@ -68,6 +81,7 @@ export default function BookingPage() {
   const [services, setServices] = useState<BarberService[]>([]);
   const [schedule, setSchedule] = useState<DayAvailability[]>([]);
   const [existingAppointments, setExistingAppointments] = useState<Appointment[]>([]);
+  const [customerExistingAppointments, setCustomerExistingAppointments] = useState<Appointment[]>([]);
 
   const [selectedService, setSelectedService] = useState<BarberService | null>(null);
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
@@ -76,7 +90,8 @@ export default function BookingPage() {
   const [availableTimeSlots, setAvailableTimeSlots] = useState<string[]>([]);
 
   const [bookingStep, setBookingStep] = useState<BookingStep>('selectService');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingBarberDetails, setIsLoadingBarberDetails] = useState(true);
+  const [isLoadingCustomerAppointments, setIsLoadingCustomerAppointments] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [newlyBookedAppointment, setNewlyBookedAppointment] = useState<Appointment | null>(null);
@@ -93,7 +108,7 @@ export default function BookingPage() {
 
   const fetchBarberData = useCallback(async () => {
     if (!barberId) return;
-    setIsLoading(true);
+    setIsLoadingBarberDetails(true);
     try {
       const barberDocRef = doc(firestore, 'users', barberId);
       const barberDocSnap = await getDoc(barberDocRef);
@@ -144,13 +159,46 @@ export default function BookingPage() {
       console.error("Error fetching barber data:", error);
       toast({ title: "Error", description: "Could not load barber information.", variant: "destructive" });
     } finally {
-      setIsLoading(false);
+      setIsLoadingBarberDetails(false);
     }
   }, [barberId, toast, router]);
+
+  const fetchCustomerAppointments = useCallback(async () => {
+    if (!user?.uid) return;
+    setIsLoadingCustomerAppointments(true);
+    try {
+      const today = new Date();
+      const currentWeek = getWeekBoundaries(today);
+      const nextWeek = getWeekBoundaries(new Date(new Date().setDate(today.getDate() + 7)));
+
+
+      const appointmentsQuery = query(
+        collection(firestore, 'appointments'),
+        where('customerId', '==', user.uid),
+        where('date', '>=', formatDateToYYYYMMDD(currentWeek.weekStart)),
+        where('date', '<=', formatDateToYYYYMMDD(nextWeek.weekEnd)), // Fetch for a 2-week window for robust checking
+        orderBy('date', 'asc')
+      );
+      const snapshot = await getDocs(appointmentsQuery);
+      setCustomerExistingAppointments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment)));
+    } catch (error) {
+      console.error("Error fetching customer's existing appointments:", error);
+      toast({ title: "Validation Error", description: "Could not retrieve your appointments to validate booking limits.", variant: "destructive" });
+    } finally {
+      setIsLoadingCustomerAppointments(false);
+    }
+  }, [user?.uid, toast]);
 
   useEffect(() => {
     fetchBarberData();
   }, [fetchBarberData]);
+
+  useEffect(() => {
+    if (user?.uid) {
+      fetchCustomerAppointments();
+    }
+  }, [user?.uid, fetchCustomerAppointments]);
+
 
   useEffect(() => {
     if (!selectedService || !schedule.length || !selectedDate) {
@@ -315,6 +363,41 @@ export default function BookingPage() {
       return;
     }
     setIsSubmitting(true);
+
+    // Daily limit check
+    const selectedDateStr = formatDateToYYYYMMDD(selectedDate);
+    const dailyBookings = customerExistingAppointments.filter(
+      app => app.date === selectedDateStr && app.customerId === user.uid
+    );
+    if (dailyBookings.length >= 1) {
+      toast({
+        title: "Booking Limit Reached",
+        description: "You can only book one appointment per day.",
+        variant: "destructive",
+      });
+      setIsSubmitting(false);
+      return;
+    }
+
+    // Weekly limit check
+    const { weekStart, weekEnd } = getWeekBoundaries(selectedDate);
+    const weeklyBookings = customerExistingAppointments.filter(app => {
+      const appDate = new Date(app.date + 'T00:00:00'); // Ensure local date interpretation
+      return app.customerId === user.uid &&
+             appDate >= weekStart &&
+             appDate <= weekEnd;
+    });
+
+    if (weeklyBookings.length >= 2) {
+      toast({
+        title: "Booking Limit Reached",
+        description: "You can only book two appointments per week.",
+        variant: "destructive",
+      });
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
       const appointmentDate = formatDateToYYYYMMDD(selectedDate);
       const appointmentStartTime = selectedTimeSlot;
@@ -322,7 +405,7 @@ export default function BookingPage() {
       const appointmentEndTime = minutesToTime(timeToMinutes(appointmentStartTime) + serviceDuration);
 
       const newAppointmentData = {
-        barberId: barber.uid, // Use barber.uid instead of barber.id
+        barberId: barber.uid, 
         barberName: `${barber.firstName} ${barber.lastName}`,
         customerId: user.uid,
         customerName: `${user.firstName} ${user.lastName}`,
@@ -340,6 +423,9 @@ export default function BookingPage() {
       const docRef = await addDoc(collection(firestore, 'appointments'), newAppointmentData);
       const finalAppointment: Appointment = { id: docRef.id, ...newAppointmentData };
       setNewlyBookedAppointment(finalAppointment);
+      
+      // Optimistically add to local state or refetch for immediate limit updates
+      setCustomerExistingAppointments(prev => [...prev, finalAppointment]);
 
       toast({ title: "Booking Confirmed!", description: "Your appointment has been successfully booked." });
       
@@ -358,12 +444,12 @@ export default function BookingPage() {
   };
 
 
-  if (isLoading) {
+  if (isLoadingBarberDetails || isLoadingCustomerAppointments) {
     return (
       <ProtectedPage expectedRole="customer">
         <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center">
           <LoadingSpinner className="h-12 w-12 text-primary" />
-          <p className="ml-3 text-base">Loading barber details...</p>
+          <p className="ml-3 text-base">Loading barber details and your appointments...</p>
         </div>
       </ProtectedPage>
     );
@@ -529,9 +615,9 @@ export default function BookingPage() {
                 <Button variant="outline" onClick={() => setBookingStep('selectDateTime')} className="w-full sm:w-auto h-12 rounded-full text-base">
                      <ChevronLeft className="mr-2 h-4 w-4" /> Back
                 </Button>
-                <Button onClick={handleConfirmBooking} className="w-full sm:w-auto h-14 rounded-full text-lg" disabled={isSubmitting}>
-                  {isSubmitting ? <LoadingSpinner className="mr-2 h-5 w-5" /> : null}
-                  Confirm Booking
+                <Button onClick={handleConfirmBooking} className="w-full sm:w-auto h-14 rounded-full text-lg" disabled={isSubmitting || isLoadingCustomerAppointments}>
+                  {(isSubmitting || isLoadingCustomerAppointments) && <LoadingSpinner className="mr-2 h-5 w-5" />}
+                  {(isSubmitting || isLoadingCustomerAppointments) ? 'Validating...' : 'Confirm Booking'}
                 </Button>
               </div>
             </CardContent>
@@ -616,5 +702,3 @@ export default function BookingPage() {
     </ProtectedPage>
   );
 }
-
-    
