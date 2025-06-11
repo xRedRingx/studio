@@ -52,6 +52,10 @@ const formatYYYYMMDDToDisplay = (dateStr: string): string => {
   return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 };
 
+const formatSelectedDateForDisplay = (date: Date): string => {
+  return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+};
+
 
 export default function BookingPage() {
   const { user } = useAuth();
@@ -318,7 +322,7 @@ export default function BookingPage() {
       const appointmentEndTime = minutesToTime(timeToMinutes(appointmentStartTime) + serviceDuration);
 
       const newAppointmentData = {
-        barberId: barber.uid,
+        barberId: barber.uid, // Use barber.uid instead of barber.id
         barberName: `${barber.firstName} ${barber.lastName}`,
         customerId: user.uid,
         customerName: `${user.firstName} ${user.lastName}`,
@@ -612,3 +616,5 @@ export default function BookingPage() {
     </ProtectedPage>
   );
 }
+
+    
