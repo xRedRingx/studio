@@ -66,3 +66,11 @@ export interface Appointment {
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
+
+export interface UnavailableDate {
+  id: string; // Firestore document ID, typically the date string 'YYYY-MM-DD'
+  barberId: string; // ID of the barber
+  date: string; // YYYY-MM-DD format
+  reason?: string; // Optional reason
+  createdAt?: Timestamp;
+}

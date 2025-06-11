@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import ProtectedPage from '@/components/layout/ProtectedPage';
 import { useAuth } from '@/hooks/useAuth';
-import type { AppUser, BarberService, Appointment, DayAvailability, BarberScheduleDoc, DayOfWeek } from '@/types';
+import type { AppUser, BarberService, Appointment, DayAvailability, BarberScheduleDoc, DayOfWeek, UnavailableDate } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -14,7 +14,7 @@ import { firestore } from '@/firebase/config';
 import { collection, doc, getDoc, getDocs, query, where, addDoc, Timestamp, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { AlertCircle, CalendarDays, CheckCircle, ChevronLeft, Clock, DollarSign, Scissors, Users, Info } from 'lucide-react';
+import { AlertCircle, CalendarDays, CheckCircle, ChevronLeft, Clock, DollarSign, Scissors, Users, Info, Ban } from 'lucide-react';
 import { APP_NAME } from '@/lib/constants';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -48,7 +48,7 @@ const formatDateToYYYYMMDD = (date: Date): string => {
 };
 
 const formatYYYYMMDDToDisplay = (dateStr: string): string => {
-  const date = new Date(dateStr + 'T00:00:00'); // Ensure parsing as local date
+  const date = new Date(dateStr + 'T00:00:00');
   return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 };
 
@@ -57,8 +57,8 @@ const formatSelectedDateForDisplay = (date: Date): string => {
 };
 
 const getWeekBoundaries = (date: Date): { weekStart: Date, weekEnd: Date } => {
-  const d = new Date(date); // Clone to avoid modifying the original date
-  const day = d.getDay(); // Sunday - 0, Monday - 1, ..., Saturday - 6
+  const d = new Date(date);
+  const day = d.getDay();
   const diffToMonday = d.getDate() - day + (day === 0 ? -6 : 1);
   const weekStart = new Date(d.getFullYear(), d.getMonth(), diffToMonday);
   weekStart.setHours(0, 0, 0, 0);
@@ -80,6 +80,7 @@ export default function BookingPage() {
   const [barber, setBarber] = useState<AppUser | null>(null);
   const [services, setServices] = useState<BarberService[]>([]);
   const [schedule, setSchedule] = useState<DayAvailability[]>([]);
+  const [barberUnavailableDates, setBarberUnavailableDates] = useState<UnavailableDate[]>([]);
   const [existingAppointments, setExistingAppointments] = useState<Appointment[]>([]);
   const [customerExistingAppointments, setCustomerExistingAppointments] = useState<Appointment[]>([]);
 
@@ -101,7 +102,7 @@ export default function BookingPage() {
   const [isCurrentUserNext, setIsCurrentUserNext] = useState<boolean>(false);
 
   const today = new Date();
-  today.setHours(0, 0, 0, 0); // For disabling past dates in calendar
+  today.setHours(0, 0, 0, 0);
   const sevenDaysFromNow = new Date(today);
   sevenDaysFromNow.setDate(today.getDate() + 6);
 
@@ -134,9 +135,20 @@ export default function BookingPage() {
             return foundDay || { day: dayName, isOpen: false, startTime: '09:00 AM', endTime: '05:00 PM' };
         });
         setSchedule(sortedFetchedSchedule);
+
+        // Fetch unavailable dates
+        const unavailableDatesColRef = collection(firestore, `barberSchedules/${barberId}/unavailableDates`);
+        const unavailableDatesSnapshot = await getDocs(query(unavailableDatesColRef));
+        const fetchedUnavailableDates: UnavailableDate[] = [];
+        unavailableDatesSnapshot.forEach((doc) => {
+            fetchedUnavailableDates.push({ id: doc.id, ...doc.data() } as UnavailableDate);
+        });
+        setBarberUnavailableDates(fetchedUnavailableDates);
+
       } else {
         const defaultSchedule: DayAvailability[] = daysOfWeekOrder.map(day => ({ day: day as DayAvailability['day'], isOpen: false, startTime: '09:00 AM', endTime: '05:00 PM' }));
         setSchedule(defaultSchedule);
+        setBarberUnavailableDates([]); // No schedule means no specific unavailable dates either
       }
 
       const dateQueryArray: string[] = [];
@@ -176,7 +188,7 @@ export default function BookingPage() {
         collection(firestore, 'appointments'),
         where('customerId', '==', user.uid),
         where('date', '>=', formatDateToYYYYMMDD(currentWeek.weekStart)),
-        where('date', '<=', formatDateToYYYYMMDD(nextWeek.weekEnd)), // Fetch for a 2-week window for robust checking
+        where('date', '<=', formatDateToYYYYMMDD(nextWeek.weekEnd)),
         orderBy('date', 'asc')
       );
       const snapshot = await getDocs(appointmentsQuery);
@@ -207,11 +219,20 @@ export default function BookingPage() {
     }
 
     const targetDateStr = formatDateToYYYYMMDD(selectedDate);
+
+    // Check if selected date is one of the barber's unavailable dates
+    if (barberUnavailableDates.some(ud => ud.date === targetDateStr)) {
+      setAvailableTimeSlots([]);
+      setSelectedTimeSlot(null);
+      return;
+    }
+
     const dayOfWeek = selectedDate.toLocaleDateString('en-US', { weekday: 'long' }) as DayAvailability['day'];
     const daySchedule = schedule.find(d => d.day === dayOfWeek);
 
     if (!daySchedule || !daySchedule.isOpen) {
       setAvailableTimeSlots([]);
+      setSelectedTimeSlot(null);
       return;
     }
 
@@ -234,10 +255,10 @@ export default function BookingPage() {
       );
 
       let isSlotInFuture = true;
-      if (targetDateStr === formatDateToYYYYMMDD(new Date())) { // Check if selectedDate is today
+      if (targetDateStr === formatDateToYYYYMMDD(new Date())) {
         const now = new Date();
         const nowMinutes = now.getHours() * 60 + now.getMinutes();
-        const bufferMinutes = 15; // Allow booking 15 mins from now
+        const bufferMinutes = 15;
         if (currentTimeMinutes < nowMinutes + bufferMinutes) {
           isSlotInFuture = false;
         }
@@ -246,11 +267,11 @@ export default function BookingPage() {
       if (isSlotFree && isSlotInFuture) {
         slots.push(minutesToTime(currentTimeMinutes));
       }
-      currentTimeMinutes += 15; // Assuming slots are in 15-minute increments, adjust if needed
+      currentTimeMinutes += 15;
     }
     setAvailableTimeSlots(slots);
-    setSelectedTimeSlot(null); // Reset selected time slot when available slots change
-  }, [selectedService, selectedDate, schedule, existingAppointments]);
+    setSelectedTimeSlot(null);
+  }, [selectedService, selectedDate, schedule, existingAppointments, barberUnavailableDates]);
 
 
   const handleServiceSelect = (serviceId: string) => {
@@ -262,8 +283,8 @@ export default function BookingPage() {
   const handleDateSelect = (date: Date | undefined) => {
     if (date) {
       setSelectedDate(date);
-      setSelectedTimeSlot(null); // Reset time slot when date changes
-      setIsCalendarOpen(false); // Close popover after selection
+      setSelectedTimeSlot(null);
+      setIsCalendarOpen(false);
     }
   };
 
@@ -364,7 +385,6 @@ export default function BookingPage() {
     }
     setIsSubmitting(true);
 
-    // Daily limit check
     const selectedDateStr = formatDateToYYYYMMDD(selectedDate);
     const dailyBookings = customerExistingAppointments.filter(
       app => app.date === selectedDateStr && app.customerId === user.uid
@@ -379,10 +399,9 @@ export default function BookingPage() {
       return;
     }
 
-    // Weekly limit check
     const { weekStart, weekEnd } = getWeekBoundaries(selectedDate);
     const weeklyBookings = customerExistingAppointments.filter(app => {
-      const appDate = new Date(app.date + 'T00:00:00'); // Ensure local date interpretation
+      const appDate = new Date(app.date + 'T00:00:00');
       return app.customerId === user.uid &&
              appDate >= weekStart &&
              appDate <= weekEnd;
@@ -424,7 +443,6 @@ export default function BookingPage() {
       const finalAppointment: Appointment = { id: docRef.id, ...newAppointmentData };
       setNewlyBookedAppointment(finalAppointment);
       
-      // Optimistically add to local state or refetch for immediate limit updates
       setCustomerExistingAppointments(prev => [...prev, finalAppointment]);
 
       toast({ title: "Booking Confirmed!", description: "Your appointment has been successfully booked." });
@@ -502,6 +520,7 @@ export default function BookingPage() {
         );
 
       case 'selectDateTime':
+        const isDateUnavailable = barberUnavailableDates.some(ud => ud.date === formatDateToYYYYMMDD(selectedDate));
         return (
           <Card className="border-none shadow-none">
             <CardHeader className="p-4 md:p-6">
@@ -543,12 +562,12 @@ export default function BookingPage() {
                       <Button
                         variant={"outline"}
                         className={cn(
-                          "w-full sm:w-[280px] justify-start text-left font-normal h-12 text-base mb-4",
+                          "w-full sm:w-[280px] justify-start text-left font-normal h-12 text-base mb-1",
                           !selectedDate && "text-muted-foreground"
                         )}
                       >
                         <CalendarDays className="mr-2 h-4 w-4" />
-                        {selectedDate ? selectedDate.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) : <span>Pick a date</span>}
+                        {selectedDate ? formatSelectedDateForDisplay(selectedDate) : <span>Pick a date</span>}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent className="w-auto p-0">
@@ -557,17 +576,26 @@ export default function BookingPage() {
                         selected={selectedDate}
                         onSelect={handleDateSelect}
                         disabled={(date) =>
-                          date < today || date > sevenDaysFromNow
+                          date < today || 
+                          date > sevenDaysFromNow || 
+                          barberUnavailableDates.some(ud => ud.date === formatDateToYYYYMMDD(date))
                         }
                         initialFocus
                       />
                     </PopoverContent>
                   </Popover>
+                  {isDateUnavailable && (
+                    <p className="text-sm text-destructive flex items-center mt-1 mb-4">
+                        <Ban className="h-4 w-4 mr-1.5" /> This date is unavailable.
+                    </p>
+                  )}
               </div>
 
               <div>
                 <Label className="text-base font-medium mb-3 block">Select Time Slot</Label>
-                {availableTimeSlots.length > 0 ? (
+                {isDateUnavailable ? (
+                     <p className="text-sm text-destructive">The barber is unavailable on this selected date.</p>
+                ) : availableTimeSlots.length > 0 ? (
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                     {availableTimeSlots.map(slot => (
                       <Button
@@ -581,14 +609,14 @@ export default function BookingPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-500">No available time slots for the selected service and date. This could be because all slots are booked, the barber is closed, or it's too late to book for today. Check the barber's weekly availability above or try a different date/service.</p>
+                  <p className="text-sm text-gray-500">No available time slots for the selected service and date. This could be because all slots are booked, the barber is closed, or it's too late to book for today. Check the barber's weekly availability or try a different date/service.</p>
                 )}
               </div>
               <div className="flex flex-col sm:flex-row justify-between pt-6 space-y-3 sm:space-y-0 sm:space-x-3">
                 <Button variant="outline" onClick={() => setBookingStep('selectService')} className="w-full sm:w-auto h-12 rounded-full text-base">
                     <ChevronLeft className="mr-2 h-4 w-4" /> Back to Services
                 </Button>
-                <Button onClick={handleProceedToConfirm} disabled={!selectedTimeSlot || !selectedService} className="w-full sm:w-auto h-12 rounded-full text-base">
+                <Button onClick={handleProceedToConfirm} disabled={!selectedTimeSlot || !selectedService || isDateUnavailable} className="w-full sm:w-auto h-12 rounded-full text-base">
                   Proceed to Confirmation
                 </Button>
               </div>
@@ -702,5 +730,3 @@ export default function BookingPage() {
     </ProtectedPage>
   );
 }
-
-      

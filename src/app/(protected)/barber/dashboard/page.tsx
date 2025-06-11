@@ -3,10 +3,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import ProtectedPage from '@/components/layout/ProtectedPage';
 import { useAuth } from '@/hooks/useAuth';
-import type { BarberService, DayAvailability, Appointment, DayOfWeek, BarberScheduleDoc } from '@/types';
+import type { BarberService, DayAvailability, Appointment, DayOfWeek, BarberScheduleDoc, UnavailableDate } from '@/types';
 import ManageServicesSection from '@/components/barber/ManageServicesSection';
 import SetWorkScheduleSection from '@/components/barber/SetWorkScheduleSection';
 import TodaysAppointmentsSection from '@/components/barber/TodaysAppointmentsSection';
+import ManageUnavailableDatesSection from '@/components/barber/ManageUnavailableDatesSection';
 import { firestore } from '@/firebase/config';
 import {
   collection,
@@ -21,6 +22,7 @@ import {
   Timestamp,
   setDoc,
   getDoc,
+  writeBatch,
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
@@ -31,6 +33,10 @@ const INITIAL_SCHEDULE: DayAvailability[] = (['Monday', 'Tuesday', 'Wednesday', 
   startTime: '09:00 AM',
   endTime: '05:00 PM',
 }));
+
+const formatDateToYYYYMMDD = (date: Date): string => {
+  return date.toISOString().split('T')[0];
+};
 
 // Helper to convert Firestore Timestamps in an object to ISO strings
 const convertTimestampsToISO = (data: any) => {
@@ -50,11 +56,11 @@ const convertTimestampsToISO = (data: any) => {
   return newData;
 };
 
-// Helper to convert ISO strings in an object back to Timestamps (if needed, for now mainly for consistency if re-saving)
+// Helper to convert ISO strings in an object back to Timestamps
 const convertISOToTimestamps = (data: any): any => {
     if (data === null || typeof data !== 'object') {
       if (typeof data === 'string' && /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z/.test(data)) {
-        try {
+         try {
             return Timestamp.fromDate(new Date(data));
         } catch (e) { /* ignore, not a valid date string for Timestamp */ }
       }
@@ -74,6 +80,7 @@ const convertISOToTimestamps = (data: any): any => {
 const LS_SERVICES_KEY = 'barber_dashboard_services';
 const LS_SCHEDULE_KEY = 'barber_dashboard_schedule';
 const LS_APPOINTMENTS_KEY = 'barber_dashboard_appointments';
+const LS_UNAVAILABLE_DATES_KEY = 'barber_dashboard_unavailable_dates';
 
 
 export default function BarberDashboardPage() {
@@ -83,38 +90,44 @@ export default function BarberDashboardPage() {
   const [services, setServices] = useState<BarberService[]>([]);
   const [schedule, setSchedule] = useState<DayAvailability[]>(INITIAL_SCHEDULE);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [unavailableDates, setUnavailableDates] = useState<UnavailableDate[]>([]);
 
   const [isLoadingServices, setIsLoadingServices] = useState(true);
   const [isLoadingSchedule, setIsLoadingSchedule] = useState(true);
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
   const [isLoadingAppointments, setIsLoadingAppointments] = useState(true);
   const [isUpdatingAppointment, setIsUpdatingAppointment] = useState(false);
+  const [isLoadingUnavailableDates, setIsLoadingUnavailableDates] = useState(true);
+  const [isProcessingUnavailableDate, setIsProcessingUnavailableDate] = useState(false);
 
-  // State to track if initial localStorage load attempt is done
+
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
 
   useEffect(() => {
-    // This effect runs once on mount to indicate localStorage check can proceed.
     setInitialLoadComplete(true);
   }, []);
 
   useEffect(() => {
-    // Load from localStorage on initial mount if initialLoadComplete is true
     if (typeof window !== 'undefined' && initialLoadComplete) {
       const cachedServices = localStorage.getItem(LS_SERVICES_KEY);
       if (cachedServices) {
         setServices(convertISOToTimestamps(JSON.parse(cachedServices)));
-        setIsLoadingServices(false); // Potentially set to false if cache is considered sufficient initially
+        setIsLoadingServices(false);
       }
       const cachedSchedule = localStorage.getItem(LS_SCHEDULE_KEY);
       if (cachedSchedule) {
-        setSchedule(JSON.parse(cachedSchedule)); // Schedule doesn't have timestamps
+        setSchedule(JSON.parse(cachedSchedule));
         setIsLoadingSchedule(false);
       }
       const cachedAppointments = localStorage.getItem(LS_APPOINTMENTS_KEY);
       if (cachedAppointments) {
         setAppointments(convertISOToTimestamps(JSON.parse(cachedAppointments)));
         setIsLoadingAppointments(false);
+      }
+      const cachedUnavailableDates = localStorage.getItem(LS_UNAVAILABLE_DATES_KEY);
+      if (cachedUnavailableDates) {
+        setUnavailableDates(convertISOToTimestamps(JSON.parse(cachedUnavailableDates)));
+        setIsLoadingUnavailableDates(false);
       }
     }
   }, [initialLoadComplete]);
@@ -149,11 +162,9 @@ export default function BarberDashboardPage() {
       toast({ title: "Error", description: "You must be logged in to add services.", variant: "destructive" });
       return;
     }
-    console.log("Attempting to add service. Current user:", user);
     try {
       const now = Timestamp.now();
       const newServiceData = { ...serviceData, barberId: user.uid, createdAt: now, updatedAt: now };
-      console.log("Data for new service:", JSON.stringify(newServiceData, null, 2));
       const docRef = await addDoc(collection(firestore, 'services'), newServiceData);
       const newServiceEntry = { ...newServiceData, id: docRef.id };
       setServices((prev) => {
@@ -166,7 +177,7 @@ export default function BarberDashboardPage() {
       toast({ title: "Success", description: "Service added successfully." });
     } catch (error) {
       console.error("Error adding service:", error);
-      toast({ title: "Error", description: "Could not add service. Check console for details.", variant: "destructive" });
+      toast({ title: "Error", description: "Could not add service.", variant: "destructive" });
     }
   };
 
@@ -175,11 +186,9 @@ export default function BarberDashboardPage() {
       toast({ title: "Error", description: "You must be logged in to update services.", variant: "destructive" });
       return;
     }
-    console.log("Attempting to update service. Current user:", user);
     try {
       const serviceRef = doc(firestore, 'services', serviceId);
       const updatedServiceData = { ...serviceData, updatedAt: Timestamp.now() };
-      console.log("Data for updating service " + serviceId + ":", JSON.stringify(updatedServiceData, null, 2));
       await updateDoc(serviceRef, updatedServiceData);
       setServices((prev) => {
         const updated = prev.map(s => s.id === serviceId ? { ...s, ...updatedServiceData } : s);
@@ -191,7 +200,7 @@ export default function BarberDashboardPage() {
       toast({ title: "Success", description: "Service updated successfully." });
     } catch (error) {
       console.error("Error updating service:", error);
-      toast({ title: "Error", description: "Could not update service. Check console for details.", variant: "destructive" });
+      toast({ title: "Error", description: "Could not update service.", variant: "destructive" });
     }
   };
 
@@ -231,7 +240,7 @@ export default function BarberDashboardPage() {
       }
       setSchedule(newSchedule);
        if (typeof window !== 'undefined') {
-        localStorage.setItem(LS_SCHEDULE_KEY, JSON.stringify(newSchedule)); // Schedule doesn't have timestamps
+        localStorage.setItem(LS_SCHEDULE_KEY, JSON.stringify(newSchedule));
       }
     } catch (error) {
       console.error("Error fetching schedule:", error);
@@ -254,23 +263,21 @@ export default function BarberDashboardPage() {
       return;
     }
     setIsSavingSchedule(true);
-    console.log("Attempting to save schedule. Current user:", user);
     try {
       const scheduleDocRef = doc(firestore, 'barberSchedules', user.uid);
       const scheduleDataToSave: BarberScheduleDoc = {
         barberId: user.uid,
-        schedule: schedule, // this is the current state
+        schedule: schedule,
         updatedAt: Timestamp.now(),
       };
-      console.log("Data for saving schedule:", JSON.stringify(scheduleDataToSave, null, 2));
-      await setDoc(scheduleDocRef, scheduleDataToSave, { merge: true });
+      await setDoc(scheduleDocRef, scheduleDataToSave, { merge: true }); // Use merge if creating/updating doc
       if (typeof window !== 'undefined') {
-        localStorage.setItem(LS_SCHEDULE_KEY, JSON.stringify(schedule)); // Save current schedule state
+        localStorage.setItem(LS_SCHEDULE_KEY, JSON.stringify(schedule));
       }
       toast({ title: "Success", description: "Work schedule saved successfully." });
     } catch (error) {
       console.error("Error saving schedule:", error);
-      toast({ title: "Error", description: "Could not save work schedule. Check console for details.", variant: "destructive" });
+      toast({ title: "Error", description: "Could not save work schedule.", variant: "destructive" });
     } finally {
       setIsSavingSchedule(false);
     }
@@ -282,6 +289,7 @@ export default function BarberDashboardPage() {
     setIsLoadingAppointments(true);
     try {
       const appointmentsCollection = collection(firestore, 'appointments');
+      // Order by date ascending, then by startTime ascending for Barber Dashboard
       const q = query(appointmentsCollection, where('barberId', '==', user.uid), orderBy('date', 'asc'), orderBy('startTime'));
       const querySnapshot = await getDocs(q);
       const fetchedAppointments: Appointment[] = [];
@@ -306,11 +314,9 @@ export default function BarberDashboardPage() {
       return;
     }
     setIsUpdatingAppointment(true);
-    console.log("Attempting to update appointment status. Current user:", user);
     try {
       const appointmentRef = doc(firestore, 'appointments', appointmentId);
       const newUpdatedAt = Timestamp.now();
-      console.log("Data for updating appointment " + appointmentId + " status to " + status + ":", { status: status, updatedAt: newUpdatedAt });
       await updateDoc(appointmentRef, { status: status, updatedAt: newUpdatedAt });
       setAppointments((prev) => {
         const updated = prev.map((app) => (app.id === appointmentId ? { ...app, status, updatedAt: newUpdatedAt } : app));
@@ -322,19 +328,111 @@ export default function BarberDashboardPage() {
       toast({ title: "Success", description: `Appointment status updated to ${status}.` });
     } catch (error) {
       console.error("Error updating appointment status:", error);
-      toast({ title: "Error", description: "Could not update appointment status. Check console for details.", variant: "destructive" });
+      toast({ title: "Error", description: "Could not update appointment status.", variant: "destructive" });
     } finally {
       setIsUpdatingAppointment(false);
     }
   };
+
+  // --- Unavailable Dates ---
+  const fetchUnavailableDates = useCallback(async () => {
+    if (!user?.uid) return;
+    setIsLoadingUnavailableDates(true);
+    try {
+      const unavailableDatesColRef = collection(firestore, `barberSchedules/${user.uid}/unavailableDates`);
+      const q = query(unavailableDatesColRef, orderBy('date', 'asc'));
+      const querySnapshot = await getDocs(q);
+      const fetchedDates: UnavailableDate[] = [];
+      querySnapshot.forEach((doc) => {
+        fetchedDates.push({ id: doc.id, ...doc.data() } as UnavailableDate);
+      });
+      setUnavailableDates(fetchedDates);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(LS_UNAVAILABLE_DATES_KEY, JSON.stringify(convertTimestampsToISO(fetchedDates)));
+      }
+    } catch (error) {
+      console.error("Error fetching unavailable dates:", error);
+      toast({ title: "Error", description: "Could not fetch unavailable dates.", variant: "destructive" });
+    } finally {
+      setIsLoadingUnavailableDates(false);
+    }
+  }, [user?.uid, toast]);
+
+  const handleAddUnavailableDate = async (date: string, reason?: string) => {
+    if (!user?.uid) {
+      toast({ title: "Error", description: "You must be logged in.", variant: "destructive" });
+      return;
+    }
+    setIsProcessingUnavailableDate(true);
+    try {
+      // Check if date already exists
+      const existingDate = unavailableDates.find(ud => ud.date === date);
+      if (existingDate) {
+        toast({ title: "Date Exists", description: "This date is already marked as unavailable.", variant: "destructive" });
+        setIsProcessingUnavailableDate(false);
+        return;
+      }
+
+      const unavailableDateDocRef = doc(firestore, `barberSchedules/${user.uid}/unavailableDates`, date);
+      const newUnavailableDate: Omit<UnavailableDate, 'id'> = {
+        barberId: user.uid,
+        date,
+        reason: reason || '',
+        createdAt: Timestamp.now(),
+      };
+      await setDoc(unavailableDateDocRef, newUnavailableDate);
+      const finalDateEntry = { ...newUnavailableDate, id: date } as UnavailableDate; // id is the date string itself
+      
+      setUnavailableDates((prev) => {
+        const updated = [...prev, finalDateEntry].sort((a,b) => a.date.localeCompare(b.date));
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(LS_UNAVAILABLE_DATES_KEY, JSON.stringify(convertTimestampsToISO(updated)));
+        }
+        return updated;
+      });
+      toast({ title: "Success", description: "Date marked as unavailable." });
+    } catch (error) {
+      console.error("Error adding unavailable date:", error);
+      toast({ title: "Error", description: "Could not add unavailable date.", variant: "destructive" });
+    } finally {
+      setIsProcessingUnavailableDate(false);
+    }
+  };
+
+  const handleRemoveUnavailableDate = async (dateId: string) => { // dateId is the YYYY-MM-DD string
+    if (!user?.uid) {
+      toast({ title: "Error", description: "You must be logged in.", variant: "destructive" });
+      return;
+    }
+    setIsProcessingUnavailableDate(true);
+    try {
+      const unavailableDateDocRef = doc(firestore, `barberSchedules/${user.uid}/unavailableDates`, dateId);
+      await deleteDoc(unavailableDateDocRef);
+      setUnavailableDates((prev) => {
+        const updated = prev.filter(ud => ud.id !== dateId);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(LS_UNAVAILABLE_DATES_KEY, JSON.stringify(convertTimestampsToISO(updated)));
+        }
+        return updated;
+      });
+      toast({ title: "Success", description: "Unavailable date removed." });
+    } catch (error) {
+      console.error("Error removing unavailable date:", error);
+      toast({ title: "Error", description: "Could not remove unavailable date.", variant: "destructive" });
+    } finally {
+      setIsProcessingUnavailableDate(false);
+    }
+  };
+
 
   useEffect(() => {
     if (user?.uid && initialLoadComplete) { 
       fetchServices();
       fetchSchedule();
       fetchAppointments();
+      fetchUnavailableDates();
     }
-  }, [user?.uid, fetchServices, fetchSchedule, fetchAppointments, initialLoadComplete]);
+  }, [user?.uid, fetchServices, fetchSchedule, fetchAppointments, fetchUnavailableDates, initialLoadComplete]);
 
 
   return (
@@ -371,7 +469,7 @@ export default function BarberDashboardPage() {
           />
         )}
 
-        {(isLoadingSchedule && schedule.every(s => s.startTime === INITIAL_SCHEDULE[0].startTime)) ? ( // Check against initial default
+        {(isLoadingSchedule && schedule.every(s => s.startTime === INITIAL_SCHEDULE[0].startTime)) ? ( 
            <div className="flex justify-center items-center py-10">
             <LoadingSpinner className="h-8 w-8 text-primary" />
             <p className="ml-2 text-base">Loading schedule...</p>
@@ -382,6 +480,20 @@ export default function BarberDashboardPage() {
             onUpdateSchedule={handleUpdateScheduleDay}
             onSaveChanges={handleSaveSchedule}
             isSaving={isSavingSchedule}
+          />
+        )}
+
+         {(isLoadingUnavailableDates && !unavailableDates.length) ? (
+          <div className="flex justify-center items-center py-10">
+            <LoadingSpinner className="h-8 w-8 text-primary" />
+            <p className="ml-2 text-base">Loading unavailable dates...</p>
+          </div>
+        ) : (
+           <ManageUnavailableDatesSection
+            unavailableDates={unavailableDates}
+            onAddUnavailableDate={handleAddUnavailableDate}
+            onRemoveUnavailableDate={handleRemoveUnavailableDate}
+            isProcessing={isProcessingUnavailableDate}
           />
         )}
       </div>
