@@ -13,8 +13,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
-import { LogOut, User as UserIcon, Phone, Mail, Settings, LayoutDashboard } from "lucide-react"; 
+import { LogOut, User as UserIcon, Phone, Mail, Settings, LayoutDashboard, Scissors, CalendarClock, CalendarOff } from "lucide-react"; 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function UserNav() {
   const { user, signOut, role } = useAuth();
@@ -78,11 +79,33 @@ export default function UserNav() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuGroup>
-          <DropdownMenuItem onClick={() => router.push(`/${role}/dashboard`)} className="text-base py-2.5 px-3">
+          <DropdownMenuItem onClick={() => router.push(`/${role}/dashboard`)} className="text-base py-2.5 px-3 cursor-pointer">
             <LayoutDashboard className="mr-2 h-4 w-4" />
             <span>Dashboard</span>
           </DropdownMenuItem>
-          {/* Placeholder for future items */}
+          {role === 'barber' && (
+            <>
+              <Link href="/barber/services" passHref legacyBehavior>
+                <DropdownMenuItem className="text-base py-2.5 px-3 cursor-pointer">
+                  <Scissors className="mr-2 h-4 w-4" />
+                  <span>Manage Services</span>
+                </DropdownMenuItem>
+              </Link>
+              <Link href="/barber/schedule" passHref legacyBehavior>
+                <DropdownMenuItem className="text-base py-2.5 px-3 cursor-pointer">
+                  <CalendarClock className="mr-2 h-4 w-4" />
+                  <span>My Schedule</span>
+                </DropdownMenuItem>
+              </Link>
+              <Link href="/barber/availability" passHref legacyBehavior>
+                <DropdownMenuItem className="text-base py-2.5 px-3 cursor-pointer">
+                  <CalendarOff className="mr-2 h-4 w-4" />
+                  <span>My Availability</span>
+                </DropdownMenuItem>
+              </Link>
+            </>
+          )}
+          {/* Placeholder for future items for both roles */}
           {/* <DropdownMenuItem className="text-base py-2.5 px-3">
             <UserIcon className="mr-2 h-4 w-4" />
             <span>Profile</span>
@@ -93,7 +116,7 @@ export default function UserNav() {
           </DropdownMenuItem> */}
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleSignOut} className="text-base py-2.5 px-3 text-destructive focus:text-destructive focus:bg-destructive/10">
+        <DropdownMenuItem onClick={handleSignOut} className="text-base py-2.5 px-3 text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer">
           <LogOut className="mr-2 h-4 w-4" />
           <span>Log out</span>
         </DropdownMenuItem>
