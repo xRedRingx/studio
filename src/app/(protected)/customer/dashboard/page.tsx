@@ -7,11 +7,21 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import type { Appointment, AppUser } from '@/types';
 import { firestore } from '@/firebase/config';
-import { collection, query, where, getDocs, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, Timestamp, doc, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { CalendarDays, Clock, Scissors, UserCircle, ChevronRight } from 'lucide-react';
+import { CalendarDays, Clock, Scissors, UserCircle, ChevronRight, XCircle, Ban } from 'lucide-react';
 import Link from 'next/link';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const getTodayDateString = () => {
   return new Date().toISOString().split('T')[0];
@@ -79,10 +89,11 @@ export default function CustomerDashboardPage() {
   const [isLoadingBarbers, setIsLoadingBarbers] = useState(true);
   const [today, setToday] = useState<string | null>(null);
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
+  const [appointmentToCancel, setAppointmentToCancel] = useState<Appointment | null>(null);
+  const [isCancelling, setIsCancelling] = useState(false);
 
   useEffect(() => {
     setToday(getTodayDateString());
-    // Load from localStorage on initial mount
     if (typeof window !== 'undefined') {
         const cachedMyAppointments = localStorage.getItem(LS_MY_APPOINTMENTS_KEY);
         if (cachedMyAppointments) {
@@ -91,7 +102,7 @@ export default function CustomerDashboardPage() {
         }
         const cachedAvailableBarbers = localStorage.getItem(LS_AVAILABLE_BARBERS_KEY);
         if (cachedAvailableBarbers) {
-            setAvailableBarbers(JSON.parse(cachedAvailableBarbers)); // AppUser doesn't have Timestamps directly
+            setAvailableBarbers(JSON.parse(cachedAvailableBarbers));
             setIsLoadingBarbers(false);
         }
         setInitialLoadComplete(true);
@@ -115,7 +126,7 @@ export default function CustomerDashboardPage() {
       });
 
       const upcomingAppointments = fetchedAppointments
-        .filter(app => app.date >= today)
+        .filter(app => app.date >= today && app.status === 'upcoming') // Only show upcoming
         .sort((a, b) => {
           if (a.date === b.date) {
             return timeToMinutes(a.startTime) - timeToMinutes(b.startTime);
@@ -146,12 +157,11 @@ export default function CustomerDashboardPage() {
         const data = doc.data();
         fetchedBarbers.push({
           uid: doc.id,
-          id: doc.id, // Ensure 'id' field consistent with AppUser type if needed
+          id: doc.id,
           firstName: data.firstName,
           lastName: data.lastName,
           role: data.role,
           phoneNumber: data.phoneNumber,
-          // Add other AppUser fields if necessary, ensure they are serializable or handled
         } as AppUser); 
       });
       setAvailableBarbers(fetchedBarbers);
@@ -180,6 +190,33 @@ export default function CustomerDashboardPage() {
     return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   };
 
+  const handleCancelAppointment = async () => {
+    if (!appointmentToCancel || !user?.uid) return;
+    setIsCancelling(true);
+    try {
+      const appointmentRef = doc(firestore, 'appointments', appointmentToCancel.id);
+      await updateDoc(appointmentRef, {
+        status: 'cancelled',
+        updatedAt: Timestamp.now(),
+      });
+      
+      setMyAppointments(prev => {
+        const updated = prev.filter(app => app.id !== appointmentToCancel.id);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(LS_MY_APPOINTMENTS_KEY, JSON.stringify(convertTimestampsToISO(updated)));
+        }
+        return updated;
+      });
+      toast({ title: "Appointment Cancelled", description: "Your appointment has been successfully cancelled." });
+    } catch (error) {
+      console.error("Error cancelling appointment:", error);
+      toast({ title: "Error", description: "Could not cancel appointment.", variant: "destructive" });
+    } finally {
+      setIsCancelling(false);
+      setAppointmentToCancel(null);
+    }
+  };
+
   return (
     <ProtectedPage expectedRole="customer">
       <div className="space-y-8">
@@ -206,7 +243,7 @@ export default function CustomerDashboardPage() {
               <div className="space-y-4">
                 {myAppointments.map(app => (
                   <Card key={app.id} className="shadow-md rounded-lg border overflow-hidden">
-                    <CardContent className="p-4 grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-4 items-center">
+                    <CardContent className="p-4 grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-4 items-start">
                       <div className="md:col-span-2 space-y-1">
                         <h3 className="text-base font-semibold text-primary flex items-center">
                           <Scissors className="mr-2 h-5 w-5" /> {app.serviceName}
@@ -223,6 +260,24 @@ export default function CustomerDashboardPage() {
                           <Clock className="mr-2 h-4 w-4" /> {app.startTime}
                         </p>
                       </div>
+                       {app.status === 'upcoming' && (
+                        <div className="md:col-span-3 flex justify-end pt-2 mt-2 border-t border-gray-200">
+                           <Button
+                            variant="destructive"
+                            size="sm"
+                            className="rounded-full h-9 px-3"
+                            onClick={() => setAppointmentToCancel(app)}
+                            disabled={isCancelling}
+                          >
+                            {isCancelling && appointmentToCancel?.id === app.id ? (
+                              <LoadingSpinner className="mr-1.5 h-4 w-4" />
+                            ) : (
+                              <XCircle className="mr-1.5 h-4 w-4" />
+                            )}
+                            Cancel
+                          </Button>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 ))}
@@ -267,6 +322,31 @@ export default function CustomerDashboardPage() {
           </CardContent>
         </Card>
       </div>
+      {appointmentToCancel && (
+        <AlertDialog open={!!appointmentToCancel} onOpenChange={(open) => !open && setAppointmentToCancel(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-xl font-bold">Confirm Cancellation</AlertDialogTitle>
+              <AlertDialogDescription className="text-base text-gray-500">
+                Are you sure you want to cancel your appointment for <span className="font-semibold">{appointmentToCancel.serviceName}</span>
+                {' '}with <span className="font-semibold">{appointmentToCancel.barberName}</span> on <span className="font-semibold">{formatDate(appointmentToCancel.date)} at {appointmentToCancel.startTime}</span>?
+                This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="mt-4">
+              <AlertDialogCancel onClick={() => setAppointmentToCancel(null)} className="rounded-full h-10 px-4" disabled={isCancelling}>Keep Appointment</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleCancelAppointment}
+                className="rounded-full h-10 px-4 bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                disabled={isCancelling}
+              >
+                {isCancelling ? <LoadingSpinner className="mr-2 h-4 w-4" /> : <Ban className="mr-2 h-4 w-4" />}
+                {isCancelling ? 'Cancelling...' : 'Yes, Cancel'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </ProtectedPage>
   );
 }

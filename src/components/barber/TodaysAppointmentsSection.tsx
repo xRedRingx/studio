@@ -28,7 +28,7 @@ export default function TodaysAppointmentsSection({ appointments, onUpdateAppoin
       return [];
     }
     return appointments
-      .filter(app => app.date === todayDate) 
+      .filter(app => app.date === todayDate && app.status !== 'cancelled') // Filter out cancelled appointments
       .sort((a, b) => {
         const dateForComparison = todayDate || '1970-01-01';
         let timeAHours = parseInt(a.startTime.split(':')[0]);
@@ -96,7 +96,7 @@ export default function TodaysAppointmentsSection({ appointments, onUpdateAppoin
       </CardHeader>
       <CardContent className="p-6">
         {todaysAppointments.length === 0 ? (
-          <p className="text-base text-gray-500">No appointments scheduled for today.</p>
+          <p className="text-base text-gray-500">No active appointments scheduled for today.</p>
         ) : (
           <div className="space-y-4">
             {todaysAppointments.map((appointment) => (
