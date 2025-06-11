@@ -8,6 +8,7 @@ import ManageServicesSection from '@/components/barber/ManageServicesSection';
 import SetWorkScheduleSection from '@/components/barber/SetWorkScheduleSection';
 import TodaysAppointmentsSection from '@/components/barber/TodaysAppointmentsSection';
 import ManageUnavailableDatesSection from '@/components/barber/ManageUnavailableDatesSection';
+import WalkInDialog from '@/components/barber/WalkInDialog'; // New Import
 import { firestore } from '@/firebase/config';
 import {
   collection,
@@ -26,6 +27,8 @@ import {
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
+import { Button } from '@/components/ui/button'; // New Import
+import { PlusCircle } from 'lucide-react'; // New Import
 
 const INITIAL_SCHEDULE: DayAvailability[] = (['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as DayOfWeek[]).map(day => ({
   day,
@@ -76,6 +79,25 @@ const convertISOToTimestamps = (data: any): any => {
     return newData;
   };
 
+const timeToMinutes = (timeStr: string): number => {
+  const [time, modifier] = timeStr.split(' ');
+  let [hours, minutes] = time.split(':').map(Number);
+  if (hours === 12) {
+    hours = modifier.toUpperCase() === 'AM' ? 0 : 12;
+  } else if (modifier.toUpperCase() === 'PM') {
+    hours += 12;
+  }
+  return hours * 60 + minutes;
+};
+
+const minutesToTime = (totalMinutes: number): string => {
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  const displayHour = h % 12 === 0 ? 12 : h % 12;
+  const period = h < 12 || h === 24 ? 'AM' : 'PM';
+  return `${String(displayHour).padStart(2, '0')}:${String(m).padStart(2, '0')} ${period}`;
+};
+
 
 const LS_SERVICES_KEY = 'barber_dashboard_services';
 const LS_SCHEDULE_KEY = 'barber_dashboard_schedule';
@@ -99,6 +121,8 @@ export default function BarberDashboardPage() {
   const [isUpdatingAppointment, setIsUpdatingAppointment] = useState(false);
   const [isLoadingUnavailableDates, setIsLoadingUnavailableDates] = useState(true);
   const [isProcessingUnavailableDate, setIsProcessingUnavailableDate] = useState(false);
+  const [isWalkInDialogOpen, setIsWalkInDialogOpen] = useState(false); // New state
+  const [isProcessingWalkIn, setIsProcessingWalkIn] = useState(false); // New state
 
 
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
@@ -270,7 +294,7 @@ export default function BarberDashboardPage() {
         schedule: schedule,
         updatedAt: Timestamp.now(),
       };
-      await setDoc(scheduleDocRef, scheduleDataToSave, { merge: true }); // Use merge if creating/updating doc
+      await setDoc(scheduleDocRef, scheduleDataToSave, { merge: true });
       if (typeof window !== 'undefined') {
         localStorage.setItem(LS_SCHEDULE_KEY, JSON.stringify(schedule));
       }
@@ -289,7 +313,6 @@ export default function BarberDashboardPage() {
     setIsLoadingAppointments(true);
     try {
       const appointmentsCollection = collection(firestore, 'appointments');
-      // Order by date ascending, then by startTime ascending for Barber Dashboard
       const q = query(appointmentsCollection, where('barberId', '==', user.uid), orderBy('date', 'asc'), orderBy('startTime'));
       const querySnapshot = await getDocs(q);
       const fetchedAppointments: Appointment[] = [];
@@ -365,7 +388,6 @@ export default function BarberDashboardPage() {
     }
     setIsProcessingUnavailableDate(true);
     try {
-      // Check if date already exists
       const existingDate = unavailableDates.find(ud => ud.date === date);
       if (existingDate) {
         toast({ title: "Date Exists", description: "This date is already marked as unavailable.", variant: "destructive" });
@@ -381,7 +403,7 @@ export default function BarberDashboardPage() {
         createdAt: Timestamp.now(),
       };
       await setDoc(unavailableDateDocRef, newUnavailableDate);
-      const finalDateEntry = { ...newUnavailableDate, id: date } as UnavailableDate; // id is the date string itself
+      const finalDateEntry = { ...newUnavailableDate, id: date } as UnavailableDate;
       
       setUnavailableDates((prev) => {
         const updated = [...prev, finalDateEntry].sort((a,b) => a.date.localeCompare(b.date));
@@ -399,7 +421,7 @@ export default function BarberDashboardPage() {
     }
   };
 
-  const handleRemoveUnavailableDate = async (dateId: string) => { // dateId is the YYYY-MM-DD string
+  const handleRemoveUnavailableDate = async (dateId: string) => {
     if (!user?.uid) {
       toast({ title: "Error", description: "You must be logged in.", variant: "destructive" });
       return;
@@ -424,6 +446,135 @@ export default function BarberDashboardPage() {
     }
   };
 
+  // --- Walk-In ---
+  const handleSaveWalkIn = async (serviceId: string, customerName: string) => {
+    if (!user || !user.uid || !user.firstName || !user.lastName) {
+      toast({ title: "Error", description: "User information is incomplete.", variant: "destructive" });
+      return;
+    }
+    setIsProcessingWalkIn(true);
+
+    const selectedService = services.find(s => s.id === serviceId);
+    if (!selectedService) {
+      toast({ title: "Error", description: "Selected service not found.", variant: "destructive" });
+      setIsProcessingWalkIn(false);
+      return;
+    }
+
+    // Find next available slot
+    const todayDateStr = formatDateToYYYYMMDD(new Date());
+    const dayOfWeek = new Date().toLocaleDateString('en-US', { weekday: 'long' }) as DayOfWeek;
+    const daySchedule = schedule.find(d => d.day === dayOfWeek);
+
+    if (!daySchedule || !daySchedule.isOpen) {
+      toast({ title: "Barber Closed", description: "Cannot add walk-in. Barber is closed today.", variant: "destructive" });
+      setIsProcessingWalkIn(false);
+      return;
+    }
+    
+    // Check if today is an unavailable date
+    if (unavailableDates.some(ud => ud.date === todayDateStr)) {
+        toast({ title: "Barber Unavailable", description: "Cannot add walk-in. Barber is marked as unavailable today.", variant: "destructive" });
+        setIsProcessingWalkIn(false);
+        return;
+    }
+
+    const serviceDuration = selectedService.duration;
+    const scheduleStartTimeMinutes = timeToMinutes(daySchedule.startTime);
+    const scheduleEndTimeMinutes = timeToMinutes(daySchedule.endTime);
+
+    const now = new Date();
+    const currentTimeMinutes = now.getHours() * 60 + now.getMinutes();
+    const earliestPossibleStartMinutes = Math.max(scheduleStartTimeMinutes, currentTimeMinutes + 5); // 5 min buffer
+
+    const todaysAppointments = appointments
+      .filter(app => app.date === todayDateStr)
+      .map(app => ({
+        start: timeToMinutes(app.startTime),
+        end: timeToMinutes(app.endTime),
+      }))
+      .sort((a, b) => a.start - b.start);
+
+    let foundSlotStartMinutes: number | null = null;
+
+    // Iterate to find the first available slot
+    for (let potentialStart = earliestPossibleStartMinutes; potentialStart + serviceDuration <= scheduleEndTimeMinutes; potentialStart += 15) {
+        const potentialEnd = potentialStart + serviceDuration;
+        const isSlotFree = !todaysAppointments.some(
+            bookedSlot => potentialStart < bookedSlot.end && potentialEnd > bookedSlot.start
+        );
+        if (isSlotFree) {
+            foundSlotStartMinutes = potentialStart;
+            break;
+        }
+    }
+    
+    if (foundSlotStartMinutes === null) {
+      // Try to append after the last appointment if within schedule
+      const lastAppointmentEnd = todaysAppointments.length > 0 ? todaysAppointments[todaysAppointments.length - 1].end : scheduleStartTimeMinutes;
+      const potentialStartAfterLast = Math.max(earliestPossibleStartMinutes, lastAppointmentEnd);
+      if (potentialStartAfterLast + serviceDuration <= scheduleEndTimeMinutes) {
+          const potentialEnd = potentialStartAfterLast + serviceDuration;
+           const isSlotFree = !todaysAppointments.some(
+            bookedSlot => potentialStartAfterLast < bookedSlot.end && potentialEnd > bookedSlot.start
+          );
+          if(isSlotFree){
+            foundSlotStartMinutes = potentialStartAfterLast;
+          }
+      }
+    }
+
+
+    if (foundSlotStartMinutes === null) {
+      toast({ title: "No Slot Available", description: "Could not find an immediate available time slot for this service.", variant: "destructive" });
+      setIsProcessingWalkIn(false);
+      return;
+    }
+
+    const appointmentStartTime = minutesToTime(foundSlotStartMinutes);
+    const appointmentEndTime = minutesToTime(foundSlotStartMinutes + serviceDuration);
+
+    try {
+      const newAppointmentData = {
+        barberId: user.uid,
+        barberName: `${user.firstName} ${user.lastName}`,
+        customerId: null, // Walk-in customer
+        customerName: customerName,
+        serviceId: selectedService.id,
+        serviceName: selectedService.name,
+        price: selectedService.price,
+        date: todayDateStr,
+        startTime: appointmentStartTime,
+        endTime: appointmentEndTime,
+        status: 'checked-in' as Appointment['status'],
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      };
+
+      const docRef = await addDoc(collection(firestore, 'appointments'), newAppointmentData);
+      const finalAppointment: Appointment = { id: docRef.id, ...newAppointmentData };
+      
+      setAppointments(prev => {
+        const updated = [...prev, finalAppointment].sort((a,b) => {
+            if (a.date === b.date) return timeToMinutes(a.startTime) - timeToMinutes(b.startTime);
+            return new Date(a.date).getTime() - new Date(b.date).getTime();
+        });
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(LS_APPOINTMENTS_KEY, JSON.stringify(convertTimestampsToISO(updated)));
+        }
+        return updated;
+      });
+
+      toast({ title: "Walk-In Added!", description: `${customerName}'s appointment for ${selectedService.name} at ${appointmentStartTime} has been added.` });
+      setIsWalkInDialogOpen(false);
+    } catch (error) {
+      console.error("Error adding walk-in appointment:", error);
+      toast({ title: "Error", description: "Could not add walk-in appointment.", variant: "destructive" });
+    } finally {
+      setIsProcessingWalkIn(false);
+    }
+  };
+
 
   useEffect(() => {
     if (user?.uid && initialLoadComplete) { 
@@ -438,9 +589,15 @@ export default function BarberDashboardPage() {
   return (
     <ProtectedPage expectedRole="barber">
       <div className="space-y-8">
-        <h1 className="text-2xl font-bold font-headline">
-          Barber Dashboard, {user?.firstName || user?.displayName || 'Barber'}!
-        </h1>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <h1 className="text-2xl font-bold font-headline">
+            Barber Dashboard, {user?.firstName || user?.displayName || 'Barber'}!
+            </h1>
+            <Button onClick={() => setIsWalkInDialogOpen(true)} className="w-full sm:w-auto h-11 rounded-full" disabled={isProcessingWalkIn || services.length === 0}>
+                <PlusCircle className="mr-2 h-5 w-5" />
+                Add Walk-In
+            </Button>
+        </div>
 
         {(isLoadingAppointments && !appointments.length) ? (
           <div className="flex justify-center items-center py-10">
@@ -497,6 +654,15 @@ export default function BarberDashboardPage() {
           />
         )}
       </div>
+      {isWalkInDialogOpen && (
+        <WalkInDialog
+            isOpen={isWalkInDialogOpen}
+            onClose={() => setIsWalkInDialogOpen(false)}
+            onSubmit={handleSaveWalkIn}
+            services={services}
+            isSubmitting={isProcessingWalkIn}
+        />
+      )}
     </ProtectedPage>
   );
 }

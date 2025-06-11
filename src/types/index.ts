@@ -54,8 +54,8 @@ export interface Appointment {
   id:string; // Firestore document ID
   barberId: string; // ID of the barber
   barberName: string; // Name of the barber
-  customerId: string; // ID of the customer who booked
-  customerName: string;
+  customerId?: string | null; // ID of the customer who booked, optional for walk-ins
+  customerName: string; // Name of the customer (could be from AppUser or entered for walk-in)
   serviceId: string; // ID of the service
   serviceName: string;
   price: number;
