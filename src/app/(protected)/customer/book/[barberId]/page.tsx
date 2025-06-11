@@ -9,7 +9,6 @@ import { useAuth } from '@/hooks/useAuth';
 import type { AppUser, BarberService, Appointment, DayAvailability, BarberScheduleDoc, DayOfWeek } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { firestore } from '@/firebase/config';
 import { collection, doc, getDoc, getDocs, query, where, addDoc, Timestamp, orderBy } from 'firebase/firestore';
@@ -17,6 +16,9 @@ import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { AlertCircle, CalendarDays, CheckCircle, ChevronLeft, Clock, DollarSign, Scissors, Users, Info } from 'lucide-react';
 import { APP_NAME } from '@/lib/constants';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { cn } from '@/lib/utils';
 
 type BookingStep = 'selectService' | 'selectDateTime' | 'confirm' | 'confirmed' | 'queued';
 
@@ -41,6 +43,15 @@ const minutesToTime = (minutes: number): string => {
 
 const daysOfWeekOrder: DayOfWeek[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
+const formatDateToYYYYMMDD = (date: Date): string => {
+  return date.toISOString().split('T')[0];
+};
+
+const formatYYYYMMDDToDisplay = (dateStr: string): string => {
+  const date = new Date(dateStr + 'T00:00:00'); // Ensure parsing as local date
+  return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+};
+
 
 export default function BookingPage() {
   const { user } = useAuth();
@@ -55,7 +66,8 @@ export default function BookingPage() {
   const [existingAppointments, setExistingAppointments] = useState<Appointment[]>([]);
 
   const [selectedService, setSelectedService] = useState<BarberService | null>(null);
-  const [selectedDate, setSelectedDate] = useState<'today' | 'tomorrow'>('today');
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string | null>(null);
   const [availableTimeSlots, setAvailableTimeSlots] = useState<string[]>([]);
 
@@ -69,22 +81,11 @@ export default function BookingPage() {
   const [currentlyServingCustomerName, setCurrentlyServingCustomerName] = useState<string | null>(null);
   const [isCurrentUserNext, setIsCurrentUserNext] = useState<boolean>(false);
 
+  const today = new Date();
+  today.setHours(0, 0, 0, 0); // For disabling past dates in calendar
+  const sevenDaysFromNow = new Date(today);
+  sevenDaysFromNow.setDate(today.getDate() + 6);
 
-  const getDisplayDate = (value: 'today' | 'tomorrow'): string => {
-    const date = new Date();
-    if (value === 'tomorrow') {
-      date.setDate(date.getDate() + 1);
-    }
-    return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
-  };
-
-  const getYYYYMMDD = (value: 'today' | 'tomorrow'): string => {
-    const date = new Date();
-    if (value === 'tomorrow') {
-      date.setDate(date.getDate() + 1);
-    }
-    return date.toISOString().split('T')[0];
-  };
 
   const fetchBarberData = useCallback(async () => {
     if (!barberId) return;
@@ -109,7 +110,6 @@ export default function BookingPage() {
       if (scheduleDocSnap.exists()) {
         const barberScheduleDoc = scheduleDocSnap.data() as BarberScheduleDoc;
         const fetchedSchedule = barberScheduleDoc.schedule;
-        // Ensure all days are present and sorted
         const sortedFetchedSchedule = daysOfWeekOrder.map(dayName => {
             const foundDay = fetchedSchedule.find(d => d.day === dayName);
             return foundDay || { day: dayName, isOpen: false, startTime: '09:00 AM', endTime: '05:00 PM' };
@@ -120,15 +120,18 @@ export default function BookingPage() {
         setSchedule(defaultSchedule);
       }
 
-      const todayStr = new Date().toISOString().split('T')[0];
-      const tomorrowDate = new Date();
-      tomorrowDate.setDate(tomorrowDate.getDate() + 1);
-      const tomorrowStr = tomorrowDate.toISOString().split('T')[0];
-
+      const dateQueryArray: string[] = [];
+      const currentDateIter = new Date();
+      for (let i = 0; i < 7; i++) {
+        const futureDate = new Date(currentDateIter);
+        futureDate.setDate(currentDateIter.getDate() + i);
+        dateQueryArray.push(formatDateToYYYYMMDD(futureDate));
+      }
+      
       const appointmentsQuery = query(
         collection(firestore, 'appointments'),
         where('barberId', '==', barberId),
-        where('date', 'in', [todayStr, tomorrowStr])
+        where('date', 'in', dateQueryArray)
       );
       const appointmentsSnapshot = await getDocs(appointmentsQuery);
       setExistingAppointments(appointmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment)));
@@ -146,13 +149,13 @@ export default function BookingPage() {
   }, [fetchBarberData]);
 
   useEffect(() => {
-    if (!selectedService || !schedule.length) {
+    if (!selectedService || !schedule.length || !selectedDate) {
       setAvailableTimeSlots([]);
       return;
     }
 
-    const targetDateStr = getYYYYMMDD(selectedDate);
-    const dayOfWeek = new Date(targetDateStr).toLocaleDateString('en-US', { weekday: 'long' }) as DayAvailability['day'];
+    const targetDateStr = formatDateToYYYYMMDD(selectedDate);
+    const dayOfWeek = selectedDate.toLocaleDateString('en-US', { weekday: 'long' }) as DayAvailability['day'];
     const daySchedule = schedule.find(d => d.day === dayOfWeek);
 
     if (!daySchedule || !daySchedule.isOpen) {
@@ -179,10 +182,9 @@ export default function BookingPage() {
       );
 
       let isSlotInFuture = true;
-      if (selectedDate === 'today') {
+      if (targetDateStr === formatDateToYYYYMMDD(new Date())) { // Check if selectedDate is today
         const now = new Date();
         const nowMinutes = now.getHours() * 60 + now.getMinutes();
-        // Add a small buffer (e.g., 15 minutes) to prevent booking slots too close to the current time
         const bufferMinutes = 15; 
         if (currentTimeMinutes < nowMinutes + bufferMinutes) {
           isSlotInFuture = false;
@@ -205,9 +207,12 @@ export default function BookingPage() {
     setBookingStep('selectDateTime');
   };
 
-  const handleDateChange = (value: 'today' | 'tomorrow') => {
-    setSelectedDate(value);
-    setSelectedTimeSlot(null);
+  const handleDateSelect = (date: Date | undefined) => {
+    if (date) {
+      setSelectedDate(date);
+      setSelectedTimeSlot(null); // Reset time slot when date changes
+      setIsCalendarOpen(false); // Close popover after selection
+    }
   };
 
   const handleTimeSlotSelect = (time: string) => {
@@ -215,7 +220,7 @@ export default function BookingPage() {
   };
 
   const handleProceedToConfirm = () => {
-    if (selectedService && selectedTimeSlot) {
+    if (selectedService && selectedTimeSlot && selectedDate) {
       setBookingStep('confirm');
     } else {
       toast({ title: "Missing information", description: "Please select a service, date, and time.", variant: "destructive" });
@@ -226,7 +231,7 @@ export default function BookingPage() {
     if (!barberId || !bookedAppointment) return;
   
     try {
-      const todayStr = new Date().toISOString().split('T')[0];
+      const todayStr = formatDateToYYYYMMDD(new Date());
       const q = query(
         collection(firestore, 'appointments'),
         where('barberId', '==', barberId),
@@ -251,9 +256,6 @@ export default function BookingPage() {
       let userIsNext = false;
       let foundCurrentUser = false;
   
-      const bookedAppointmentService = services.find(s => s.id === bookedAppointment.serviceId);
-      const bookedAppointmentDuration = bookedAppointmentService?.duration || 30; 
-
       for (let i = 0; i < todaysOpenAppointments.length; i++) {
         const app = todaysOpenAppointments[i];
         const serviceDetails = services.find(s => s.id === app.serviceId) || { duration: 30 }; 
@@ -304,13 +306,13 @@ export default function BookingPage() {
   };
 
   const handleConfirmBooking = async () => {
-    if (!user || !selectedService || !selectedTimeSlot || !barber) {
+    if (!user || !selectedService || !selectedTimeSlot || !barber || !selectedDate) {
       toast({ title: "Error", description: "Missing booking information.", variant: "destructive" });
       return;
     }
     setIsSubmitting(true);
     try {
-      const appointmentDate = getYYYYMMDD(selectedDate);
+      const appointmentDate = formatDateToYYYYMMDD(selectedDate);
       const appointmentStartTime = selectedTimeSlot;
       const serviceDuration = selectedService.duration;
       const appointmentEndTime = minutesToTime(timeToMinutes(appointmentStartTime) + serviceDuration);
@@ -337,7 +339,7 @@ export default function BookingPage() {
 
       toast({ title: "Booking Confirmed!", description: "Your appointment has been successfully booked." });
       
-      if (finalAppointment.date === getYYYYMMDD('today')) { 
+      if (finalAppointment.date === formatDateToYYYYMMDD(new Date())) { 
         await fetchAndCalculateQueueInfo(finalAppointment);
       } else {
         setBookingStep('confirmed'); 
@@ -445,21 +447,32 @@ export default function BookingPage() {
               )}
 
               <div>
-                <Label className="text-base font-medium mb-3 block">Select Date</Label>
-                <RadioGroup
-                  value={selectedDate}
-                  onValueChange={(value: 'today' | 'tomorrow') => handleDateChange(value)}
-                  className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-4"
-                >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="today" id="today" />
-                    <Label htmlFor="today" className="text-base cursor-pointer hover:text-primary">{getDisplayDate('today')} (Today)</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="tomorrow" id="tomorrow" />
-                    <Label htmlFor="tomorrow" className="text-base cursor-pointer hover:text-primary">{getDisplayDate('tomorrow')} (Tomorrow)</Label>
-                  </div>
-                </RadioGroup>
+                <Label className="text-base font-medium mb-2 block">Select Date</Label>
+                 <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant={"outline"}
+                        className={cn(
+                          "w-full sm:w-[280px] justify-start text-left font-normal h-12 text-base mb-4",
+                          !selectedDate && "text-muted-foreground"
+                        )}
+                      >
+                        <CalendarDays className="mr-2 h-4 w-4" />
+                        {selectedDate ? selectedDate.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' }) : <span>Pick a date</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0">
+                      <Calendar
+                        mode="single"
+                        selected={selectedDate}
+                        onSelect={handleDateSelect}
+                        disabled={(date) =>
+                          date < today || date > sevenDaysFromNow
+                        }
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
               </div>
 
               <div>
@@ -504,7 +517,7 @@ export default function BookingPage() {
               <div className="space-y-2 text-base">
                 <p><Scissors className="inline mr-2 h-5 w-5 text-primary" /> Service: <span className="font-semibold">{selectedService?.name}</span></p>
                 <p><Users className="inline mr-2 h-5 w-5 text-primary" /> With: <span className="font-semibold">{barber.firstName} {barber.lastName}</span></p>
-                <p><CalendarDays className="inline mr-2 h-5 w-5 text-primary" /> Date: <span className="font-semibold">{getDisplayDate(selectedDate)}</span></p>
+                <p><CalendarDays className="inline mr-2 h-5 w-5 text-primary" /> Date: <span className="font-semibold">{selectedDate ? formatSelectedDateForDisplay(selectedDate) : ''}</span></p>
                 <p><Clock className="inline mr-2 h-5 w-5 text-primary" /> Time: <span className="font-semibold text-[#0088E0]">{selectedTimeSlot}</span></p>
                 <p><DollarSign className="inline mr-2 h-5 w-5 text-primary" /> Price: <span className="font-semibold">${selectedService?.price.toFixed(2)}</span></p>
               </div>
@@ -531,7 +544,7 @@ export default function BookingPage() {
                 <CardContent className="space-y-2 text-base">
                   <p>Your appointment for <span className="font-semibold">{newlyBookedAppointment?.serviceName}</span></p>
                   <p>with <span className="font-semibold">{barber.firstName} {barber.lastName}</span></p>
-                  <p>on <span className="font-semibold">{newlyBookedAppointment ? getDisplayDate(newlyBookedAppointment.date === getYYYYMMDD('today') ? 'today' : 'tomorrow') : ''} at <span className="text-[#0088E0]">{newlyBookedAppointment?.startTime}</span></span></p>
+                  <p>on <span className="font-semibold">{formatYYYYMMDDToDisplay(newlyBookedAppointment?.date || '')} at <span className="text-[#0088E0]">{newlyBookedAppointment?.startTime}</span></span></p>
                   <p>has been successfully booked.</p>
                   <Button onClick={() => router.push('/customer/dashboard')} className="mt-8 w-full max-w-xs mx-auto h-14 rounded-full text-lg">
                     Back to Dashboard
@@ -599,6 +612,3 @@ export default function BookingPage() {
     </ProtectedPage>
   );
 }
-
-
-    
