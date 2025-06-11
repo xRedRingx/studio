@@ -237,7 +237,7 @@ export default function BookingPage() {
       if (targetDateStr === formatDateToYYYYMMDD(new Date())) { // Check if selectedDate is today
         const now = new Date();
         const nowMinutes = now.getHours() * 60 + now.getMinutes();
-        const bufferMinutes = 15; 
+        const bufferMinutes = 15; // Allow booking 15 mins from now
         if (currentTimeMinutes < nowMinutes + bufferMinutes) {
           isSlotInFuture = false;
         }
@@ -246,10 +246,10 @@ export default function BookingPage() {
       if (isSlotFree && isSlotInFuture) {
         slots.push(minutesToTime(currentTimeMinutes));
       }
-      currentTimeMinutes += 15; 
+      currentTimeMinutes += 15; // Assuming slots are in 15-minute increments, adjust if needed
     }
     setAvailableTimeSlots(slots);
-    setSelectedTimeSlot(null); 
+    setSelectedTimeSlot(null); // Reset selected time slot when available slots change
   }, [selectedService, selectedDate, schedule, existingAppointments]);
 
 
@@ -581,7 +581,7 @@ export default function BookingPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-500">No available time slots for the selected service and date. Check the barber's weekly availability above or try a different date/service.</p>
+                  <p className="text-sm text-gray-500">No available time slots for the selected service and date. This could be because all slots are booked, the barber is closed, or it's too late to book for today. Check the barber's weekly availability above or try a different date/service.</p>
                 )}
               </div>
               <div className="flex flex-col sm:flex-row justify-between pt-6 space-y-3 sm:space-y-0 sm:space-x-3">
@@ -702,3 +702,5 @@ export default function BookingPage() {
     </ProtectedPage>
   );
 }
+
+      
