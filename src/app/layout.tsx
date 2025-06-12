@@ -5,6 +5,7 @@ import { AuthProvider } from '@/contexts/AuthContext';
 import { Toaster } from '@/components/ui/toaster';
 import OfflineIndicator from '@/components/layout/OfflineIndicator';
 import { APP_NAME } from '@/lib/constants';
+import { ThemeProvider } from '@/components/layout/ThemeProvider';
 
 export const metadata: Metadata = {
   title: APP_NAME,
@@ -25,14 +26,22 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=PT+Sans:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet" />
         <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;700&display=swap" rel="stylesheet" />
         {/* Theme color for browser UI theming */}
-        <meta name="theme-color" content="#5DADE2" />
+        <meta name="theme-color" content="#5DADE2" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#27272A" media="(prefers-color-scheme: dark)" /> {/* Example dark theme color from .dark --background */}
       </head>
       <body className="font-body antialiased" suppressHydrationWarning>
-        <AuthProvider>
-          <OfflineIndicator />
-          {children}
-          <Toaster />
-        </AuthProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <AuthProvider>
+            <OfflineIndicator />
+            {children}
+            <Toaster />
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
