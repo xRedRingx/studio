@@ -11,6 +11,7 @@ import {
   signInWithEmailAndPassword, 
   signOut as firebaseSignOut, 
   onAuthStateChanged,
+  sendPasswordResetEmail as firebaseSendPasswordResetEmail, // Import Firebase function
   type User as FirebaseUser // Renamed to avoid conflict with AppUser
 } from 'firebase/auth';
 import { collection, doc, getDoc, setDoc, Timestamp, serverTimestamp } from 'firebase/firestore';
@@ -27,6 +28,7 @@ interface AuthContextType {
     userDetails: Omit<AppUser, 'uid' | 'createdAt' | 'updatedAt' | 'displayName' | 'photoURL' | 'emailVerified'> & { password_original_do_not_use: string }
   ) => Promise<void>;
   signInWithEmailAndPassword: (email: string, password_original_do_not_use: string) => Promise<void>;
+  sendPasswordResetLink: (email: string) => Promise<void>; // New method
   signOut: () => Promise<void>;
 }
 
@@ -211,6 +213,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const sendPasswordResetLink = async (email: string) => {
+    setIsProcessingAuth(true);
+    try {
+      await firebaseSendPasswordResetEmail(auth, email);
+      // Toast message moved to ForgotPasswordForm for better UX flow (toast after successful API call there)
+    } catch (error: any) {
+      console.error("AuthContext: Error sending password reset email:", error);
+      // Firebase often doesn't throw an error for non-existent emails to prevent email enumeration.
+      // So, a generic "if exists" message is usually best, handled in the form component.
+      // If there's a different type of error (e.g., network), we can toast it.
+      if (error.code !== 'auth/user-not-found') { // Example of a specific error to handle differently if needed
+         toast({ title: "Password Reset Error", description: error.message || "Could not send reset link. Please try again.", variant: "destructive" });
+      }
+      throw error; // Re-throw to be caught by the form if needed
+    } finally {
+      setIsProcessingAuth(false);
+    }
+  };
+
   const signOutUser = async () => {
     setIsProcessingAuth(true);
     try {
@@ -234,6 +255,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setRole: setRoleContextAndStorage,
       registerWithEmailAndPassword,
       signInWithEmailAndPassword: newSignInWithEmailAndPassword,
+      sendPasswordResetLink, // Expose the new method
       signOut: signOutUser,
     }}>
       {children}

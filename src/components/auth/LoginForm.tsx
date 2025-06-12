@@ -6,6 +6,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -68,7 +69,12 @@ export default function LoginForm({ role }: LoginFormProps) {
           name="password"
           render={({ field }) => (
             <FormItem>
-              <FormLabel className="text-base">Password</FormLabel>
+              <div className="flex items-center justify-between">
+                <FormLabel className="text-base">Password</FormLabel>
+                <Link href="/forgot-password" tabIndex={-1} className="text-sm text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring rounded-sm">
+                  Forgot password?
+                </Link>
+              </div>
               <FormControl>
                 <Input type="password" placeholder="Enter password" {...field} className="text-base h-12" autoComplete="current-password" disabled={isProcessingAuth} />
               </FormControl>
