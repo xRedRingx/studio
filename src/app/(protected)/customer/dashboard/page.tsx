@@ -10,7 +10,7 @@ import { firestore } from '@/firebase/config';
 import { collection, query, where, getDocs, orderBy, Timestamp, doc, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { CalendarDays, Clock, Scissors, UserCircle, ChevronRight, XCircle, Ban } from 'lucide-react';
+import { CalendarDays, Clock, Scissors, UserCircle, ChevronRight, XCircle, Ban, Eye } from 'lucide-react';
 import Link from 'next/link';
 import {
   AlertDialog,
@@ -157,7 +157,7 @@ export default function CustomerDashboardPage() {
         const data = doc.data();
         fetchedBarbers.push({
           uid: doc.id,
-          id: doc.id,
+          id: doc.id, // Ensure id is present for key prop or other uses
           firstName: data.firstName,
           lastName: data.lastName,
           role: data.role,
@@ -238,6 +238,9 @@ export default function CustomerDashboardPage() {
             ) : myAppointments.length === 0 ? (
               <div className="text-center py-6">
                 <p className="text-base text-gray-500 mb-4">You have no upcoming appointments.</p>
+                 <Button asChild className="rounded-full h-12 px-6 text-base">
+                    <Link href="#find-barber">Find a Barber</Link>
+                </Button>
               </div>
             ) : (
               <div className="space-y-4">
@@ -310,8 +313,8 @@ export default function CustomerDashboardPage() {
                         </h3>
                       </div>
                       <Button asChild variant="outline" size="sm" className="rounded-full h-10 px-4 text-base w-full sm:w-auto">
-                        <Link href={`/customer/book/${barber.uid}`}>
-                          Book <ChevronRight className="ml-2 h-4 w-4" />
+                        <Link href={`/customer/view-barber/${barber.uid}`}>
+                           <Eye className="mr-2 h-4 w-4" /> View Services 
                         </Link>
                       </Button>
                     </CardContent>
@@ -350,3 +353,4 @@ export default function CustomerDashboardPage() {
     </ProtectedPage>
   );
 }
+
