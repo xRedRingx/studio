@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
-import { LogOut, User as UserIcon, Phone, Mail, Settings, LayoutDashboard, Scissors, CalendarClock, CalendarOff } from "lucide-react"; 
+import { LogOut, User as UserIcon, Phone, Mail, Settings, LayoutDashboard, Scissors, CalendarClock, CalendarOff, Edit } from "lucide-react"; 
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
@@ -83,6 +83,12 @@ export default function UserNav() {
             <LayoutDashboard className="mr-2 h-4 w-4" />
             <span>Dashboard</span>
           </DropdownMenuItem>
+           <Link href="/profile/edit" passHref legacyBehavior>
+            <DropdownMenuItem className="text-base py-2.5 px-3 cursor-pointer">
+              <Edit className="mr-2 h-4 w-4" />
+              <span>Edit Profile</span>
+            </DropdownMenuItem>
+          </Link>
           {role === 'barber' && (
             <>
               <Link href="/barber/services" passHref legacyBehavior>
@@ -105,12 +111,8 @@ export default function UserNav() {
               </Link>
             </>
           )}
-          {/* Placeholder for future items for both roles */}
+          {/* Placeholder for future settings if needed */}
           {/* <DropdownMenuItem className="text-base py-2.5 px-3">
-            <UserIcon className="mr-2 h-4 w-4" />
-            <span>Profile</span>
-          </DropdownMenuItem>
-          <DropdownMenuItem className="text-base py-2.5 px-3">
             <Settings className="mr-2 h-4 w-4" />
             <span>Settings</span>
           </DropdownMenuItem> */}

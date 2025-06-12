@@ -11,10 +11,10 @@ import {
   signInWithEmailAndPassword, 
   signOut as firebaseSignOut, 
   onAuthStateChanged,
-  sendPasswordResetEmail as firebaseSendPasswordResetEmail, // Import Firebase function
-  type User as FirebaseUser // Renamed to avoid conflict with AppUser
+  sendPasswordResetEmail as firebaseSendPasswordResetEmail,
+  type User as FirebaseUser
 } from 'firebase/auth';
-import { collection, doc, getDoc, setDoc, Timestamp, serverTimestamp } from 'firebase/firestore';
+import { collection, doc, getDoc, setDoc, updateDoc, Timestamp, serverTimestamp } from 'firebase/firestore'; // Added updateDoc
 import { useToast } from '@/hooks/use-toast';
 
 interface AuthContextType {
@@ -23,18 +23,20 @@ interface AuthContextType {
   loadingAuth: boolean; 
   initialRoleChecked: boolean; 
   isProcessingAuth: boolean; 
+  setIsProcessingAuth: React.Dispatch<React.SetStateAction<boolean>>; // Exposed for profile page
+  setUser: React.Dispatch<React.SetStateAction<AppUser | null>>; // Exposed for profile page
   setRole: (role: UserRole) => void;
   registerWithEmailAndPassword: (
     userDetails: Omit<AppUser, 'uid' | 'createdAt' | 'updatedAt' | 'displayName' | 'photoURL' | 'emailVerified'> & { password_original_do_not_use: string }
   ) => Promise<void>;
   signInWithEmailAndPassword: (email: string, password_original_do_not_use: string) => Promise<void>;
-  sendPasswordResetLink: (email: string) => Promise<void>; // New method
+  sendPasswordResetLink: (email: string) => Promise<void>;
+  updateUserProfile: (userId: string, updates: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber'>>) => Promise<void>; // New
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Helper function to create or update user document in Firestore
 const createUserDocument = async (firebaseUser: FirebaseUser, additionalData: Partial<AppUser> = {}) => {
   if (!firebaseUser) return;
 
@@ -57,16 +59,13 @@ const createUserDocument = async (firebaseUser: FirebaseUser, additionalData: Pa
         firstName: additionalData.firstName || '',
         lastName: additionalData.lastName || '',
         phoneNumber: additionalData.phoneNumber || null,
-        ...additionalData, // Spread additional data like role, firstName, lastName
+        ...additionalData,
       });
     } catch (error) {
       console.error("Error creating user document: ", error);
       throw error;
     }
   }
-  // If user doc exists, you might want to merge or update it here if needed
-  // For this example, we primarily create it on registration.
-  // When fetching user data on login, we'll just get the existing doc.
 };
 
 
@@ -88,7 +87,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setLoadingAuth(true);
       if (firebaseUser) {
-        // User is signed in via Firebase Auth
         const userDocRef = doc(firestore, 'users', firebaseUser.uid);
         const userDocSnap = await getDoc(userDocRef);
 
@@ -96,7 +94,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           const firestoreUser = userDocSnap.data() as AppUser;
           const appUser: AppUser = {
             uid: firebaseUser.uid,
-            email: firebaseUser.email || firestoreUser.email, // Prefer Firebase Auth email
+            email: firebaseUser.email || firestoreUser.email,
             displayName: firebaseUser.displayName || firestoreUser.displayName,
             photoURL: firebaseUser.photoURL,
             emailVerified: firebaseUser.emailVerified,
@@ -104,22 +102,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             firstName: firestoreUser.firstName,
             lastName: firestoreUser.lastName,
             phoneNumber: firestoreUser.phoneNumber,
-            createdAt: firestoreUser.createdAt, // Firestore Timestamps
-            updatedAt: firestoreUser.updatedAt, // Firestore Timestamps
+            createdAt: firestoreUser.createdAt,
+            updatedAt: firestoreUser.updatedAt,
           };
           setUser(appUser);
-          persistUserSession(appUser); // Persist merged user data
+          persistUserSession(appUser);
           if (appUser.role) setRoleContextAndStorage(appUser.role);
         } else {
-          // This case should ideally not happen if createUserDocument is called on registration.
-          // If it does, it means there's a Firebase Auth user without a corresponding Firestore doc.
-          // You might want to create it here or log an error.
           console.warn("AuthContext: Firebase user exists but no Firestore document found. User might need to complete registration.");
-          setUser(null); // Or a minimal AppUser object from firebaseUser
+          setUser(null);
           clearUserSession();
         }
       } else {
-        // User is signed out
         setUser(null);
         clearUserSession();
       }
@@ -158,17 +152,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password_original_do_not_use);
       const firebaseUser = userCredential.user;
       
-      // Prepare data for Firestore document
       const firestoreData: Partial<AppUser> = {
         firstName,
         lastName,
         role: userRole,
         phoneNumber: phoneNumber || null,
-        email, // Ensure email is part of Firestore doc too
+        email,
       };
       await createUserDocument(firebaseUser, firestoreData);
 
-      // Fetch the newly created document to get the full AppUser object
       const userDocRef = doc(firestore, 'users', firebaseUser.uid);
       const userDocSnap = await getDoc(userDocRef);
       if (!userDocSnap.exists()) {
@@ -198,7 +190,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsProcessingAuth(true);
     try {
       await signInWithEmailAndPassword(auth, email, password_original_do_not_use);
-      // onAuthStateChanged will handle setting user state and persisting session
       toast({ title: "Login Successful!", description: "Welcome back!" });
     } catch (error: any) {
       console.error("AuthContext: Error signing in:", error);
@@ -217,16 +208,40 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsProcessingAuth(true);
     try {
       await firebaseSendPasswordResetEmail(auth, email);
-      // Toast message moved to ForgotPasswordForm for better UX flow (toast after successful API call there)
     } catch (error: any) {
       console.error("AuthContext: Error sending password reset email:", error);
-      // Firebase often doesn't throw an error for non-existent emails to prevent email enumeration.
-      // So, a generic "if exists" message is usually best, handled in the form component.
-      // If there's a different type of error (e.g., network), we can toast it.
-      if (error.code !== 'auth/user-not-found') { // Example of a specific error to handle differently if needed
+      if (error.code !== 'auth/user-not-found') {
          toast({ title: "Password Reset Error", description: error.message || "Could not send reset link. Please try again.", variant: "destructive" });
       }
-      throw error; // Re-throw to be caught by the form if needed
+      throw error;
+    } finally {
+      setIsProcessingAuth(false);
+    }
+  };
+
+  const updateUserProfile = async (userId: string, updates: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber'>>) => {
+    setIsProcessingAuth(true);
+    try {
+      const userRef = doc(firestore, 'users', userId);
+      const dataToUpdate: any = { ...updates, updatedAt: Timestamp.now() };
+
+      if (updates.phoneNumber === '' || updates.phoneNumber === undefined) {
+        dataToUpdate.phoneNumber = null;
+      }
+
+      await updateDoc(userRef, dataToUpdate);
+
+      setUser(prevUser => {
+        if (!prevUser) return null;
+        const updatedUser = { ...prevUser, ...dataToUpdate }; // Make sure to spread dataToUpdate which has the correct phoneNumber
+        persistUserSession(updatedUser);
+        return updatedUser;
+      });
+      toast({ title: "Profile Updated", description: "Your profile information has been saved." });
+    } catch (error: any) {
+      console.error("AuthContext: Error updating user profile:", error);
+      toast({ title: "Update Error", description: error.message || "Could not update profile.", variant: "destructive" });
+      throw error;
     } finally {
       setIsProcessingAuth(false);
     }
@@ -236,7 +251,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsProcessingAuth(true);
     try {
       await firebaseSignOut(auth);
-      // onAuthStateChanged will handle clearing user state and session
     } catch (error: any) {
         console.error("AuthContext: Error signing out:", error);
         toast({ title: "Sign Out Error", description: "Could not sign out. Please try again.", variant: "destructive" });
@@ -252,10 +266,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       loadingAuth,
       initialRoleChecked,
       isProcessingAuth,
+      setIsProcessingAuth, // Exposed
+      setUser, // Exposed
       setRole: setRoleContextAndStorage,
       registerWithEmailAndPassword,
       signInWithEmailAndPassword: newSignInWithEmailAndPassword,
-      sendPasswordResetLink, // Expose the new method
+      sendPasswordResetLink,
+      updateUserProfile, // New method
       signOut: signOutUser,
     }}>
       {children}
