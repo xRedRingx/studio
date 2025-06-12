@@ -9,6 +9,7 @@ import { APP_NAME } from '@/lib/constants';
 export const metadata: Metadata = {
   title: APP_NAME,
   description: 'Seamlessly connect barbers and customers.',
+  manifest: '/manifest.json', // Added manifest link for PWA
 };
 
 export default function RootLayout({
@@ -23,6 +24,8 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=PT+Sans:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet" />
         <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;700&display=swap" rel="stylesheet" />
+        {/* Theme color for browser UI theming */}
+        <meta name="theme-color" content="#E24C3B" />
       </head>
       <body className="font-body antialiased" suppressHydrationWarning>
         <AuthProvider>
