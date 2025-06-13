@@ -14,7 +14,7 @@ import { firestore } from '@/firebase/config';
 import { collection, doc, getDoc, getDocs, query, where, addDoc, Timestamp, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { AlertCircle, CalendarDays, CheckCircle, ChevronLeft, Clock, DollarSign, Scissors, Users, Info, Ban } from 'lucide-react';
+import { AlertCircle, CalendarDays, CheckCircle, ChevronLeft, Clock, DollarSign, Scissors, Users, Info, Ban, AlertTriangle } from 'lucide-react';
 import { APP_NAME } from '@/lib/constants';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -114,7 +114,19 @@ export default function BookingPage() {
       const barberDocRef = doc(firestore, 'users', barberId);
       const barberDocSnap = await getDoc(barberDocRef);
       if (barberDocSnap.exists() && barberDocSnap.data().role === 'barber') {
-        setBarber({ id: barberDocSnap.id, ...barberDocSnap.data() } as AppUser);
+        const barberData = barberDocSnap.data() as AppUser;
+        // Default isAcceptingBookings to true if undefined or null
+        const isAccepting = barberData.isAcceptingBookings !== undefined && barberData.isAcceptingBookings !== null 
+                            ? barberData.isAcceptingBookings 
+                            : true;
+        setBarber({ id: barberDocSnap.id, ...barberData, isAcceptingBookings: isAccepting });
+        
+        // If barber is not accepting bookings, no need to fetch other data for booking
+        if (!isAccepting) {
+            setIsLoadingBarberDetails(false);
+            return;
+        }
+
       } else {
         toast({ title: "Error", description: "Barber not found.", variant: "destructive" });
         router.push('/customer/dashboard');
@@ -136,7 +148,6 @@ export default function BookingPage() {
         });
         setSchedule(sortedFetchedSchedule);
 
-        // Fetch unavailable dates
         const unavailableDatesColRef = collection(firestore, `barberSchedules/${barberId}/unavailableDates`);
         const unavailableDatesSnapshot = await getDocs(query(unavailableDatesColRef));
         const fetchedUnavailableDates: UnavailableDate[] = [];
@@ -148,7 +159,7 @@ export default function BookingPage() {
       } else {
         const defaultSchedule: DayAvailability[] = daysOfWeekOrder.map(day => ({ day: day as DayAvailability['day'], isOpen: false, startTime: '09:00 AM', endTime: '05:00 PM' }));
         setSchedule(defaultSchedule);
-        setBarberUnavailableDates([]); // No schedule means no specific unavailable dates either
+        setBarberUnavailableDates([]);
       }
 
       const dateQueryArray: string[] = [];
@@ -213,14 +224,13 @@ export default function BookingPage() {
 
 
   useEffect(() => {
-    if (!selectedService || !schedule.length || !selectedDate) {
+    if (!selectedService || !schedule.length || !selectedDate || !(barber?.isAcceptingBookings !== false) ) {
       setAvailableTimeSlots([]);
       return;
     }
 
     const targetDateStr = formatDateToYYYYMMDD(selectedDate);
 
-    // Check if selected date is one of the barber's unavailable dates
     if (barberUnavailableDates.some(ud => ud.date === targetDateStr)) {
       setAvailableTimeSlots([]);
       setSelectedTimeSlot(null);
@@ -271,7 +281,7 @@ export default function BookingPage() {
     }
     setAvailableTimeSlots(slots);
     setSelectedTimeSlot(null);
-  }, [selectedService, selectedDate, schedule, existingAppointments, barberUnavailableDates]);
+  }, [selectedService, selectedDate, schedule, existingAppointments, barberUnavailableDates, barber?.isAcceptingBookings]);
 
 
   const handleServiceSelect = (serviceId: string) => {
@@ -383,6 +393,11 @@ export default function BookingPage() {
       toast({ title: "Error", description: "Missing booking information.", variant: "destructive" });
       return;
     }
+     if (barber.isAcceptingBookings === false) {
+      toast({ title: "Booking Not Allowed", description: "This barber is not currently accepting new online bookings.", variant: "destructive" });
+      setIsSubmitting(false);
+      return;
+    }
     setIsSubmitting(true);
 
     const selectedDateStr = formatDateToYYYYMMDD(selectedDate);
@@ -484,6 +499,27 @@ export default function BookingPage() {
     );
   }
   
+  const barberIsAcceptingBookings = barber.isAcceptingBookings !== undefined ? barber.isAcceptingBookings : true;
+
+  if (!barberIsAcceptingBookings) {
+    return (
+      <ProtectedPage expectedRole="customer">
+        <div className="space-y-6 max-w-xl mx-auto text-center py-10">
+          <AlertTriangle className="mx-auto h-16 w-16 text-yellow-500 mb-4" />
+          <h1 className="text-2xl font-bold font-headline">
+            Booking Not Available
+          </h1>
+          <p className="text-base text-gray-600">
+            {barber.firstName} {barber.lastName} is not currently accepting new online bookings. Please check back later or contact them directly.
+          </p>
+          <Button onClick={() => router.push(`/customer/view-barber/${barberId}`)} className="mt-6 h-12 rounded-full px-6 text-base">
+            Back to Barber's Profile
+          </Button>
+        </div>
+      </ProtectedPage>
+    );
+  }
+
   const renderStepContent = () => {
     switch (bookingStep) {
       case 'selectService':
@@ -683,33 +719,32 @@ export default function BookingPage() {
                 </CardHeader>
                 <CardContent className="space-y-3 text-base">
                     {newlyBookedAppointment && barber && (
-                    <div className="pb-2 mb-3 border-b border-gray-200">
-                        <p className="text-lg font-semibold">Your Appointment Details:</p>
-                        <p><span className="font-medium">{newlyBookedAppointment.serviceName}</span></p>
-                        <p>With: <span className="font-medium">{barber.firstName} {barber.lastName}</span></p>
-                        <p>Time: <span className="font-medium text-[#0088E0]">{newlyBookedAppointment.startTime}</span> today.</p>
+                    <div className="pb-3 mb-4 border-b border-border">
+                        <p className="text-lg font-semibold text-foreground">Your Appointment:</p>
+                        <p><span className="font-medium">{newlyBookedAppointment.serviceName}</span> with <span className="font-medium">{barber.firstName} {barber.lastName}</span></p>
+                        <p>Today at <span className="font-medium text-[#0088E0]">{newlyBookedAppointment.startTime}</span>.</p>
                     </div>
                     )}
 
-                    <div className="space-y-1">
+                    <div className="space-y-1.5">
                         {isCurrentUserNext && (
-                             <p className="text-lg font-semibold text-green-600">You are next in line!</p>
+                             <p className="text-xl font-semibold text-green-600">You are next in line!</p>
                         )}
                         {queuePosition && !isCurrentUserNext && (
-                             <p className="text-md">Your position in line: <span className="font-bold text-primary">#{queuePosition}</span></p>
+                             <p className="text-lg">Your position: <span className="font-bold text-2xl text-primary">#{queuePosition}</span></p>
                         )}
                         {estimatedWaitTime !== null && estimatedWaitTime > 0 && !isCurrentUserNext && (
                         <p className="text-md">Estimated wait: <span className="font-semibold text-primary">~{estimatedWaitTime} minutes</span></p>
                         )}
                         {currentlyServingCustomerName && (
-                        <p className="text-sm text-gray-600">Currently serving: <span className="font-medium text-foreground">{currentlyServingCustomerName}</span>.</p>
+                        <p className="text-sm text-muted-foreground">Currently serving: <span className="font-medium text-foreground">{currentlyServingCustomerName}</span>.</p>
                         )}
                         {!currentlyServingCustomerName && queuePosition === 1 && !isCurrentUserNext && (
-                             <p className="text-sm text-gray-600">You are at the front of the queue. The barber will call you shortly.</p>
+                             <p className="text-md text-muted-foreground">You are at the front of the queue. The barber will call you shortly.</p>
                         )}
                     </div>
 
-                    <p className="text-xs text-gray-500 pt-4">
+                    <p className="text-xs text-muted-foreground pt-4">
                         Note: Queue information is based on current bookings and may change.
                     </p>
                     <Button onClick={() => router.push('/customer/dashboard')} className="mt-6 w-full max-w-xs mx-auto h-14 rounded-full text-lg">

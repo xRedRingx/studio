@@ -12,11 +12,11 @@ import { firestore } from '@/firebase/config';
 import { collection, doc, getDoc, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { ArrowLeft, CalendarPlus, Scissors, DollarSign, Clock, UserCircle } from 'lucide-react';
+import { ArrowLeft, CalendarPlus, Scissors, DollarSign, Clock, UserCircle, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 
 export default function ViewBarberPage() {
-  const { user } = useAuth(); // Though not directly used, ProtectedPage relies on it
+  const { user } = useAuth(); 
   const router = useRouter();
   const params = useParams();
   const barberId = params.barberId as string;
@@ -28,24 +28,27 @@ export default function ViewBarberPage() {
 
   const fetchBarberAndServices = useCallback(async () => {
     if (!barberId) {
-        router.push('/customer/dashboard'); // Should not happen if routing is correct
+        router.push('/customer/dashboard');
         return;
     }
     setIsLoading(true);
     try {
-      // Fetch barber details
       const barberDocRef = doc(firestore, 'users', barberId);
       const barberDocSnap = await getDoc(barberDocRef);
 
       if (barberDocSnap.exists() && barberDocSnap.data().role === 'barber') {
-        setBarber({ id: barberDocSnap.id, ...barberDocSnap.data() } as AppUser);
+        const barberData = barberDocSnap.data() as AppUser;
+        // Default isAcceptingBookings to true if undefined or null
+        const isAccepting = barberData.isAcceptingBookings !== undefined && barberData.isAcceptingBookings !== null 
+                            ? barberData.isAcceptingBookings 
+                            : true;
+        setBarber({ id: barberDocSnap.id, ...barberData, isAcceptingBookings: isAccepting });
       } else {
         toast({ title: "Error", description: "Barber not found.", variant: "destructive" });
         router.push('/customer/dashboard');
         return;
       }
 
-      // Fetch barber's services
       const servicesQuery = query(
         collection(firestore, 'services'),
         where('barberId', '==', barberId),
@@ -80,7 +83,6 @@ export default function ViewBarberPage() {
   }
 
   if (!barber) {
-    // This case should ideally be handled by the loading state or redirect within fetch function
     return (
       <ProtectedPage expectedRole="customer">
         <div className="text-center py-10">
@@ -92,6 +94,8 @@ export default function ViewBarberPage() {
       </ProtectedPage>
     );
   }
+  
+  const barberIsAcceptingBookings = barber.isAcceptingBookings !== undefined ? barber.isAcceptingBookings : true;
 
   return (
     <ProtectedPage expectedRole="customer">
@@ -114,6 +118,20 @@ export default function ViewBarberPage() {
           </CardHeader>
           
           <CardContent className="p-4 md:p-6">
+            {!barberIsAcceptingBookings && (
+                <div className="mb-6 p-4 border-l-4 border-yellow-500 bg-yellow-50 rounded-md shadow-sm">
+                    <div className="flex">
+                        <div className="flex-shrink-0">
+                        <AlertTriangle className="h-5 w-5 text-yellow-500" aria-hidden="true" />
+                        </div>
+                        <div className="ml-3">
+                        <p className="text-sm text-yellow-700">
+                            {barber.firstName} is not currently accepting new online bookings. Please check back later.
+                        </p>
+                        </div>
+                    </div>
+                </div>
+            )}
             <h3 className="text-xl font-semibold mb-4 text-foreground">Services Offered</h3>
             {services.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -137,10 +155,19 @@ export default function ViewBarberPage() {
           </CardContent>
 
           <CardFooter className="p-4 md:p-6 border-t">
-            <Button asChild className="w-full sm:w-auto h-14 rounded-full text-lg">
-              <Link href={`/customer/book/${barberId}`}>
-                <CalendarPlus className="mr-2 h-5 w-5" /> Book with {barber.firstName}
-              </Link>
+            <Button 
+                asChild={barberIsAcceptingBookings} 
+                className="w-full sm:w-auto h-14 rounded-full text-lg"
+                disabled={!barberIsAcceptingBookings}
+            >
+              {barberIsAcceptingBookings ? (
+                <Link href={`/customer/book/${barberId}`}>
+                  <CalendarPlus className="mr-2 h-5 w-5" /> Book with {barber.firstName}
+                </Link>
+              ) : (
+                // Button is disabled, so text is just for display if needed, but AlertTriangle message is primary
+                <><CalendarPlus className="mr-2 h-5 w-5" /> Not Accepting Bookings</>
+              )}
             </Button>
           </CardFooter>
         </Card>

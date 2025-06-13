@@ -152,21 +152,27 @@ export default function CustomerDashboardPage() {
       const usersCollection = collection(firestore, 'users');
       const q = query(usersCollection, where('role', '==', 'barber'), orderBy('firstName', 'asc'));
       const querySnapshot = await getDocs(q);
-      const fetchedBarbers: AppUser[] = [];
+      const fetchedBarbersData: AppUser[] = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data();
-        fetchedBarbers.push({
-          uid: doc.id,
-          id: doc.id, // Ensure id is present for key prop or other uses
-          firstName: data.firstName,
-          lastName: data.lastName,
-          role: data.role,
-          phoneNumber: data.phoneNumber,
-        } as AppUser); 
+        // Default isAcceptingBookings to true if undefined or null
+        const isAccepting = data.isAcceptingBookings !== undefined && data.isAcceptingBookings !== null ? data.isAcceptingBookings : true;
+        
+        if (isAccepting) { // Only add barbers who are accepting bookings
+            fetchedBarbersData.push({
+            uid: doc.id,
+            id: doc.id, 
+            firstName: data.firstName,
+            lastName: data.lastName,
+            role: data.role,
+            phoneNumber: data.phoneNumber,
+            isAcceptingBookings: isAccepting, // Store the resolved value
+            } as AppUser);
+        }
       });
-      setAvailableBarbers(fetchedBarbers);
+      setAvailableBarbers(fetchedBarbersData);
       if (typeof window !== 'undefined') {
-        localStorage.setItem(LS_AVAILABLE_BARBERS_KEY, JSON.stringify(fetchedBarbers));
+        localStorage.setItem(LS_AVAILABLE_BARBERS_KEY, JSON.stringify(fetchedBarbersData));
       }
     } catch (error) {
       console.error("Error fetching barbers:", error);
@@ -301,7 +307,7 @@ export default function CustomerDashboardPage() {
                 <p className="ml-3 text-base">Loading available barbers...</p>
               </div>
             ) : availableBarbers.length === 0 ? (
-              <p className="text-sm text-gray-500">No barbers are currently available.</p>
+              <p className="text-base text-gray-500">No barbers are currently accepting online bookings.</p>
             ) : (
               <div className="space-y-4">
                 {availableBarbers.map(barber => (
