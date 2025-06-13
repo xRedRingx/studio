@@ -76,7 +76,7 @@ export default function ManageServicesSection({
           <CardTitle className="text-2xl font-bold">Manage Services</CardTitle>
           <CardDescription className="text-sm text-gray-500 mt-1">Add, edit, or remove the services you offer.</CardDescription>
         </div>
-        <Button onClick={() => handleOpenDialog()} size="sm" className="rounded-full h-10 px-4 w-full sm:w-auto" disabled={isSubmitting}>
+        <Button onClick={() => handleOpenDialog()} className="rounded-full h-10 px-4 w-full sm:w-auto" disabled={isSubmitting}>
           <PlusCircle className="mr-2 h-4 w-4" /> Add New
         </Button>
       </CardHeader>
@@ -116,7 +116,7 @@ export default function ManageServicesSection({
                         </AlertDialogHeader>
                         <AlertDialogFooter className="mt-4">
                           <AlertDialogCancel onClick={() => setServiceToDelete(null)} className="rounded-full h-10 px-4" disabled={isSubmitting}>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={handleDeleteConfirm} className="rounded-full h-10 px-4" disabled={isSubmitting}>
+                          <AlertDialogAction onClick={handleDeleteConfirm} className="rounded-full h-10 px-4 bg-destructive hover:bg-destructive/90 text-destructive-foreground" disabled={isSubmitting}>
                             {isSubmitting ? <LoadingSpinner className="mr-2 h-4 w-4" /> : null}
                             {isSubmitting ? 'Deleting...' : 'Delete'}
                           </AlertDialogAction>

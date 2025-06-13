@@ -128,11 +128,9 @@ export default function BarberDashboardPage() {
     setInitialLoadComplete(true);
   }, []);
 
-  useEffect(() => {
+ useEffect(() => {
     if (user) {
-      setLocalIsAcceptingBookings(
-        user.isAcceptingBookings !== undefined ? user.isAcceptingBookings : true
-      );
+      setLocalIsAcceptingBookings(user.isAcceptingBookings !== undefined ? user.isAcceptingBookings : true);
     }
   }, [user]);
 
@@ -387,12 +385,16 @@ export default function BarberDashboardPage() {
     setIsUpdatingAcceptingBookings(true);
     try {
       await updateUserAcceptingBookings(user.uid, newCheckedState);
+      // The user object in AuthContext will be updated by updateUserAcceptingBookings
+      // which will trigger the useEffect to sync localIsAcceptingBookings
       toast({
         title: "Status Updated",
         description: `You are now ${newCheckedState ? 'accepting' : 'not accepting'} new online bookings.`,
       });
     } catch (error) {
       console.error("Error updating accepting bookings status:", error);
+      // Revert optimistic update on error
+      // The useEffect listening to `user` will handle this if user object in context isn't updated.
       toast({ title: "Error", description: "Could not update your booking status.", variant: "destructive" });
     } finally {
       setIsUpdatingAcceptingBookings(false);

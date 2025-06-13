@@ -153,7 +153,7 @@ export default function ManageUnavailableDatesSection({
                   </div>
                    <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" onClick={() => setDateToRemove(ud)} disabled={isProcessing}>
+                        <Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10 rounded-full h-9 w-9" onClick={() => setDateToRemove(ud)} disabled={isProcessing}>
                           <Trash2 className="h-4 w-4" />
                           <span className="sr-only">Remove {ud.date}</span>
                         </Button>
@@ -166,9 +166,9 @@ export default function ManageUnavailableDatesSection({
                             Customers will be able to book on this day again.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel onClick={() => setDateToRemove(null)} disabled={isProcessing}>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={handleConfirmRemove} disabled={isProcessing} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                        <AlertDialogFooter className="mt-4">
+                          <AlertDialogCancel onClick={() => setDateToRemove(null)} disabled={isProcessing} className="rounded-full h-10 px-4">Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleConfirmRemove} disabled={isProcessing} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded-full h-10 px-4">
                             {isProcessing ? <LoadingSpinner className="mr-2 h-4 w-4" /> : null}
                             Remove
                           </AlertDialogAction>
