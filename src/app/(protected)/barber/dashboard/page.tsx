@@ -1,11 +1,12 @@
 
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import ProtectedPage from '@/components/layout/ProtectedPage';
 import { useAuth } from '@/hooks/useAuth';
 import type { BarberService, Appointment, DayOfWeek, BarberScheduleDoc, UnavailableDate, AppUser } from '@/types';
 import TodaysAppointmentsSection from '@/components/barber/TodaysAppointmentsSection';
-import WalkInDialog from '@/components/barber/WalkInDialog';
+// import WalkInDialog from '@/components/barber/WalkInDialog'; // Removed direct import
 import { firestore } from '@/firebase/config';
 import {
   collection,
@@ -31,6 +32,10 @@ import { getItemWithTimestampRevival, setItemWithTimestampConversion, LS_SERVICE
 import type { DayAvailability as ScheduleDayAvailability } from '@/types';
 import { getDoc as getFirestoreDoc } from 'firebase/firestore';
 
+const WalkInDialog = dynamic(() => import('@/components/barber/WalkInDialog'), {
+  loading: () => <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-[100]"><LoadingSpinner className="h-8 w-8 text-primary" /></div>,
+  ssr: false
+});
 
 const formatDateToYYYYMMDD = (date: Date): string => {
   return date.toISOString().split('T')[0];
@@ -89,10 +94,10 @@ export default function BarberDashboardPage() {
   }, []);
 
  useEffect(() => {
-    if (user) {
+    if (user) { // Initialize local state when user data is available or changes
       setLocalIsAcceptingBookings(user.isAcceptingBookings !== undefined ? user.isAcceptingBookings : true);
     }
-  }, [user]);
+  }, [user]); // Dependency array includes 'user'
 
 
   useEffect(() => {
@@ -344,6 +349,8 @@ export default function BarberDashboardPage() {
     } catch (error) {
       console.error("Error updating accepting bookings status:", error);
       toast({ title: "Error", description: "Could not update your booking status.", variant: "destructive" });
+      // Revert optimistic update on error by syncing with the actual user context
+      // This will be handled by the useEffect that depends on `user`
     } finally {
       setIsUpdatingAcceptingBookings(false);
     }

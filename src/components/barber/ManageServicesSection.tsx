@@ -2,10 +2,11 @@
 'use client';
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import type { BarberService } from '@/types';
-import ServiceDialog from './ServiceDialog';
+// import ServiceDialog from './ServiceDialog'; // Removed direct import
 import { PlusCircle, Edit3, Trash2, DollarSign, Clock } from 'lucide-react';
 import {
   AlertDialog,
@@ -19,6 +20,11 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import LoadingSpinner from '@/components/ui/loading-spinner';
+
+const ServiceDialog = dynamic(() => import('./ServiceDialog'), {
+  loading: () => <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-[100]"><LoadingSpinner className="h-8 w-8 text-primary" /></div>,
+  ssr: false // Dialogs are client-side only
+});
 
 interface ManageServicesSectionProps {
   services: BarberService[];
@@ -76,7 +82,7 @@ export default function ManageServicesSection({
           <CardTitle className="text-2xl font-bold">Manage Services</CardTitle>
           <CardDescription className="text-sm text-gray-500 mt-1">Add, edit, or remove the services you offer.</CardDescription>
         </div>
-        <Button onClick={() => handleOpenDialog()} className="rounded-full h-10 px-4 w-full sm:w-auto" disabled={isSubmitting}>
+        <Button onClick={() => handleOpenDialog()} className="rounded-full h-11 px-6 text-base w-full sm:w-auto" disabled={isSubmitting}>
           <PlusCircle className="mr-2 h-4 w-4" /> Add New
         </Button>
       </CardHeader>
