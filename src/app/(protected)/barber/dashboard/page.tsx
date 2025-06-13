@@ -117,10 +117,8 @@ export default function BarberDashboardPage() {
   const [isProcessingWalkIn, setIsProcessingWalkIn] = useState(false);
   const [isLoadingBarberSelfData, setIsLoadingBarberSelfData] = useState(true);
   
-  // Local state for the switch
-  const [localIsAcceptingBookings, setLocalIsAcceptingBookings] = useState(
-    user?.isAcceptingBookings !== undefined ? user.isAcceptingBookings : true
-  );
+  // Local state for the switch, initialized to true, useEffect will sync it.
+  const [localIsAcceptingBookings, setLocalIsAcceptingBookings] = useState(true);
   const [isUpdatingAcceptingBookings, setIsUpdatingAcceptingBookings] = useState(false);
 
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
@@ -131,12 +129,14 @@ export default function BarberDashboardPage() {
 
   // Effect to sync local switch state with AuthContext user state
   useEffect(() => {
+    // This effect syncs local state with the AuthContext user state
+    // when the user object changes (e.g., on load, or after an update via AuthContext)
     if (user) {
       setLocalIsAcceptingBookings(
         user.isAcceptingBookings !== undefined ? user.isAcceptingBookings : true
       );
     }
-  }, [user, user?.isAcceptingBookings]);
+  }, [user]); // Depend only on the user object from AuthContext
 
 
   useEffect(() => {
@@ -389,7 +389,7 @@ export default function BarberDashboardPage() {
     setIsUpdatingAcceptingBookings(true);
     try {
       await updateUserAcceptingBookings(user.uid, newCheckedState);
-      // AuthContext will update its user state, which then syncs back via useEffect.
+      // AuthContext will update its user state, which then syncs back via the useEffect listening to [user].
       toast({
         title: "Status Updated",
         description: `You are now ${newCheckedState ? 'accepting' : 'not accepting'} new online bookings.`,
@@ -397,10 +397,10 @@ export default function BarberDashboardPage() {
     } catch (error) {
       console.error("Error updating accepting bookings status:", error);
       toast({ title: "Error", description: "Could not update your booking status.", variant: "destructive" });
-      // Revert optimistic UI update if API call fails by relying on useEffect to sync from context
-      // which would still hold the old value if AuthContext's setUser wasn't reached or errored.
-      // Or, more explicitly:
-      if (user) {
+      // Revert optimistic UI by relying on the useEffect to sync from AuthContext's user,
+      // which would still hold the old value if the Firestore update failed.
+      // For explicitness, one could also do:
+      if (user) { // Check if user is not null
          setLocalIsAcceptingBookings(user.isAcceptingBookings !== undefined ? user.isAcceptingBookings : true);
       }
     } finally {
@@ -490,3 +490,4 @@ export default function BarberDashboardPage() {
     </ProtectedPage>
   );
 }
+
