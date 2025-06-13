@@ -117,7 +117,6 @@ export default function BarberDashboardPage() {
   const [isProcessingWalkIn, setIsProcessingWalkIn] = useState(false);
   const [isLoadingBarberSelfData, setIsLoadingBarberSelfData] = useState(true);
   
-  // Local state for the switch, initialized to true, useEffect will sync it.
   const [localIsAcceptingBookings, setLocalIsAcceptingBookings] = useState(true);
   const [isUpdatingAcceptingBookings, setIsUpdatingAcceptingBookings] = useState(false);
 
@@ -127,16 +126,13 @@ export default function BarberDashboardPage() {
     setInitialLoadComplete(true);
   }, []);
 
-  // Effect to sync local switch state with AuthContext user state
   useEffect(() => {
-    // This effect syncs local state with the AuthContext user state
-    // when the user object changes (e.g., on load, or after an update via AuthContext)
     if (user) {
       setLocalIsAcceptingBookings(
         user.isAcceptingBookings !== undefined ? user.isAcceptingBookings : true
       );
     }
-  }, [user]); // Depend only on the user object from AuthContext
+  }, [user]);
 
 
   useEffect(() => {
@@ -385,11 +381,10 @@ export default function BarberDashboardPage() {
   const handleToggleAcceptingBookings = async (newCheckedState: boolean) => {
     if (!user || !updateUserAcceptingBookings) return;
 
-    setLocalIsAcceptingBookings(newCheckedState); // Optimistic UI update
+    setLocalIsAcceptingBookings(newCheckedState); 
     setIsUpdatingAcceptingBookings(true);
     try {
       await updateUserAcceptingBookings(user.uid, newCheckedState);
-      // AuthContext will update its user state, which then syncs back via the useEffect listening to [user].
       toast({
         title: "Status Updated",
         description: `You are now ${newCheckedState ? 'accepting' : 'not accepting'} new online bookings.`,
@@ -397,12 +392,8 @@ export default function BarberDashboardPage() {
     } catch (error) {
       console.error("Error updating accepting bookings status:", error);
       toast({ title: "Error", description: "Could not update your booking status.", variant: "destructive" });
-      // Revert optimistic UI by relying on the useEffect to sync from AuthContext's user,
-      // which would still hold the old value if the Firestore update failed.
-      // For explicitness, one could also do:
-      if (user) { // Check if user is not null
-         setLocalIsAcceptingBookings(user.isAcceptingBookings !== undefined ? user.isAcceptingBookings : true);
-      }
+      // The useEffect listening to [user] will handle reverting localIsAcceptingBookings
+      // if the AuthContext's user state hasn't changed due to the error.
     } finally {
       setIsUpdatingAcceptingBookings(false);
     }
