@@ -76,7 +76,7 @@ export default function UserNav() {
       if (permission === 'granted') {
         // IMPORTANT: Replace "YOUR_WEB_PUSH_CERTIFICATE_KEY_PAIR" with your actual VAPID key 
         // from Firebase Project Settings > Cloud Messaging > Web configuration > Web Push certificates
-        const currentToken = await getToken(messaging, { vapidKey: "BCl2L2xL8A8pM8M9G5J7c7Q_7FhY2jT5R7zH7L8bN1Xy_3XkY6nQzM4G1wO3kFjP1vA9sC0dE2bU8g" }); 
+        const currentToken = await getToken(messaging, { vapidKey: "BFYxArauaN91bGFF6uqe6uljMXgcvXJtUSc_BDmUG4EjiVSaAhBZ2uwxWnGFiwm9oWGzMx6YPBGnijsE0OcP0no" }); 
         if (currentToken) {
           await updateUserFCMToken(user.uid, currentToken);
           // Toast is handled by updateUserFCMToken
