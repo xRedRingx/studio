@@ -3,8 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import ProtectedPage from '@/components/layout/ProtectedPage';
 import { useAuth } from '@/hooks/useAuth';
-import type { BarberService, Appointment, DayOfWeek, BarberScheduleDoc, UnavailableDate } from '@/types'; // DayAvailability, BarberScheduleDoc, UnavailableDate might be removable if not used by walkin or today's appts directly
-import ManageServicesSection from '@/components/barber/ManageServicesSection'; // Will be removed from here, but WalkInDialog needs services
+import type { BarberService, Appointment, DayOfWeek, BarberScheduleDoc, UnavailableDate, AppUser } from '@/types';
 import TodaysAppointmentsSection from '@/components/barber/TodaysAppointmentsSection';
 import WalkInDialog from '@/components/barber/WalkInDialog';
 import { firestore } from '@/firebase/config';
@@ -19,13 +18,14 @@ import {
   deleteDoc,
   orderBy,
   Timestamp,
-  // setDoc, // May not be needed if schedule/unavailable are moved
-  // getDoc, // May not be needed if schedule/unavailable are moved
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { Button } from '@/components/ui/button';
-import { PlusCircle } from 'lucide-react';
+import { PlusCircle, Settings2 } from 'lucide-react'; // Added Settings2 for toggle section
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'; // For styling the toggle section
 
 // Keep for WalkInDialog time calculations
 const formatDateToYYYYMMDD = (date: Date): string => {
@@ -88,13 +88,11 @@ const minutesToTime = (totalMinutes: number): string => {
 };
 
 
-const LS_SERVICES_KEY_DASHBOARD = 'barber_dashboard_services'; // Renamed to avoid conflict
-const LS_APPOINTMENTS_KEY_DASHBOARD = 'barber_dashboard_appointments'; // Renamed
-// Removed LS keys for schedule and unavailable dates as they are managed on separate pages
+const LS_SERVICES_KEY_DASHBOARD = 'barber_dashboard_services';
+const LS_APPOINTMENTS_KEY_DASHBOARD = 'barber_dashboard_appointments';
 
-// Barber's own schedule and unavailable dates are needed for walk-in validation
-import type { DayAvailability as ScheduleDayAvailability } from '@/types'; // Alias for clarity
-import { getDoc as getFirestoreDoc } from 'firebase/firestore'; // Specific import for clarity
+import type { DayAvailability as ScheduleDayAvailability } from '@/types';
+import { getDoc as getFirestoreDoc } from 'firebase/firestore';
 
 const INITIAL_SCHEDULE_FOR_WALKIN_CHECK: ScheduleDayAvailability[] = (['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as DayOfWeek[]).map(day => ({
   day,
@@ -105,23 +103,21 @@ const INITIAL_SCHEDULE_FOR_WALKIN_CHECK: ScheduleDayAvailability[] = (['Monday',
 
 
 export default function BarberDashboardPage() {
-  const { user } = useAuth();
+  const { user, setUser, updateUserAcceptingBookings } = useAuth(); // Added setUser and updateUserAcceptingBookings
   const { toast } = useToast();
 
   const [services, setServices] = useState<BarberService[]>([]);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  // State for barber's own schedule and unavailable dates, fetched for walk-in validation
   const [barberScheduleForWalkin, setBarberScheduleForWalkin] = useState<ScheduleDayAvailability[]>(INITIAL_SCHEDULE_FOR_WALKIN_CHECK);
   const [barberUnavailableDatesForWalkin, setBarberUnavailableDatesForWalkin] = useState<UnavailableDate[]>([]);
-
 
   const [isLoadingServices, setIsLoadingServices] = useState(true);
   const [isLoadingAppointments, setIsLoadingAppointments] = useState(true);
   const [isUpdatingAppointment, setIsUpdatingAppointment] = useState(false);
   const [isWalkInDialogOpen, setIsWalkInDialogOpen] = useState(false);
   const [isProcessingWalkIn, setIsProcessingWalkIn] = useState(false);
-  const [isLoadingBarberSelfData, setIsLoadingBarberSelfData] = useState(true); // For schedule/unavailable for walkin
-
+  const [isLoadingBarberSelfData, setIsLoadingBarberSelfData] = useState(true);
+  const [isUpdatingAcceptingBookings, setIsUpdatingAcceptingBookings] = useState(false); // New state for toggle
 
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
 
@@ -134,19 +130,16 @@ export default function BarberDashboardPage() {
       const cachedServices = localStorage.getItem(LS_SERVICES_KEY_DASHBOARD);
       if (cachedServices) {
         setServices(convertISOToTimestamps(JSON.parse(cachedServices)));
-        setIsLoadingServices(false); 
+        setIsLoadingServices(false);
       }
       const cachedAppointments = localStorage.getItem(LS_APPOINTMENTS_KEY_DASHBOARD);
       if (cachedAppointments) {
         setAppointments(convertISOToTimestamps(JSON.parse(cachedAppointments)));
         setIsLoadingAppointments(false);
       }
-       // No local storage for barber's own schedule/unavailable for walkin here, fetched fresh
     }
   }, [initialLoadComplete]);
 
-
-  // --- Services (still needed for WalkInDialog) ---
   const fetchServices = useCallback(async () => {
     if (!user?.uid) return;
     setIsLoadingServices(true);
@@ -170,7 +163,6 @@ export default function BarberDashboardPage() {
     }
   }, [user?.uid, toast]);
 
-  // --- Appointments ---
   const fetchAppointments = useCallback(async () => {
     if (!user?.uid) return;
     setIsLoadingAppointments(true);
@@ -220,21 +212,18 @@ export default function BarberDashboardPage() {
     }
   };
 
-  // --- Fetch Barber's own schedule and unavailable dates for Walk-In validation ---
   const fetchBarberSelfDataForWalkIn = useCallback(async () => {
     if (!user?.uid) return;
     setIsLoadingBarberSelfData(true);
     try {
-      // Fetch schedule
       const scheduleDocRef = doc(firestore, 'barberSchedules', user.uid);
       const scheduleSnap = await getFirestoreDoc(scheduleDocRef);
       if (scheduleSnap.exists()) {
         setBarberScheduleForWalkin((scheduleSnap.data() as BarberScheduleDoc).schedule);
       } else {
-        setBarberScheduleForWalkin(INITIAL_SCHEDULE_FOR_WALKIN_CHECK); // Fallback if no schedule set
+        setBarberScheduleForWalkin(INITIAL_SCHEDULE_FOR_WALKIN_CHECK);
       }
 
-      // Fetch unavailable dates
       const unavailableDatesColRef = collection(firestore, `barberSchedules/${user.uid}/unavailableDates`);
       const unavailableDatesQuery = query(unavailableDatesColRef);
       const unavailableDatesSnapshot = await getDocs(unavailableDatesQuery);
@@ -252,8 +241,6 @@ export default function BarberDashboardPage() {
     }
   }, [user?.uid, toast]);
 
-
-  // --- Walk-In ---
   const handleSaveWalkIn = async (serviceId: string, customerName: string) => {
     if (!user || !user.uid || !user.firstName || !user.lastName) {
       toast({ title: "Error", description: "User information is incomplete.", variant: "destructive" });
@@ -381,15 +368,39 @@ export default function BarberDashboardPage() {
     }
   };
 
+  // New handler for toggling booking acceptance
+  const handleToggleAcceptingBookings = async (isAccepting: boolean) => {
+    if (!user || !updateUserAcceptingBookings) return;
+    setIsUpdatingAcceptingBookings(true);
+    try {
+      await updateUserAcceptingBookings(user.uid, isAccepting);
+      // setUser directly updates the user in AuthContext, which should propagate here.
+      // No need to call setUser from this component if AuthContext handles it.
+      toast({
+        title: "Status Updated",
+        description: `You are now ${isAccepting ? 'accepting' : 'not accepting'} new online bookings.`,
+      });
+    } catch (error) {
+      console.error("Error updating accepting bookings status:", error);
+      toast({ title: "Error", description: "Could not update your booking status.", variant: "destructive" });
+      // Revert optimistic UI update if API call fails - AuthContext should ideally handle this
+      // or we can force a refresh of the user object.
+      // For now, the user object in AuthContext is the source of truth.
+    } finally {
+      setIsUpdatingAcceptingBookings(false);
+    }
+  };
 
   useEffect(() => {
     if (user?.uid && initialLoadComplete) { 
-      fetchServices(); // Still needed for WalkInDialog
+      fetchServices();
       fetchAppointments();
-      fetchBarberSelfDataForWalkIn(); // Fetch barber's own data for walk-in validation
+      fetchBarberSelfDataForWalkIn();
     }
   }, [user?.uid, fetchServices, fetchAppointments, fetchBarberSelfDataForWalkIn, initialLoadComplete]);
 
+  // Determine the checked state for the switch, defaulting to true if undefined
+  const isAcceptingBookingsChecked = user?.isAcceptingBookings !== undefined ? user.isAcceptingBookings : true;
 
   return (
     <ProtectedPage expectedRole="barber">
@@ -407,6 +418,38 @@ export default function BarberDashboardPage() {
                 Add Walk-In
             </Button>
         </div>
+
+        {/* Accepting Bookings Toggle Section */}
+        <Card className="border-none shadow-lg rounded-xl overflow-hidden">
+          <CardHeader className="p-4 md:p-6">
+            <CardTitle className="text-xl font-bold flex items-center">
+              <Settings2 className="mr-2 h-5 w-5 text-primary" />
+              Online Booking Status
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4 md:p-6">
+            {user ? (
+              <div className="flex items-center space-x-3">
+                <Switch
+                  id="accepting-bookings-toggle"
+                  checked={isAcceptingBookingsChecked}
+                  onCheckedChange={handleToggleAcceptingBookings}
+                  disabled={isUpdatingAcceptingBookings}
+                  aria-label="Toggle accepting new online bookings"
+                />
+                <Label htmlFor="accepting-bookings-toggle" className="text-base">
+                  {isAcceptingBookingsChecked ? 'Accepting New Online Bookings' : 'Not Accepting New Online Bookings'}
+                </Label>
+                {isUpdatingAcceptingBookings && <LoadingSpinner className="h-5 w-5 text-primary ml-2" />}
+              </div>
+            ) : (
+              <p>Loading booking status...</p>
+            )}
+             <p className="text-sm text-gray-500 mt-2">
+              Turn this off to temporarily prevent new customers from booking online. Existing appointments will not be affected.
+            </p>
+          </CardContent>
+        </Card>
 
         {(isLoadingAppointments && !appointments.length) ? (
           <div className="flex justify-center items-center py-10">
@@ -426,7 +469,7 @@ export default function BarberDashboardPage() {
             isOpen={isWalkInDialogOpen}
             onClose={() => setIsWalkInDialogOpen(false)}
             onSubmit={handleSaveWalkIn}
-            services={services} // Pass services to dialog
+            services={services}
             isSubmitting={isProcessingWalkIn}
         />
       )}
