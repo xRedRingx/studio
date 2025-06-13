@@ -55,23 +55,50 @@ export default function ManageUnavailableDatesSection({
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
+  const alreadyMarkedUnavailableDays = unavailableDates.map(ud => {
+    // Ensure correct parsing of YYYY-MM-DD into a Date object for the local timezone
+    const [year, month, day] = ud.date.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  });
+
+  const modifiers = {
+    alreadyUnavailable: alreadyMarkedUnavailableDays,
+  };
+
+  const modifiersStyles = {
+    alreadyUnavailable: {
+      backgroundColor: 'hsl(var(--muted))',
+      color: 'hsl(var(--muted-foreground)/0.6)',
+      border: '1px dashed hsl(var(--border))',
+      borderRadius: 'var(--radius-sm, 0.375rem)', // Use ShadCN's radius if available or a default
+    },
+  };
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedDate) {
-      // This should ideally be caught by disabling the button if no date is selected
       alert("Please select a date.");
       return;
     }
     const dateString = formatDateToYYYYMMDD(selectedDate);
     await onAddUnavailableDate(dateString, reason || undefined);
-    setSelectedDate(new Date()); // Reset to today or clear
+    // Don't reset selectedDate here, let user pick another or clear it
     setReason('');
-    setIsCalendarOpen(false);
+    // Calendar might close automatically, or user closes it.
   };
 
   const handleDateSelect = (date: Date | undefined) => {
     if (date) {
-      setSelectedDate(date);
+      // Check if the selected date is already unavailable. If so, don't set it for "add new"
+      const isAlreadyMarked = alreadyMarkedUnavailableDays.some(
+        d => d.getTime() === date.getTime()
+      );
+      if (!isAlreadyMarked) {
+        setSelectedDate(date);
+      } else {
+        // Optionally, provide feedback that this date is already marked
+        // For now, just don't update selectedDate for adding
+      }
       setIsCalendarOpen(false);
     }
   };
@@ -87,7 +114,7 @@ export default function ManageUnavailableDatesSection({
     <Card className="border-none shadow-lg rounded-xl overflow-hidden">
       <CardHeader className="p-4 md:p-6">
         <CardTitle className="text-2xl font-bold">Manage Unavailable Dates</CardTitle>
-        <CardDescription className="text-sm text-gray-500 mt-1">Block out specific dates for holidays or personal time.</CardDescription>
+        <CardDescription className="text-sm text-gray-500 mt-1">Block out specific dates for holidays or personal time. Dates already marked are styled differently in the calendar.</CardDescription>
       </CardHeader>
       <CardContent className="p-4 md:p-6 space-y-6">
         <form onSubmit={handleSubmit} className="space-y-4 p-4 border rounded-lg bg-card shadow-sm">
@@ -114,7 +141,12 @@ export default function ManageUnavailableDatesSection({
                     mode="single"
                     selected={selectedDate}
                     onSelect={handleDateSelect}
-                    disabled={(date) => date < today || unavailableDates.some(ud => ud.date === formatDateToYYYYMMDD(date))}
+                    disabled={[ // This controls actual clickability
+                      { before: today },
+                      ...alreadyMarkedUnavailableDays 
+                    ]}
+                    modifiers={modifiers}
+                    modifiersStyles={modifiersStyles}
                     initialFocus
                   />
                 </PopoverContent>
@@ -129,11 +161,15 @@ export default function ManageUnavailableDatesSection({
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 className="h-12 text-base"
-                disabled={isProcessing}
+                disabled={isProcessing || !selectedDate || (selectedDate && alreadyMarkedUnavailableDays.some(d => d.getTime() === selectedDate.getTime()))}
               />
             </div>
           </div>
-          <Button type="submit" className="h-12 rounded-full text-base" disabled={!selectedDate || isProcessing}>
+          <Button 
+            type="submit" 
+            className="h-12 rounded-full text-base" 
+            disabled={!selectedDate || isProcessing || (selectedDate && alreadyMarkedUnavailableDays.some(d => d.getTime() === selectedDate.getTime()))}
+          >
             {isProcessing ? <LoadingSpinner className="mr-2 h-5 w-5" /> : <PlusCircle className="mr-2 h-5 w-5" />}
             {isProcessing ? 'Adding...' : 'Add Unavailable Date'}
           </Button>
