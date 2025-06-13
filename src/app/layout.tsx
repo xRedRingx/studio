@@ -6,6 +6,23 @@ import { Toaster } from '@/components/ui/toaster';
 import OfflineIndicator from '@/components/layout/OfflineIndicator';
 import { APP_NAME } from '@/lib/constants';
 import { ThemeProvider } from '@/components/layout/ThemeProvider';
+import { PT_Sans, Source_Code_Pro } from 'next/font/google';
+
+const ptSans = PT_Sans({
+  subsets: ['latin'],
+  weight: ['400', '700'],
+  style: ['normal', 'italic'],
+  variable: '--font-pt-sans',
+  display: 'swap',
+});
+
+const sourceCodePro = Source_Code_Pro({
+  subsets: ['latin'],
+  weight: ['400', '700'],
+  style: ['normal'],
+  variable: '--font-source-code-pro',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: APP_NAME,
@@ -21,15 +38,12 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=PT+Sans:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet" />
-        <link href="https://fonts.googleapis.com/css2?family=Source+Code+Pro:wght@400;700&display=swap" rel="stylesheet" />
+        {/* Removed direct Google Font links, next/font handles this now */}
         <meta name="theme-color" content="#5DADE2" media="(prefers-color-scheme: light)" />
         <meta name="theme-color" content="#27272A" media="(prefers-color-scheme: dark)" />
         <link rel="manifest" href="/manifest.json" />
       </head>
-      <body className="font-body antialiased" suppressHydrationWarning>
+      <body className={`${ptSans.variable} ${sourceCodePro.variable} font-body antialiased`} suppressHydrationWarning>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
