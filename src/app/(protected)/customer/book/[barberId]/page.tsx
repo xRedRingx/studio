@@ -14,13 +14,28 @@ import { firestore } from '@/firebase/config';
 import { collection, doc, getDoc, getDocs, query, where, addDoc, Timestamp, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { AlertCircle, CalendarDays, CheckCircle, ChevronLeft, Clock, DollarSign, Scissors, Users, Info, Ban, AlertTriangle } from 'lucide-react';
+import { AlertCircle, CalendarDays, CheckCircle, ChevronLeft, Clock, DollarSign, Scissors, Users, Info, Ban, AlertTriangle, Forward, CircleUser, Check, Edit } from 'lucide-react';
 import { APP_NAME } from '@/lib/constants';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
+import { Progress } from '@/components/ui/progress'; // For visual stepper (optional)
 
 type BookingStep = 'selectService' | 'selectDateTime' | 'confirm' | 'confirmed' | 'queued';
+
+const bookingStepTitles: Record<Exclude<BookingStep, 'confirmed' | 'queued'>, string> = {
+  selectService: "Select a Service",
+  selectDateTime: "Pick Date & Time",
+  confirm: "Confirm Your Booking",
+};
+
+const bookingStepNumbers: Record<Exclude<BookingStep, 'confirmed' | 'queued'>, number> = {
+  selectService: 1,
+  selectDateTime: 2,
+  confirm: 3,
+};
+const totalBookingSteps = 3;
+
 
 const timeToMinutes = (timeStr: string): number => {
   const [time, modifier] = timeStr.split(' ');
@@ -476,6 +491,19 @@ export default function BookingPage() {
     }
   };
 
+  const renderStepProgress = () => {
+    if (bookingStep === 'confirmed' || bookingStep === 'queued') return null;
+    
+    const currentStepNumber = bookingStepNumbers[bookingStep];
+    const currentStepTitle = bookingStepTitles[bookingStep];
+
+    return (
+      <div className="mb-4 text-sm text-gray-600">
+        Step {currentStepNumber} of {totalBookingSteps}: <span className="font-semibold text-primary">{currentStepTitle}</span>
+      </div>
+    );
+  };
+
 
   if (isLoadingBarberDetails || isLoadingCustomerAppointments) {
     return (
@@ -501,7 +529,7 @@ export default function BookingPage() {
   
   const barberIsAcceptingBookings = barber.isAcceptingBookings !== undefined ? barber.isAcceptingBookings : true;
 
-  if (!barberIsAcceptingBookings) {
+  if (!barberIsAcceptingBookings && bookingStep !== 'confirmed' && bookingStep !== 'queued') {
     return (
       <ProtectedPage expectedRole="customer">
         <div className="space-y-6 max-w-xl mx-auto text-center py-10">
@@ -526,7 +554,7 @@ export default function BookingPage() {
         return (
           <Card className="border-none shadow-none">
             <CardHeader className="p-4 md:p-6">
-              <CardTitle className="text-2xl font-bold">Step 1: Select a Service</CardTitle>
+              <CardTitle className="text-2xl font-bold">Select a Service</CardTitle>
               <CardDescription className="text-sm text-gray-500">Choose from the services offered by {barber.firstName || 'this barber'}.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 p-4 md:p-6">
@@ -548,6 +576,7 @@ export default function BookingPage() {
                         <span className="text-[#0088E0]">{service.duration} min</span>
                       </span>
                     </div>
+                    <ChevronLeft className="h-5 w-5 ml-auto text-gray-400 transform rotate-180" />
                   </Button>
                 ))
               )}
@@ -560,7 +589,7 @@ export default function BookingPage() {
         return (
           <Card className="border-none shadow-none">
             <CardHeader className="p-4 md:p-6">
-              <CardTitle className="text-2xl font-bold">Step 2: Pick Date & Time</CardTitle>
+              <CardTitle className="text-2xl font-bold">Pick Date & Time</CardTitle>
               <CardDescription className="text-sm text-gray-500">
                 Selected service: <span className="font-semibold text-foreground">{selectedService?.name}</span>
               </CardDescription>
@@ -653,7 +682,7 @@ export default function BookingPage() {
                     <ChevronLeft className="mr-2 h-4 w-4" /> Back to Services
                 </Button>
                 <Button onClick={handleProceedToConfirm} disabled={!selectedTimeSlot || !selectedService || isDateUnavailable} className="w-full sm:w-auto h-12 rounded-full text-base">
-                  Proceed to Confirmation
+                  Proceed to Confirmation <Forward className="ml-2 h-4 w-4" />
                 </Button>
               </div>
             </CardContent>
@@ -664,24 +693,25 @@ export default function BookingPage() {
         return (
           <Card className="border-none shadow-none">
             <CardHeader className="p-4 md:p-6">
-              <CardTitle className="text-2xl font-bold">Step 3: Confirm Booking</CardTitle>
+              <CardTitle className="text-2xl font-bold">Confirm Booking</CardTitle>
               <CardDescription className="text-sm text-gray-500">Please review your appointment details.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 p-4 md:p-6">
-              <div className="space-y-2 text-base">
-                <p><Scissors className="inline mr-2 h-5 w-5 text-primary" /> Service: <span className="font-semibold">{selectedService?.name}</span></p>
-                <p><Users className="inline mr-2 h-5 w-5 text-primary" /> With: <span className="font-semibold">{barber.firstName} {barber.lastName}</span></p>
-                <p><CalendarDays className="inline mr-2 h-5 w-5 text-primary" /> Date: <span className="font-semibold">{selectedDate ? formatSelectedDateForDisplay(selectedDate) : ''}</span></p>
-                <p><Clock className="inline mr-2 h-5 w-5 text-primary" /> Time: <span className="font-semibold text-[#0088E0]">{selectedTimeSlot}</span></p>
-                <p><DollarSign className="inline mr-2 h-5 w-5 text-primary" /> Price: <span className="font-semibold">${selectedService?.price.toFixed(2)}</span></p>
+              <div className="space-y-2 text-base border-b pb-4 mb-4">
+                 <p className="font-semibold text-lg text-primary mb-2">Review Details:</p>
+                <p><Scissors className="inline mr-2 h-5 w-5 text-gray-500" /> Service: <span className="font-medium">{selectedService?.name}</span></p>
+                <p><CircleUser className="inline mr-2 h-5 w-5 text-gray-500" /> With: <span className="font-medium">{barber.firstName} {barber.lastName}</span></p>
+                <p><CalendarDays className="inline mr-2 h-5 w-5 text-gray-500" /> Date: <span className="font-medium">{selectedDate ? formatSelectedDateForDisplay(selectedDate) : ''}</span></p>
+                <p><Clock className="inline mr-2 h-5 w-5 text-gray-500" /> Time: <span className="font-medium text-[#0088E0]">{selectedTimeSlot}</span></p>
+                <p><DollarSign className="inline mr-2 h-5 w-5 text-gray-500" /> Price: <span className="font-medium">${selectedService?.price.toFixed(2)}</span></p>
               </div>
-              <div className="flex flex-col sm:flex-row justify-between pt-8 space-y-3 sm:space-y-0 sm:space-x-3">
+              <div className="flex flex-col sm:flex-row justify-between pt-4 space-y-3 sm:space-y-0 sm:space-x-3">
                 <Button variant="outline" onClick={() => setBookingStep('selectDateTime')} className="w-full sm:w-auto h-12 rounded-full text-base">
                      <ChevronLeft className="mr-2 h-4 w-4" /> Back
                 </Button>
                 <Button onClick={handleConfirmBooking} className="w-full sm:w-auto h-14 rounded-full text-lg" disabled={isSubmitting || isLoadingCustomerAppointments}>
                   {(isSubmitting || isLoadingCustomerAppointments) && <LoadingSpinner className="mr-2 h-5 w-5" />}
-                  {(isSubmitting || isLoadingCustomerAppointments) ? 'Validating...' : 'Confirm Booking'}
+                  <Check className="mr-2 h-5 w-5" /> {(isSubmitting || isLoadingCustomerAppointments) ? 'Validating...' : 'Confirm Booking'}
                 </Button>
               </div>
             </CardContent>
@@ -701,7 +731,7 @@ export default function BookingPage() {
                   <p>on <span className="font-semibold">{formatYYYYMMDDToDisplay(newlyBookedAppointment?.date || '')} at <span className="text-[#0088E0]">{newlyBookedAppointment?.startTime}</span></span></p>
                   <p>has been successfully booked.</p>
                   <Button onClick={() => router.push('/customer/dashboard')} className="mt-8 w-full max-w-xs mx-auto h-14 rounded-full text-lg">
-                    Back to Dashboard
+                    <LayoutDashboard className="mr-2 h-5 w-5" /> Back to Dashboard
                   </Button>
                 </CardContent>
               </Card>
@@ -748,7 +778,7 @@ export default function BookingPage() {
                         Note: Queue information is based on current bookings and may change.
                     </p>
                     <Button onClick={() => router.push('/customer/dashboard')} className="mt-6 w-full max-w-xs mx-auto h-14 rounded-full text-lg">
-                    Back to Dashboard
+                     <LayoutDashboard className="mr-2 h-5 w-5" /> Back to Dashboard
                     </Button>
                 </CardContent>
                 </Card>
@@ -772,6 +802,7 @@ export default function BookingPage() {
                 </Button>
             )}
         </div>
+        {renderStepProgress()}
         {renderStepContent()}
       </div>
     </ProtectedPage>

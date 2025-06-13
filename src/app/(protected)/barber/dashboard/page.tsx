@@ -22,10 +22,12 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Settings2 } from 'lucide-react';
+import { PlusCircle, Settings2, LayoutDashboard } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; // Import Tooltip components
+
 
 const formatDateToYYYYMMDD = (date: Date): string => {
   return date.toISOString().split('T')[0];
@@ -102,7 +104,7 @@ const INITIAL_SCHEDULE_FOR_WALKIN_CHECK: ScheduleDayAvailability[] = (['Monday',
 
 
 export default function BarberDashboardPage() {
-  const { user, updateUserAcceptingBookings } = useAuth();
+  const { user, setUser, updateUserAcceptingBookings } = useAuth();
   const { toast } = useToast();
 
   const [services, setServices] = useState<BarberService[]>([]);
@@ -392,8 +394,6 @@ export default function BarberDashboardPage() {
     } catch (error) {
       console.error("Error updating accepting bookings status:", error);
       toast({ title: "Error", description: "Could not update your booking status.", variant: "destructive" });
-      // The useEffect listening to [user] will handle reverting localIsAcceptingBookings
-      // if the AuthContext's user state hasn't changed due to the error.
     } finally {
       setIsUpdatingAcceptingBookings(false);
     }
@@ -407,68 +407,89 @@ export default function BarberDashboardPage() {
     }
   }, [user?.uid, fetchServices, fetchAppointments, fetchBarberSelfDataForWalkIn, initialLoadComplete]);
 
+  const isAddWalkInDisabled = isProcessingWalkIn || isLoadingServices || services.length === 0 || isLoadingBarberSelfData;
+  const addWalkInTooltipContent = () => {
+    if (isLoadingServices || isLoadingBarberSelfData) return "Loading necessary data...";
+    if (services.length === 0) return "Please add services first to enable walk-ins.";
+    if (isProcessingWalkIn) return "Processing previous walk-in...";
+    return null;
+  };
 
   return (
     <ProtectedPage expectedRole="barber">
-      <div className="space-y-8">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-            <h1 className="text-2xl font-bold font-headline">
-            Barber Dashboard, {user?.firstName || user?.displayName || 'Barber'}!
-            </h1>
-            <Button 
-              onClick={() => setIsWalkInDialogOpen(true)} 
-              className="w-full sm:w-auto h-11 rounded-full" 
-              disabled={isProcessingWalkIn || isLoadingServices || services.length === 0 || isLoadingBarberSelfData}
-            >
-                <PlusCircle className="mr-2 h-5 w-5" />
-                Add Walk-In
-            </Button>
-        </div>
-
-        <Card className="border-none shadow-lg rounded-xl overflow-hidden">
-          <CardHeader className="p-4 md:p-6">
-            <CardTitle className="text-xl font-bold flex items-center">
-              <Settings2 className="mr-2 h-5 w-5 text-primary" />
-              Online Booking Status
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 md:p-6">
-            {user ? (
-              <div className="flex items-center space-x-3">
-                <Switch
-                  id="accepting-bookings-toggle"
-                  checked={localIsAcceptingBookings}
-                  onCheckedChange={handleToggleAcceptingBookings}
-                  disabled={isUpdatingAcceptingBookings}
-                  aria-label="Toggle accepting new online bookings"
-                />
-                <Label htmlFor="accepting-bookings-toggle" className="text-base">
-                  {localIsAcceptingBookings ? 'Accepting New Online Bookings' : 'Not Accepting New Online Bookings'}
-                </Label>
-                {isUpdatingAcceptingBookings && <LoadingSpinner className="h-5 w-5 text-primary ml-2" />}
-              </div>
-            ) : (
-              <p>Loading booking status...</p>
-            )}
-             <p className="text-sm text-gray-500 mt-2">
-              Turn this off to temporarily prevent new customers from booking online. Existing appointments will not be affected.
-            </p>
-          </CardContent>
-        </Card>
-
-        {(isLoadingAppointments && !appointments.length) ? (
-          <div className="flex justify-center items-center py-10">
-            <LoadingSpinner className="h-8 w-8 text-primary" />
-            <p className="ml-2 text-base">Loading appointments...</p>
+      <TooltipProvider>
+        <div className="space-y-8">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <h1 className="text-2xl font-bold font-headline">
+              Barber Dashboard, {user?.firstName || user?.displayName || 'Barber'}!
+              </h1>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span tabIndex={isAddWalkInDisabled ? 0 : -1}> {/* Wrapper for Tooltip when Button is disabled */}
+                    <Button 
+                      onClick={() => setIsWalkInDialogOpen(true)} 
+                      className="w-full sm:w-auto h-11 rounded-full" 
+                      disabled={isAddWalkInDisabled}
+                      aria-describedby={isAddWalkInDisabled ? "add-walkin-tooltip" : undefined}
+                    >
+                        <PlusCircle className="mr-2 h-5 w-5" />
+                        Add Walk-In
+                    </Button>
+                  </span>
+                </TooltipTrigger>
+                {isAddWalkInDisabled && addWalkInTooltipContent() && (
+                  <TooltipContent id="add-walkin-tooltip">
+                    <p>{addWalkInTooltipContent()}</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
           </div>
-        ) : (
-          <TodaysAppointmentsSection
-            appointments={appointments}
-            onUpdateAppointmentStatus={handleUpdateAppointmentStatus}
-            isUpdatingAppointment={isUpdatingAppointment}
-          />
-        )}
-      </div>
+
+          <Card className="border-none shadow-lg rounded-xl overflow-hidden">
+            <CardHeader className="p-4 md:p-6">
+              <CardTitle className="text-xl font-bold flex items-center">
+                <Settings2 className="mr-2 h-5 w-5 text-primary" />
+                Online Booking Status
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 md:p-6">
+              {user ? (
+                <div className="flex items-center space-x-3">
+                  <Switch
+                    id="accepting-bookings-toggle"
+                    checked={localIsAcceptingBookings}
+                    onCheckedChange={handleToggleAcceptingBookings}
+                    disabled={isUpdatingAcceptingBookings}
+                    aria-label="Toggle accepting new online bookings"
+                  />
+                  <Label htmlFor="accepting-bookings-toggle" className="text-base">
+                    {localIsAcceptingBookings ? 'Accepting New Online Bookings' : 'Not Accepting New Online Bookings'}
+                  </Label>
+                  {isUpdatingAcceptingBookings && <LoadingSpinner className="h-5 w-5 text-primary ml-2" />}
+                </div>
+              ) : (
+                <p>Loading booking status...</p>
+              )}
+               <p className="text-sm text-gray-500 mt-2">
+                Turn this off to temporarily prevent new customers from booking online. Existing appointments will not be affected.
+              </p>
+            </CardContent>
+          </Card>
+
+          {(isLoadingAppointments && !appointments.length) ? (
+            <div className="flex justify-center items-center py-10">
+              <LoadingSpinner className="h-8 w-8 text-primary" />
+              <p className="ml-2 text-base">Loading appointments...</p>
+            </div>
+          ) : (
+            <TodaysAppointmentsSection
+              appointments={appointments}
+              onUpdateAppointmentStatus={handleUpdateAppointmentStatus}
+              isUpdatingAppointment={isUpdatingAppointment}
+            />
+          )}
+        </div>
+      </TooltipProvider>
       {isWalkInDialogOpen && (
         <WalkInDialog
             isOpen={isWalkInDialogOpen}
