@@ -14,6 +14,7 @@ import {
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
+import { getSimpleItem, setSimpleItem, LS_SCHEDULE_KEY } from '@/lib/localStorageUtils';
 
 const INITIAL_SCHEDULE: DayAvailability[] = (['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as DayOfWeek[]).map(day => ({
   day,
@@ -22,7 +23,6 @@ const INITIAL_SCHEDULE: DayAvailability[] = (['Monday', 'Tuesday', 'Wednesday', 
   endTime: '05:00 PM',
 }));
 
-const LS_SCHEDULE_KEY = 'barber_schedule_page_schedule';
 
 export default function BarberSchedulePage() {
   const { user } = useAuth();
@@ -37,10 +37,10 @@ export default function BarberSchedulePage() {
   }, []);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && initialLoadComplete) {
-      const cachedSchedule = localStorage.getItem(LS_SCHEDULE_KEY);
+    if (initialLoadComplete) {
+      const cachedSchedule = getSimpleItem<DayAvailability[]>(LS_SCHEDULE_KEY);
       if (cachedSchedule) {
-        setSchedule(JSON.parse(cachedSchedule)); // Schedule itself doesn't have Timestamps
+        setSchedule(cachedSchedule); 
         setIsLoadingSchedule(false);
       }
     }
@@ -58,13 +58,11 @@ export default function BarberSchedulePage() {
         newSchedule = scheduleData.schedule;
       }
       setSchedule(newSchedule);
-       if (typeof window !== 'undefined') {
-        localStorage.setItem(LS_SCHEDULE_KEY, JSON.stringify(newSchedule));
-      }
+      setSimpleItem(LS_SCHEDULE_KEY, newSchedule);
     } catch (error) {
       console.error("Error fetching schedule:", error);
       toast({ title: "Error", description: "Could not fetch work schedule.", variant: "destructive" });
-      setSchedule(INITIAL_SCHEDULE); // Fallback
+      setSchedule(INITIAL_SCHEDULE); 
     } finally {
       setIsLoadingSchedule(false);
     }
@@ -90,9 +88,7 @@ export default function BarberSchedulePage() {
         updatedAt: Timestamp.now(),
       };
       await setDoc(scheduleDocRef, scheduleDataToSave, { merge: true });
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(LS_SCHEDULE_KEY, JSON.stringify(schedule));
-      }
+      setSimpleItem(LS_SCHEDULE_KEY, schedule);
       toast({ title: "Success", description: "Work schedule saved successfully." });
     } catch (error) {
       console.error("Error saving schedule:", error);

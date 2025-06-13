@@ -18,46 +18,8 @@ import {
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
+import { getItemWithTimestampRevival, setItemWithTimestampConversion, LS_UNAVAILABLE_DATES_KEY } from '@/lib/localStorageUtils';
 
-// Helper to convert Firestore Timestamps in an object to ISO strings
-const convertTimestampsToISO = (data: any) => {
-  if (data === null || typeof data !== 'object') {
-    return data;
-  }
-  if (data instanceof Timestamp) {
-    return data.toDate().toISOString();
-  }
-  if (Array.isArray(data)) {
-    return data.map(convertTimestampsToISO);
-  }
-  const newData: { [key: string]: any } = {};
-  for (const key in data) {
-    newData[key] = convertTimestampsToISO(data[key]);
-  }
-  return newData;
-};
-
-// Helper to convert ISO strings in an object back to Timestamps
-const convertISOToTimestamps = (data: any): any => {
-    if (data === null || typeof data !== 'object') {
-      if (typeof data === 'string' && /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z/.test(data)) {
-         try {
-            return Timestamp.fromDate(new Date(data));
-        } catch (e) { /* ignore, not a valid date string for Timestamp */ }
-      }
-      return data;
-    }
-    if (Array.isArray(data)) {
-      return data.map(convertISOToTimestamps);
-    }
-    const newData: { [key: string]: any } = {};
-    for (const key in data) {
-      newData[key] = convertISOToTimestamps(data[key]);
-    }
-    return newData;
-  };
-
-const LS_UNAVAILABLE_DATES_KEY = 'barber_availability_page_unavailable_dates';
 
 export default function BarberAvailabilityPage() {
   const { user } = useAuth();
@@ -72,11 +34,11 @@ export default function BarberAvailabilityPage() {
   }, []);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && initialLoadComplete) {
-      const cachedUnavailableDates = localStorage.getItem(LS_UNAVAILABLE_DATES_KEY);
+    if (initialLoadComplete) {
+      const cachedUnavailableDates = getItemWithTimestampRevival<UnavailableDate[]>(LS_UNAVAILABLE_DATES_KEY);
       if (cachedUnavailableDates) {
-        setUnavailableDates(convertISOToTimestamps(JSON.parse(cachedUnavailableDates)));
-        setIsLoadingUnavailableDates(false);
+        setUnavailableDates(cachedUnavailableDates);
+        setIsLoadingUnavailableDates(false); // Loaded from cache, reduce initial loading perception
       }
     }
   }, [initialLoadComplete]);
@@ -93,9 +55,7 @@ export default function BarberAvailabilityPage() {
         fetchedDates.push({ id: doc.id, ...doc.data() } as UnavailableDate);
       });
       setUnavailableDates(fetchedDates);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(LS_UNAVAILABLE_DATES_KEY, JSON.stringify(convertTimestampsToISO(fetchedDates)));
-      }
+      setItemWithTimestampConversion(LS_UNAVAILABLE_DATES_KEY, fetchedDates);
     } catch (error) {
       console.error("Error fetching unavailable dates:", error);
       toast({ title: "Error", description: "Could not fetch unavailable dates.", variant: "destructive" });
@@ -130,9 +90,7 @@ export default function BarberAvailabilityPage() {
       
       setUnavailableDates((prev) => {
         const updated = [...prev, finalDateEntry].sort((a,b) => a.date.localeCompare(b.date));
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(LS_UNAVAILABLE_DATES_KEY, JSON.stringify(convertTimestampsToISO(updated)));
-        }
+        setItemWithTimestampConversion(LS_UNAVAILABLE_DATES_KEY, updated);
         return updated;
       });
       toast({ title: "Success", description: "Date marked as unavailable." });
@@ -155,9 +113,7 @@ export default function BarberAvailabilityPage() {
       await deleteDoc(unavailableDateDocRef);
       setUnavailableDates((prev) => {
         const updated = prev.filter(ud => ud.id !== dateId);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(LS_UNAVAILABLE_DATES_KEY, JSON.stringify(convertTimestampsToISO(updated)));
-        }
+        setItemWithTimestampConversion(LS_UNAVAILABLE_DATES_KEY, updated);
         return updated;
       });
       toast({ title: "Success", description: "Unavailable date removed." });

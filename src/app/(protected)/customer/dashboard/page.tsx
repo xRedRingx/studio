@@ -22,6 +22,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { getItemWithTimestampRevival, setItemWithTimestampConversion, LS_MY_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD, getSimpleItem, setSimpleItem, LS_AVAILABLE_BARBERS_KEY_CUSTOMER_DASHBOARD } from '@/lib/localStorageUtils';
+
 
 const getTodayDateString = () => {
   return new Date().toISOString().split('T')[0];
@@ -38,47 +40,6 @@ const timeToMinutes = (timeStr: string): number => {
   return hours * 60 + minutes;
 };
 
-// Helper to convert Firestore Timestamps in an object to ISO strings
-const convertTimestampsToISO = (data: any) => {
-  if (data === null || typeof data !== 'object') {
-    return data;
-  }
-  if (data instanceof Timestamp) {
-    return data.toDate().toISOString();
-  }
-  if (Array.isArray(data)) {
-    return data.map(convertTimestampsToISO);
-  }
-  const newData: { [key: string]: any } = {};
-  for (const key in data) {
-    newData[key] = convertTimestampsToISO(data[key]);
-  }
-  return newData;
-};
-
-// Helper to convert ISO strings in an object back to Timestamps
-const convertISOToTimestamps = (data: any): any => {
-    if (data === null || typeof data !== 'object') {
-      if (typeof data === 'string' && /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z/.test(data)) {
-         try {
-            return Timestamp.fromDate(new Date(data));
-        } catch (e) { /* ignore, not a valid date string for Timestamp */ }
-      }
-      return data;
-    }
-    if (Array.isArray(data)) {
-      return data.map(convertISOToTimestamps);
-    }
-    const newData: { [key: string]: any } = {};
-    for (const key in data) {
-      newData[key] = convertISOToTimestamps(data[key]);
-    }
-    return newData;
-  };
-
-const LS_MY_APPOINTMENTS_KEY = 'customer_dashboard_my_appointments';
-const LS_AVAILABLE_BARBERS_KEY = 'customer_dashboard_available_barbers';
-
 
 export default function CustomerDashboardPage() {
   const { user } = useAuth();
@@ -94,15 +55,15 @@ export default function CustomerDashboardPage() {
 
   useEffect(() => {
     setToday(getTodayDateString());
-    if (typeof window !== 'undefined') {
-        const cachedMyAppointments = localStorage.getItem(LS_MY_APPOINTMENTS_KEY);
+    if (typeof window !== 'undefined') { // Ensure this check is here before any localStorage access
+        const cachedMyAppointments = getItemWithTimestampRevival<Appointment[]>(LS_MY_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD);
         if (cachedMyAppointments) {
-            setMyAppointments(convertISOToTimestamps(JSON.parse(cachedMyAppointments)));
+            setMyAppointments(cachedMyAppointments);
             setIsLoadingAppointments(false);
         }
-        const cachedAvailableBarbers = localStorage.getItem(LS_AVAILABLE_BARBERS_KEY);
+        const cachedAvailableBarbers = getSimpleItem<AppUser[]>(LS_AVAILABLE_BARBERS_KEY_CUSTOMER_DASHBOARD);
         if (cachedAvailableBarbers) {
-            setAvailableBarbers(JSON.parse(cachedAvailableBarbers));
+            setAvailableBarbers(cachedAvailableBarbers);
             setIsLoadingBarbers(false);
         }
         setInitialLoadComplete(true);
@@ -126,7 +87,7 @@ export default function CustomerDashboardPage() {
       });
 
       const upcomingAppointments = fetchedAppointments
-        .filter(app => app.date >= today && app.status === 'upcoming') // Only show upcoming
+        .filter(app => app.date >= today && app.status === 'upcoming') 
         .sort((a, b) => {
           if (a.date === b.date) {
             return timeToMinutes(a.startTime) - timeToMinutes(b.startTime);
@@ -135,9 +96,7 @@ export default function CustomerDashboardPage() {
         });
 
       setMyAppointments(upcomingAppointments);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(LS_MY_APPOINTMENTS_KEY, JSON.stringify(convertTimestampsToISO(upcomingAppointments)));
-      }
+      setItemWithTimestampConversion(LS_MY_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD, upcomingAppointments);
     } catch (error) {
       console.error("Error fetching appointments:", error);
       toast({ title: "Error", description: "Could not fetch your appointments.", variant: "destructive" });
@@ -155,10 +114,9 @@ export default function CustomerDashboardPage() {
       const fetchedBarbersData: AppUser[] = [];
       querySnapshot.forEach((doc) => {
         const data = doc.data();
-        // Default isAcceptingBookings to true if undefined or null
         const isAccepting = data.isAcceptingBookings !== undefined && data.isAcceptingBookings !== null ? data.isAcceptingBookings : true;
         
-        if (isAccepting) { // Only add barbers who are accepting bookings
+        if (isAccepting) { 
             fetchedBarbersData.push({
             uid: doc.id,
             id: doc.id, 
@@ -166,14 +124,12 @@ export default function CustomerDashboardPage() {
             lastName: data.lastName,
             role: data.role,
             phoneNumber: data.phoneNumber,
-            isAcceptingBookings: isAccepting, // Store the resolved value
+            isAcceptingBookings: isAccepting, 
             } as AppUser);
         }
       });
       setAvailableBarbers(fetchedBarbersData);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(LS_AVAILABLE_BARBERS_KEY, JSON.stringify(fetchedBarbersData));
-      }
+      setSimpleItem(LS_AVAILABLE_BARBERS_KEY_CUSTOMER_DASHBOARD, fetchedBarbersData);
     } catch (error) {
       console.error("Error fetching barbers:", error);
       toast({ title: "Error", description: "Could not fetch available barbers.", variant: "destructive" });
@@ -208,9 +164,7 @@ export default function CustomerDashboardPage() {
       
       setMyAppointments(prev => {
         const updated = prev.filter(app => app.id !== appointmentToCancel.id);
-        if (typeof window !== 'undefined') {
-          localStorage.setItem(LS_MY_APPOINTMENTS_KEY, JSON.stringify(convertTimestampsToISO(updated)));
-        }
+        setItemWithTimestampConversion(LS_MY_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD, updated);
         return updated;
       });
       toast({ title: "Appointment Cancelled", description: "Your appointment has been successfully cancelled." });

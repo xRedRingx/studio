@@ -20,46 +20,8 @@ import {
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
+import { getItemWithTimestampRevival, setItemWithTimestampConversion, LS_SERVICES_KEY_BARBER_SERVICES_PAGE } from '@/lib/localStorageUtils';
 
-// Helper to convert Firestore Timestamps in an object to ISO strings
-const convertTimestampsToISO = (data: any) => {
-  if (data === null || typeof data !== 'object') {
-    return data;
-  }
-  if (data instanceof Timestamp) {
-    return data.toDate().toISOString();
-  }
-  if (Array.isArray(data)) {
-    return data.map(convertTimestampsToISO);
-  }
-  const newData: { [key: string]: any } = {};
-  for (const key in data) {
-    newData[key] = convertTimestampsToISO(data[key]);
-  }
-  return newData;
-};
-
-// Helper to convert ISO strings in an object back to Timestamps
-const convertISOToTimestamps = (data: any): any => {
-    if (data === null || typeof data !== 'object') {
-      if (typeof data === 'string' && /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z/.test(data)) {
-         try {
-            return Timestamp.fromDate(new Date(data));
-        } catch (e) { /* ignore, not a valid date string for Timestamp */ }
-      }
-      return data;
-    }
-    if (Array.isArray(data)) {
-      return data.map(convertISOToTimestamps);
-    }
-    const newData: { [key: string]: any } = {};
-    for (const key in data) {
-      newData[key] = convertISOToTimestamps(data[key]);
-    }
-    return newData;
-  };
-
-const LS_SERVICES_KEY = 'barber_services_page_services';
 
 export default function BarberServicesPage() {
   const { user } = useAuth();
@@ -73,10 +35,10 @@ export default function BarberServicesPage() {
   }, []);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && initialLoadComplete) {
-      const cachedServices = localStorage.getItem(LS_SERVICES_KEY);
+    if (initialLoadComplete) {
+      const cachedServices = getItemWithTimestampRevival<BarberService[]>(LS_SERVICES_KEY_BARBER_SERVICES_PAGE);
       if (cachedServices) {
-        setServices(convertISOToTimestamps(JSON.parse(cachedServices)));
+        setServices(cachedServices);
         setIsLoadingServices(false);
       }
     }
@@ -94,9 +56,7 @@ export default function BarberServicesPage() {
         fetchedServices.push({ id: doc.id, ...doc.data() } as BarberService);
       });
       setServices(fetchedServices);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(LS_SERVICES_KEY, JSON.stringify(convertTimestampsToISO(fetchedServices)));
-      }
+      setItemWithTimestampConversion(LS_SERVICES_KEY_BARBER_SERVICES_PAGE, fetchedServices);
     } catch (error) {
       console.error("Error fetching services:", error);
       toast({ title: "Error", description: "Could not fetch services.", variant: "destructive" });
@@ -117,9 +77,7 @@ export default function BarberServicesPage() {
       const newServiceEntry = { ...newServiceData, id: docRef.id };
       setServices((prev) => {
         const updated = [newServiceEntry, ...prev];
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(LS_SERVICES_KEY, JSON.stringify(convertTimestampsToISO(updated)));
-        }
+        setItemWithTimestampConversion(LS_SERVICES_KEY_BARBER_SERVICES_PAGE, updated);
         return updated;
       });
       toast({ title: "Success", description: "Service added successfully." });
@@ -140,9 +98,7 @@ export default function BarberServicesPage() {
       await updateDoc(serviceRef, updatedServiceData);
       setServices((prev) => {
         const updated = prev.map(s => s.id === serviceId ? { ...s, ...updatedServiceData } : s);
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(LS_SERVICES_KEY, JSON.stringify(convertTimestampsToISO(updated)));
-        }
+        setItemWithTimestampConversion(LS_SERVICES_KEY_BARBER_SERVICES_PAGE, updated);
         return updated;
       });
       toast({ title: "Success", description: "Service updated successfully." });
@@ -162,9 +118,7 @@ export default function BarberServicesPage() {
       await deleteDoc(serviceRef);
       setServices((prev) => {
         const updated = prev.filter(s => s.id !== serviceId);
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(LS_SERVICES_KEY, JSON.stringify(convertTimestampsToISO(updated)));
-        }
+        setItemWithTimestampConversion(LS_SERVICES_KEY_BARBER_SERVICES_PAGE, updated);
         return updated;
       });
       toast({ title: "Success", description: "Service deleted successfully." });

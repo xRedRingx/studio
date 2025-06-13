@@ -26,48 +26,15 @@ import { PlusCircle, Settings2, LayoutDashboard } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; // Import Tooltip components
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; 
+import { getItemWithTimestampRevival, setItemWithTimestampConversion, LS_SERVICES_KEY_DASHBOARD, LS_APPOINTMENTS_KEY_DASHBOARD } from '@/lib/localStorageUtils';
+import type { DayAvailability as ScheduleDayAvailability } from '@/types';
+import { getDoc as getFirestoreDoc } from 'firebase/firestore';
 
 
 const formatDateToYYYYMMDD = (date: Date): string => {
   return date.toISOString().split('T')[0];
 };
-
-const convertTimestampsToISO = (data: any) => {
-  if (data === null || typeof data !== 'object') {
-    return data;
-  }
-  if (data instanceof Timestamp) {
-    return data.toDate().toISOString();
-  }
-  if (Array.isArray(data)) {
-    return data.map(convertTimestampsToISO);
-  }
-  const newData: { [key: string]: any } = {};
-  for (const key in data) {
-    newData[key] = convertTimestampsToISO(data[key]);
-  }
-  return newData;
-};
-
-const convertISOToTimestamps = (data: any): any => {
-    if (data === null || typeof data !== 'object') {
-      if (typeof data === 'string' && /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z/.test(data)) {
-         try {
-            return Timestamp.fromDate(new Date(data));
-        } catch (e) { /* ignore, not a valid date string for Timestamp */ }
-      }
-      return data;
-    }
-    if (Array.isArray(data)) {
-      return data.map(convertISOToTimestamps);
-    }
-    const newData: { [key: string]: any } = {};
-    for (const key in data) {
-      newData[key] = convertISOToTimestamps(data[key]);
-    }
-    return newData;
-  };
 
 const timeToMinutes = (timeStr: string): number => {
   const [time, modifier] = timeStr.split(' ');
@@ -87,13 +54,6 @@ const minutesToTime = (totalMinutes: number): string => {
   const period = h < 12 || h === 24 ? 'AM' : 'PM';
   return `${String(displayHour).padStart(2, '0')}:${String(m).padStart(2, '0')} ${period}`;
 };
-
-
-const LS_SERVICES_KEY_DASHBOARD = 'barber_dashboard_services';
-const LS_APPOINTMENTS_KEY_DASHBOARD = 'barber_dashboard_appointments';
-
-import type { DayAvailability as ScheduleDayAvailability } from '@/types';
-import { getDoc as getFirestoreDoc } from 'firebase/firestore';
 
 const INITIAL_SCHEDULE_FOR_WALKIN_CHECK: ScheduleDayAvailability[] = (['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as DayOfWeek[]).map(day => ({
   day,
@@ -136,15 +96,15 @@ export default function BarberDashboardPage() {
 
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && initialLoadComplete) {
-      const cachedServices = localStorage.getItem(LS_SERVICES_KEY_DASHBOARD);
+    if (initialLoadComplete) {
+      const cachedServices = getItemWithTimestampRevival<BarberService[]>(LS_SERVICES_KEY_DASHBOARD);
       if (cachedServices) {
-        setServices(convertISOToTimestamps(JSON.parse(cachedServices)));
+        setServices(cachedServices);
         setIsLoadingServices(false);
       }
-      const cachedAppointments = localStorage.getItem(LS_APPOINTMENTS_KEY_DASHBOARD);
+      const cachedAppointments = getItemWithTimestampRevival<Appointment[]>(LS_APPOINTMENTS_KEY_DASHBOARD);
       if (cachedAppointments) {
-        setAppointments(convertISOToTimestamps(JSON.parse(cachedAppointments)));
+        setAppointments(cachedAppointments);
         setIsLoadingAppointments(false);
       }
     }
@@ -162,9 +122,7 @@ export default function BarberDashboardPage() {
         fetchedServices.push({ id: doc.id, ...doc.data() } as BarberService);
       });
       setServices(fetchedServices);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(LS_SERVICES_KEY_DASHBOARD, JSON.stringify(convertTimestampsToISO(fetchedServices)));
-      }
+      setItemWithTimestampConversion(LS_SERVICES_KEY_DASHBOARD, fetchedServices);
     } catch (error) {
       console.error("Error fetching services:", error);
       toast({ title: "Error", description: "Could not fetch services for Walk-In.", variant: "destructive" });
@@ -185,9 +143,7 @@ export default function BarberDashboardPage() {
         fetchedAppointments.push({ id: doc.id, ...doc.data() } as Appointment);
       });
       setAppointments(fetchedAppointments);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(LS_APPOINTMENTS_KEY_DASHBOARD, JSON.stringify(convertTimestampsToISO(fetchedAppointments)));
-      }
+      setItemWithTimestampConversion(LS_APPOINTMENTS_KEY_DASHBOARD, fetchedAppointments);
     } catch (error) {
       console.error("Error fetching appointments:", error);
       toast({ title: "Error", description: "Could not fetch appointments.", variant: "destructive" });
@@ -208,9 +164,7 @@ export default function BarberDashboardPage() {
       await updateDoc(appointmentRef, { status: status, updatedAt: newUpdatedAt });
       setAppointments((prev) => {
         const updated = prev.map((app) => (app.id === appointmentId ? { ...app, status, updatedAt: newUpdatedAt } : app));
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(LS_APPOINTMENTS_KEY_DASHBOARD, JSON.stringify(convertTimestampsToISO(updated)));
-        }
+        setItemWithTimestampConversion(LS_APPOINTMENTS_KEY_DASHBOARD, updated);
         return updated;
       });
       toast({ title: "Success", description: `Appointment status updated to ${status}.` });
@@ -362,9 +316,7 @@ export default function BarberDashboardPage() {
             if (a.date === b.date) return timeToMinutes(a.startTime) - timeToMinutes(b.startTime);
             return new Date(a.date).getTime() - new Date(b.date).getTime();
         });
-        if (typeof window !== 'undefined') {
-            localStorage.setItem(LS_APPOINTMENTS_KEY_DASHBOARD, JSON.stringify(convertTimestampsToISO(updated)));
-        }
+        setItemWithTimestampConversion(LS_APPOINTMENTS_KEY_DASHBOARD, updated);
         return updated;
       });
 
@@ -385,16 +337,12 @@ export default function BarberDashboardPage() {
     setIsUpdatingAcceptingBookings(true);
     try {
       await updateUserAcceptingBookings(user.uid, newCheckedState);
-      // The user object in AuthContext will be updated by updateUserAcceptingBookings
-      // which will trigger the useEffect to sync localIsAcceptingBookings
       toast({
         title: "Status Updated",
         description: `You are now ${newCheckedState ? 'accepting' : 'not accepting'} new online bookings.`,
       });
     } catch (error) {
       console.error("Error updating accepting bookings status:", error);
-      // Revert optimistic update on error
-      // The useEffect listening to `user` will handle this if user object in context isn't updated.
       toast({ title: "Error", description: "Could not update your booking status.", variant: "destructive" });
     } finally {
       setIsUpdatingAcceptingBookings(false);
@@ -427,7 +375,7 @@ export default function BarberDashboardPage() {
               </h1>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span tabIndex={isAddWalkInDisabled ? 0 : -1}> {/* Wrapper for Tooltip when Button is disabled */}
+                  <span tabIndex={isAddWalkInDisabled ? 0 : -1}> 
                     <Button 
                       onClick={() => setIsWalkInDialogOpen(true)} 
                       className="w-full sm:w-auto h-11 rounded-full" 
@@ -504,4 +452,3 @@ export default function BarberDashboardPage() {
     </ProtectedPage>
   );
 }
-
