@@ -16,8 +16,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { LogOut, User as UserIcon, Phone, Mail, Settings, LayoutDashboard, Scissors, CalendarClock, CalendarOff, Edit, BellRing, BellOff } from "lucide-react"; 
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { messaging } from "@/firebase/config"; // Import messaging
-import { getToken } from "firebase/messaging"; // Import getToken
+import { messaging } from "@/firebase/config"; 
+import { getToken } from "firebase/messaging"; 
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from "react";
 import LoadingSpinner from "../ui/loading-spinner";
@@ -30,21 +30,27 @@ export default function UserNav() {
   const [isProcessingFCM, setIsProcessingFCM] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
+    if (typeof window !== 'undefined' && 'Notification' in window && messaging) {
       setNotificationStatus(Notification.permission);
     } else {
       setNotificationStatus('unavailable');
     }
-  }, []);
+  }, []); 
   
   useEffect(() => {
-    // If user has an FCM token, assume permission was granted at some point
     if (user?.fcmToken) {
       setNotificationStatus('granted');
-    } else if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'denied') {
-      setNotificationStatus('denied');
-    } else if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
-      setNotificationStatus('prompt');
+    } else {
+      // If no token, rely on the initial permission set or if it changed via our prompt
+      // This primarily ensures that if a token is cleared, we don't incorrectly stay in 'granted' state locally
+      // if the browser permission itself is still 'granted'. The button would then show "Enable Notifications" to re-fetch.
+      if (typeof window !== 'undefined' && 'Notification' in window && messaging) {
+          if (Notification.permission === 'denied') setNotificationStatus('denied');
+          else if (Notification.permission === 'default') setNotificationStatus('prompt');
+          // If Notification.permission is 'granted' but no fcmToken, it means we should try to get it.
+          // 'prompt' state for notificationStatus will allow the user to click "Enable Notifications".
+          else if (Notification.permission === 'granted') setNotificationStatus('prompt'); 
+      }
     }
   }, [user?.fcmToken]);
 
@@ -59,41 +65,43 @@ export default function UserNav() {
       toast({ title: "Error", description: "Messaging service or user not available.", variant: "destructive" });
       return;
     }
-    if (notificationStatus === 'granted' && user.fcmToken) {
-        toast({ title: "Notifications", description: "Notifications are already enabled."});
+    // Check current actual browser permission before proceeding, in case it changed
+    if (Notification.permission === 'denied') {
+        setNotificationStatus('denied'); // Update local state if it was out of sync
+        toast({ title: "Permission Denied", description: "Please enable notifications in your browser settings for this site.", variant: "destructive" });
+        if (user.fcmToken) await updateUserFCMToken(user.uid, null); // Clear token if permission is now denied
         return;
     }
-    if (notificationStatus === 'denied') {
-        toast({ title: "Permission Denied", description: "Please enable notifications in your browser settings for this site.", variant: "destructive" });
+    if (Notification.permission === 'granted' && user.fcmToken) {
+        setNotificationStatus('granted'); // Update local state
+        toast({ title: "Notifications", description: "Notifications are already enabled."});
         return;
     }
 
     setIsProcessingFCM(true);
     try {
       const permission = await Notification.requestPermission();
-      setNotificationStatus(permission);
+      setNotificationStatus(permission); // Update state immediately based on user's choice
 
       if (permission === 'granted') {
-        // IMPORTANT: Replace "YOUR_WEB_PUSH_CERTIFICATE_KEY_PAIR" with your actual VAPID key 
-        // from Firebase Project Settings > Cloud Messaging > Web configuration > Web Push certificates
         const currentToken = await getToken(messaging, { vapidKey: "BFYxArauaN91bGFF6uqe6uljMXgcvXJtUSc_BDmUG4EjiVSaAhBZ2uwxWnGFiwm9oWGzMx6YPBGnijsE0OcP0no" }); 
         if (currentToken) {
           await updateUserFCMToken(user.uid, currentToken);
-          // Toast is handled by updateUserFCMToken
+          // Toast for success is handled by updateUserFCMToken
         } else {
-          toast({ title: "Token Error", description: "Could not retrieve notification token. Ensure your VAPID key is correct in UserNav.tsx and Firebase setup is complete.", variant: "destructive" });
-          await updateUserFCMToken(user.uid, null); // Clear if previously set but now fails
+          toast({ title: "Token Error", description: "Could not retrieve notification token. Ensure your VAPID key is correct and Firebase setup is complete.", variant: "destructive" });
+          await updateUserFCMToken(user.uid, null); 
         }
       } else if (permission === 'denied') {
         toast({ title: "Permission Denied", description: "You will not receive notifications.", variant: "destructive" });
-        await updateUserFCMToken(user.uid, null); // Clear token if permission denied
-      } else {
+        await updateUserFCMToken(user.uid, null); 
+      } else { // 'default' - user dismissed the prompt
         toast({ title: "Notifications", description: "Permission not granted. You can try again later." });
       }
     } catch (error) {
       console.error('Error enabling notifications:', error);
       toast({ title: "Notification Setup Error", description: "An error occurred. See console for details.", variant: "destructive" });
-       if(user.uid) await updateUserFCMToken(user.uid, null); // Attempt to clear token on error
+       if(user.uid) await updateUserFCMToken(user.uid, null); 
     } finally {
       setIsProcessingFCM(false);
     }
@@ -122,10 +130,11 @@ export default function UserNav() {
   const displayEmail = user.email;
   const displayPhoneNumber = user.phoneNumber;
 
-  const showEnableNotifications = notificationStatus === 'prompt' && !user.fcmToken;
-  const showNotificationsEnabled = notificationStatus === 'granted' && user.fcmToken;
-  const showNotificationsDenied = notificationStatus === 'denied';
-  const showNotificationsUnavailable = notificationStatus === 'unavailable';
+  const isNotificationFeatureAvailable = notificationStatus !== 'unavailable' && !!messaging;
+  const isCurrentlyEnabledWithToken = notificationStatus === 'granted' && !!user.fcmToken;
+  const isPermissionHardDenied = notificationStatus === 'denied'; // Browser permission is explicitly denied
+  // Prompting if permission is 'default', or if 'granted' but we don't have a token (need to retry fetch)
+  const isPromptingForPermission = notificationStatus === 'prompt' || (notificationStatus === 'granted' && !user.fcmToken);
 
 
   return (
@@ -191,21 +200,39 @@ export default function UserNav() {
               </DropdownMenuItem>
             </>
           )}
-          {!showNotificationsUnavailable && (
-            <DropdownMenuItem 
-                onClick={handleEnableNotifications} 
-                disabled={isProcessingFCM || showNotificationsEnabled || showNotificationsDenied} 
-                className="text-base py-2.5 px-3 cursor-pointer"
+          
+          {isNotificationFeatureAvailable ? (
+            <DropdownMenuItem
+              onClick={handleEnableNotifications}
+              disabled={isProcessingFCM || isCurrentlyEnabledWithToken || isPermissionHardDenied}
+              className="text-base py-2.5 px-3 cursor-pointer"
             >
-                {isProcessingFCM ? <LoadingSpinner className="mr-2 h-4 w-4" /> : (showNotificationsEnabled ? <BellRing className="mr-2 h-4 w-4 text-green-500" /> : <BellRing className="mr-2 h-4 w-4" />)}
-                <span>
-                {isProcessingFCM ? 'Processing...' : 
-                    showNotificationsEnabled ? 'Notifications Enabled' : 
-                    showNotificationsDenied ? 'Permissions Denied' : 
-                    'Enable Notifications'}
-                </span>
+              {isProcessingFCM ? (
+                <LoadingSpinner className="mr-2 h-4 w-4" />
+              ) : isCurrentlyEnabledWithToken ? (
+                <BellRing className="mr-2 h-4 w-4 text-green-500" />
+              ) : isPermissionHardDenied ? (
+                <BellOff className="mr-2 h-4 w-4 text-destructive" />
+              ) : ( 
+                <BellRing className="mr-2 h-4 w-4" />
+              )}
+              <span>
+                {isProcessingFCM
+                  ? 'Processing...'
+                  : isCurrentlyEnabledWithToken
+                  ? 'Notifications Enabled'
+                  : isPermissionHardDenied
+                  ? 'Notifications Blocked' 
+                  : 'Enable Notifications'}
+              </span>
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem disabled className="text-base py-2.5 px-3 cursor-not-allowed">
+              <BellOff className="mr-2 h-4 w-4 text-muted-foreground" />
+              <span>Notifications N/A</span>
             </DropdownMenuItem>
           )}
+
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleSignOut} className="text-base py-2.5 px-3 text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer">
@@ -216,3 +243,4 @@ export default function UserNav() {
     </DropdownMenu>
   );
 }
+
