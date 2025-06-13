@@ -17,6 +17,7 @@ export interface AppUser {
   email: string; // Primary identifier from Firebase Auth
   phoneNumber?: string | null; // Optional, stored in Firestore
   isAcceptingBookings?: boolean; // New: For barbers to toggle online booking visibility
+  fcmToken?: string | null; // FCM registration token
   createdAt?: Timestamp; // Firestore timestamp
   updatedAt?: Timestamp; // Firestore timestamp
   // Fields from Firebase Auth user object that we might merge for convenience

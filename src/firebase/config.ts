@@ -4,6 +4,7 @@ import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 // Import initializeFirestore for settings, and also getFirestore if it's needed elsewhere without re-init
 import { initializeFirestore, CACHE_SIZE_UNLIMITED, memoryLocalCache, persistentLocalCache } from 'firebase/firestore';
+import { getMessaging } from 'firebase/messaging'; // Added
 
 
 const firebaseConfig = {
@@ -28,6 +29,11 @@ const firestore = initializeFirestore(app, {
   // localCache: memoryLocalCache({ cacheSizeBytes: CACHE_SIZE_UNLIMITED })
 });
 
+// Initialize Firebase Messaging
+const messaging = (typeof window !== 'undefined' && typeof navigator !== 'undefined' && 'serviceWorker' in navigator)
+  ? getMessaging(app)
+  : null;
 
-export { app, auth, firestore };
+
+export { app, auth, firestore, messaging };
 

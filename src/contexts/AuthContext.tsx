@@ -27,13 +27,14 @@ interface AuthContextType {
   setUser: React.Dispatch<React.SetStateAction<AppUser | null>>; 
   setRole: (role: UserRole) => void;
   registerWithEmailAndPassword: (
-    userDetails: Omit<AppUser, 'uid' | 'createdAt' | 'updatedAt' | 'displayName' | 'photoURL' | 'emailVerified'> & { password_original_do_not_use: string }
+    userDetails: Omit<AppUser, 'uid' | 'createdAt' | 'updatedAt' | 'displayName' | 'photoURL' | 'emailVerified' | 'fcmToken'> & { password_original_do_not_use: string }
   ) => Promise<void>;
   signInWithEmailAndPassword: (email: string, password_original_do_not_use: string) => Promise<void>;
   sendPasswordResetLink: (email: string) => Promise<void>;
   updateUserProfile: (userId: string, updates: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber'>>) => Promise<void>;
   signOut: () => Promise<void>;
-  updateUserAcceptingBookings: (userId: string, isAccepting: boolean) => Promise<void>; // Added
+  updateUserAcceptingBookings: (userId: string, isAccepting: boolean) => Promise<void>;
+  updateUserFCMToken: (userId: string, token: string | null) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -61,6 +62,7 @@ const createUserDocument = async (firebaseUser: FirebaseUser, additionalData: Pa
         lastName: additionalData.lastName || '',
         phoneNumber: additionalData.phoneNumber || null,
         isAcceptingBookings: additionalData.role === 'barber' ? (additionalData.isAcceptingBookings !== undefined ? additionalData.isAcceptingBookings : true) : undefined,
+        fcmToken: null, // Initialize fcmToken
         ...additionalData,
       });
     } catch (error) {
@@ -105,6 +107,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             lastName: firestoreUser.lastName,
             phoneNumber: firestoreUser.phoneNumber,
             isAcceptingBookings: firestoreUser.role === 'barber' ? (firestoreUser.isAcceptingBookings !== undefined ? firestoreUser.isAcceptingBookings : true) : undefined,
+            fcmToken: firestoreUser.fcmToken || null, // Load fcmToken
             createdAt: firestoreUser.createdAt,
             updatedAt: firestoreUser.updatedAt,
           };
@@ -146,7 +149,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const registerWithEmailAndPassword = async (
-     userDetails: Omit<AppUser, 'uid' | 'createdAt' | 'updatedAt' | 'displayName' | 'photoURL' | 'emailVerified'> & { password_original_do_not_use: string }
+     userDetails: Omit<AppUser, 'uid' | 'createdAt' | 'updatedAt' | 'displayName' | 'photoURL' | 'emailVerified' | 'fcmToken'> & { password_original_do_not_use: string }
   ) => {
     setIsProcessingAuth(true);
     const { email, password_original_do_not_use, firstName, lastName, role: userRole, phoneNumber, isAcceptingBookings } = userDetails;
@@ -162,6 +165,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         phoneNumber: phoneNumber || null,
         email,
         isAcceptingBookings: userRole === 'barber' ? (isAcceptingBookings !== undefined ? isAcceptingBookings : true) : undefined,
+        fcmToken: null, // Initialized here as well
       };
       await createUserDocument(firebaseUser, firestoreData);
 
@@ -218,8 +222,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (error.code !== 'auth/user-not-found') {
          toast({ title: "Password Reset Error", description: error.message || "Could not send reset link. Please try again.", variant: "destructive" });
       }
-      // If user-not-found, we don't toast to prevent email enumeration, but the form submission might still need to know.
-      // The toast in the form itself will handle the generic "If an account exists..." message.
       throw error; 
     } finally {
       setIsProcessingAuth(false);
@@ -227,7 +229,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const updateUserProfile = async (userId: string, updates: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber'>>) => {
-    // setIsProcessingAuth(true); // Removed: Page will manage its own submission state
     try {
       const userRef = doc(firestore, 'users', userId);
       const dataToUpdate: any = { ...updates, updatedAt: Timestamp.now() };
@@ -240,25 +241,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       setUser(prevUser => {
         if (!prevUser) return null;
-        const updatedUser = { ...prevUser, ...dataToUpdate, updatedAt: dataToUpdate.updatedAt }; // Ensure updatedAt is also updated
+        const updatedUser = { ...prevUser, ...dataToUpdate, updatedAt: dataToUpdate.updatedAt }; 
         persistUserSession(updatedUser);
         return updatedUser;
       });
-      // Toast is handled by the calling page
     } catch (error: any) {
       console.error("AuthContext: Error updating user profile:", error);
-      // Toast is handled by the calling page
       throw error;
     } 
-    // finally { // Removed
-    //   setIsProcessingAuth(false);
-    // }
   };
 
   const updateUserAcceptingBookings = async (userId: string, isAccepting: boolean) => {
-    // This function will be called from the BarberDashboardPage
-    // It can use setIsProcessingAuth if desired, or the page can handle its own loading state
-    // For consistency with other specific updates, let's assume the page handles its own loading state for this toggle.
     try {
       const userRef = doc(firestore, 'users', userId);
       await updateDoc(userRef, {
@@ -272,10 +265,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         persistUserSession(updatedUser);
         return updatedUser;
       });
-      // Toast message can be shown by the calling component (BarberDashboardPage)
     } catch (error: any) {
       console.error("AuthContext: Error updating isAcceptingBookings status:", error);
       toast({ title: "Update Error", description: error.message || "Could not update booking status.", variant: "destructive" });
+      throw error;
+    }
+  };
+
+  const updateUserFCMToken = async (userId: string, token: string | null) => {
+    try {
+      const userRef = doc(firestore, 'users', userId);
+      await updateDoc(userRef, {
+        fcmToken: token,
+        updatedAt: Timestamp.now(),
+      });
+      setUser(prevUser => {
+        if (!prevUser || prevUser.uid !== userId) return prevUser;
+        const updatedUser = { ...prevUser, fcmToken: token, updatedAt: Timestamp.now() };
+        persistUserSession(updatedUser);
+        return updatedUser;
+      });
+       toast({ title: "Notifications", description: token ? "Notifications enabled." : "Notifications disabled." });
+    } catch (error: any) {
+      console.error("AuthContext: Error updating FCM token:", error);
+      toast({ title: "Notification Error", description: "Could not update notification preference.", variant: "destructive" });
       throw error;
     }
   };
@@ -284,9 +297,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signOutUser = async () => {
     setIsProcessingAuth(true);
     try {
+      if (user?.uid && user.fcmToken) {
+        // Optionally, clear the FCM token from Firestore on sign-out
+        // await updateUserFCMToken(user.uid, null); // This would also update local user state before sign out
+      }
       await firebaseSignOut(auth);
-      // User & role will be cleared by onAuthStateChanged listener
-      // Clear role from local storage as well, so user goes to role selector.
       localStorage.removeItem(LOCAL_STORAGE_ROLE_KEY);
       setRoleState(null); 
       toast({ title: "Signed Out", description: "You have been successfully signed out." });
@@ -313,7 +328,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       sendPasswordResetLink,
       updateUserProfile, 
       signOut: signOutUser,
-      updateUserAcceptingBookings, // Exposed
+      updateUserAcceptingBookings,
+      updateUserFCMToken,
     }}>
       {children}
     </AuthContext.Provider>
