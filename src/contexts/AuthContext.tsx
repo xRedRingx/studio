@@ -59,6 +59,7 @@ const createUserDocument = async (firebaseUser: FirebaseUser, additionalData: Pa
         firstName: additionalData.firstName || '',
         lastName: additionalData.lastName || '',
         phoneNumber: additionalData.phoneNumber || null,
+        isAcceptingBookings: additionalData.role === 'barber' ? (additionalData.isAcceptingBookings !== undefined ? additionalData.isAcceptingBookings : true) : undefined,
         ...additionalData,
       });
     } catch (error) {
@@ -102,6 +103,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             firstName: firestoreUser.firstName,
             lastName: firestoreUser.lastName,
             phoneNumber: firestoreUser.phoneNumber,
+            isAcceptingBookings: firestoreUser.role === 'barber' ? (firestoreUser.isAcceptingBookings !== undefined ? firestoreUser.isAcceptingBookings : true) : undefined,
             createdAt: firestoreUser.createdAt,
             updatedAt: firestoreUser.updatedAt,
           };
@@ -146,7 +148,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
      userDetails: Omit<AppUser, 'uid' | 'createdAt' | 'updatedAt' | 'displayName' | 'photoURL' | 'emailVerified'> & { password_original_do_not_use: string }
   ) => {
     setIsProcessingAuth(true);
-    const { email, password_original_do_not_use, firstName, lastName, role: userRole, phoneNumber } = userDetails;
+    const { email, password_original_do_not_use, firstName, lastName, role: userRole, phoneNumber, isAcceptingBookings } = userDetails;
 
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password_original_do_not_use);
@@ -158,6 +160,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         role: userRole,
         phoneNumber: phoneNumber || null,
         email,
+        isAcceptingBookings: userRole === 'barber' ? (isAcceptingBookings !== undefined ? isAcceptingBookings : true) : undefined,
       };
       await createUserDocument(firebaseUser, firestoreData);
 
@@ -190,6 +193,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsProcessingAuth(true);
     try {
       await signInWithEmailAndPassword(auth, email, password_original_do_not_use);
+      // User object will be set by onAuthStateChanged listener
       toast({ title: "Login Successful!", description: "Welcome back!" });
     } catch (error: any) {
       console.error("AuthContext: Error signing in:", error);
@@ -213,7 +217,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (error.code !== 'auth/user-not-found') {
          toast({ title: "Password Reset Error", description: error.message || "Could not send reset link. Please try again.", variant: "destructive" });
       }
-      throw error;
+      throw error; // Rethrow to be caught by form if needed
     } finally {
       setIsProcessingAuth(false);
     }
@@ -251,6 +255,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsProcessingAuth(true);
     try {
       await firebaseSignOut(auth);
+      // User & role will be cleared by onAuthStateChanged listener
     } catch (error: any) {
         console.error("AuthContext: Error signing out:", error);
         toast({ title: "Sign Out Error", description: "Could not sign out. Please try again.", variant: "destructive" });

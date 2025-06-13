@@ -62,6 +62,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
         phoneNumber: values.phoneNumber || null,
         password_original_do_not_use: values.password, 
         role: role,
+        isAcceptingBookings: role === 'barber' ? true : undefined, // Initialize for barbers
       };
       await registerWithEmailAndPassword(userDetailsForApi);
     } catch (error) {
