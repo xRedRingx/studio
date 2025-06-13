@@ -22,12 +22,11 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Settings2 } from 'lucide-react'; // Added Settings2 for toggle section
+import { PlusCircle, Settings2 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'; // For styling the toggle section
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
-// Keep for WalkInDialog time calculations
 const formatDateToYYYYMMDD = (date: Date): string => {
   return date.toISOString().split('T')[0];
 };
@@ -103,7 +102,7 @@ const INITIAL_SCHEDULE_FOR_WALKIN_CHECK: ScheduleDayAvailability[] = (['Monday',
 
 
 export default function BarberDashboardPage() {
-  const { user, setUser, updateUserAcceptingBookings } = useAuth(); // Added setUser and updateUserAcceptingBookings
+  const { user, updateUserAcceptingBookings } = useAuth();
   const { toast } = useToast();
 
   const [services, setServices] = useState<BarberService[]>([]);
@@ -117,13 +116,28 @@ export default function BarberDashboardPage() {
   const [isWalkInDialogOpen, setIsWalkInDialogOpen] = useState(false);
   const [isProcessingWalkIn, setIsProcessingWalkIn] = useState(false);
   const [isLoadingBarberSelfData, setIsLoadingBarberSelfData] = useState(true);
-  const [isUpdatingAcceptingBookings, setIsUpdatingAcceptingBookings] = useState(false); // New state for toggle
+  
+  // Local state for the switch
+  const [localIsAcceptingBookings, setLocalIsAcceptingBookings] = useState(
+    user?.isAcceptingBookings !== undefined ? user.isAcceptingBookings : true
+  );
+  const [isUpdatingAcceptingBookings, setIsUpdatingAcceptingBookings] = useState(false);
 
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
 
   useEffect(() => {
     setInitialLoadComplete(true);
   }, []);
+
+  // Effect to sync local switch state with AuthContext user state
+  useEffect(() => {
+    if (user) {
+      setLocalIsAcceptingBookings(
+        user.isAcceptingBookings !== undefined ? user.isAcceptingBookings : true
+      );
+    }
+  }, [user, user?.isAcceptingBookings]);
+
 
   useEffect(() => {
     if (typeof window !== 'undefined' && initialLoadComplete) {
@@ -368,24 +382,27 @@ export default function BarberDashboardPage() {
     }
   };
 
-  // New handler for toggling booking acceptance
-  const handleToggleAcceptingBookings = async (isAccepting: boolean) => {
+  const handleToggleAcceptingBookings = async (newCheckedState: boolean) => {
     if (!user || !updateUserAcceptingBookings) return;
+
+    setLocalIsAcceptingBookings(newCheckedState); // Optimistic UI update
     setIsUpdatingAcceptingBookings(true);
     try {
-      await updateUserAcceptingBookings(user.uid, isAccepting);
-      // setUser directly updates the user in AuthContext, which should propagate here.
-      // No need to call setUser from this component if AuthContext handles it.
+      await updateUserAcceptingBookings(user.uid, newCheckedState);
+      // AuthContext will update its user state, which then syncs back via useEffect.
       toast({
         title: "Status Updated",
-        description: `You are now ${isAccepting ? 'accepting' : 'not accepting'} new online bookings.`,
+        description: `You are now ${newCheckedState ? 'accepting' : 'not accepting'} new online bookings.`,
       });
     } catch (error) {
       console.error("Error updating accepting bookings status:", error);
       toast({ title: "Error", description: "Could not update your booking status.", variant: "destructive" });
-      // Revert optimistic UI update if API call fails - AuthContext should ideally handle this
-      // or we can force a refresh of the user object.
-      // For now, the user object in AuthContext is the source of truth.
+      // Revert optimistic UI update if API call fails by relying on useEffect to sync from context
+      // which would still hold the old value if AuthContext's setUser wasn't reached or errored.
+      // Or, more explicitly:
+      if (user) {
+         setLocalIsAcceptingBookings(user.isAcceptingBookings !== undefined ? user.isAcceptingBookings : true);
+      }
     } finally {
       setIsUpdatingAcceptingBookings(false);
     }
@@ -399,8 +416,6 @@ export default function BarberDashboardPage() {
     }
   }, [user?.uid, fetchServices, fetchAppointments, fetchBarberSelfDataForWalkIn, initialLoadComplete]);
 
-  // Determine the checked state for the switch, defaulting to true if undefined
-  const isAcceptingBookingsChecked = user?.isAcceptingBookings !== undefined ? user.isAcceptingBookings : true;
 
   return (
     <ProtectedPage expectedRole="barber">
@@ -419,7 +434,6 @@ export default function BarberDashboardPage() {
             </Button>
         </div>
 
-        {/* Accepting Bookings Toggle Section */}
         <Card className="border-none shadow-lg rounded-xl overflow-hidden">
           <CardHeader className="p-4 md:p-6">
             <CardTitle className="text-xl font-bold flex items-center">
@@ -432,13 +446,13 @@ export default function BarberDashboardPage() {
               <div className="flex items-center space-x-3">
                 <Switch
                   id="accepting-bookings-toggle"
-                  checked={isAcceptingBookingsChecked}
+                  checked={localIsAcceptingBookings}
                   onCheckedChange={handleToggleAcceptingBookings}
                   disabled={isUpdatingAcceptingBookings}
                   aria-label="Toggle accepting new online bookings"
                 />
                 <Label htmlFor="accepting-bookings-toggle" className="text-base">
-                  {isAcceptingBookingsChecked ? 'Accepting New Online Bookings' : 'Not Accepting New Online Bookings'}
+                  {localIsAcceptingBookings ? 'Accepting New Online Bookings' : 'Not Accepting New Online Bookings'}
                 </Label>
                 {isUpdatingAcceptingBookings && <LoadingSpinner className="h-5 w-5 text-primary ml-2" />}
               </div>
