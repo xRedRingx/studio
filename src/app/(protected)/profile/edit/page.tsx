@@ -1,22 +1,20 @@
 
 'use client';
 
+import { useState } from 'react'; // Import useState
 import ProtectedPage from '@/components/layout/ProtectedPage';
 import ProfileEditForm from '@/components/user/ProfileEditForm';
 import { useAuth } from '@/hooks/useAuth';
 import type { AppUser } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-import { firestore } from '@/firebase/config';
-import { doc, updateDoc, Timestamp } from 'firebase/firestore';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 
 export default function ProfileEditPage() {
-  const { user, setUser, isProcessingAuth, setIsProcessingAuth } = useAuth(); // Assuming setIsProcessingAuth exists or can be added
+  const { user, setUser, updateUserProfile, loadingAuth } = useAuth(); // Removed isProcessingAuth, setIsProcessingAuth for this page's direct use
   const { toast } = useToast();
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false); // New local state for submission
 
-  if (!user && !isProcessingAuth) {
-    // Redirect or handle if user is somehow not available and not loading
-    // This should ideally be handled by ProtectedPage, but as a fallback.
+  if (!user && !loadingAuth) {
     return (
         <ProtectedPage>
             <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center">
@@ -32,53 +30,27 @@ export default function ProfileEditPage() {
       return;
     }
 
-    // Use setIsProcessingAuth or a new state like isUpdatingProfile
-    if (typeof setIsProcessingAuth === 'function') {
-        setIsProcessingAuth(true);
-    }
-
+    setIsUpdatingProfile(true); // Use local state
 
     try {
-      const userRef = doc(firestore, 'users', user.uid);
-      const updates: any = { ...data, updatedAt: Timestamp.now() };
-      
-      // Ensure phone number is explicitly set to null if empty string, or kept as string if provided
-      if (data.phoneNumber === '') {
-        updates.phoneNumber = null;
-      } else if (data.phoneNumber) {
-        updates.phoneNumber = data.phoneNumber;
-      }
+      // Call updateUserProfile from AuthContext, which no longer sets isProcessingAuth itself for this action
+      await updateUserProfile(user.uid, data);
+      // The setUser logic is handled within updateUserProfile or by onAuthStateChanged if email/photoURL were also updated (not the case here)
+      // AuthContext's updateUserProfile will update the user in its own state and localStorage.
 
-
-      await updateDoc(userRef, updates);
-
-      // Update local user state in AuthContext and localStorage
-      setUser(prevUser => {
-        if (!prevUser) return null;
-        const updatedUser = { ...prevUser, ...updates, phoneNumber: updates.phoneNumber }; // Use phoneNumber from updates
-
-        // Update localStorage
-        const storableUser = {
-          ...updatedUser,
-          createdAt: updatedUser.createdAt instanceof Timestamp ? updatedUser.createdAt.toDate().toISOString() : updatedUser.createdAt,
-          updatedAt: updatedUser.updatedAt instanceof Timestamp ? updatedUser.updatedAt.toDate().toISOString() : new Date().toISOString(),
-        };
-        localStorage.setItem('barberflow_user_session', JSON.stringify(storableUser));
-        return updatedUser;
-      });
+      // No need to manually call setUser here if AuthContext handles it post-update.
+      // However, the `updateUserProfile` in AuthContext *does* call setUser.
 
       toast({ title: "Success", description: "Your profile has been updated." });
     } catch (error) {
       console.error("Error updating profile:", error);
       toast({ title: "Error", description: "Could not update profile. Please try again.", variant: "destructive" });
     } finally {
-       if (typeof setIsProcessingAuth === 'function') {
-        setIsProcessingAuth(false);
-      }
+       setIsUpdatingProfile(false); // Use local state
     }
   };
   
-  if (isProcessingAuth && !user) { // Show loading if processing initial auth and no user yet
+  if (loadingAuth && !user) { 
     return (
       <ProtectedPage>
         <div className="flex min-h-[calc(100vh-10rem)] items-center justify-center">
@@ -98,7 +70,7 @@ export default function ProfileEditPage() {
           <ProfileEditForm
             currentUser={user}
             onSubmit={handleUpdateProfile}
-            isSubmitting={isProcessingAuth} // Pass down the submitting state
+            isSubmitting={isUpdatingProfile} // Pass down the local submitting state
           />
         ) : (
            <div className="flex items-center justify-center py-10">
@@ -110,3 +82,4 @@ export default function ProfileEditPage() {
     </ProtectedPage>
   );
 }
+

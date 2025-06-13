@@ -23,16 +23,17 @@ interface AuthContextType {
   loadingAuth: boolean; 
   initialRoleChecked: boolean; 
   isProcessingAuth: boolean; 
-  setIsProcessingAuth: React.Dispatch<React.SetStateAction<boolean>>; // Exposed for profile page
-  setUser: React.Dispatch<React.SetStateAction<AppUser | null>>; // Exposed for profile page
+  setIsProcessingAuth: React.Dispatch<React.SetStateAction<boolean>>; 
+  setUser: React.Dispatch<React.SetStateAction<AppUser | null>>; 
   setRole: (role: UserRole) => void;
   registerWithEmailAndPassword: (
     userDetails: Omit<AppUser, 'uid' | 'createdAt' | 'updatedAt' | 'displayName' | 'photoURL' | 'emailVerified'> & { password_original_do_not_use: string }
   ) => Promise<void>;
   signInWithEmailAndPassword: (email: string, password_original_do_not_use: string) => Promise<void>;
   sendPasswordResetLink: (email: string) => Promise<void>;
-  updateUserProfile: (userId: string, updates: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber'>>) => Promise<void>; // New
+  updateUserProfile: (userId: string, updates: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber'>>) => Promise<void>;
   signOut: () => Promise<void>;
+  updateUserAcceptingBookings: (userId: string, isAccepting: boolean) => Promise<void>; // Added
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -217,14 +218,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (error.code !== 'auth/user-not-found') {
          toast({ title: "Password Reset Error", description: error.message || "Could not send reset link. Please try again.", variant: "destructive" });
       }
-      throw error; // Rethrow to be caught by form if needed
+      // If user-not-found, we don't toast to prevent email enumeration, but the form submission might still need to know.
+      // The toast in the form itself will handle the generic "If an account exists..." message.
+      throw error; 
     } finally {
       setIsProcessingAuth(false);
     }
   };
 
   const updateUserProfile = async (userId: string, updates: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber'>>) => {
-    setIsProcessingAuth(true);
+    // setIsProcessingAuth(true); // Removed: Page will manage its own submission state
     try {
       const userRef = doc(firestore, 'users', userId);
       const dataToUpdate: any = { ...updates, updatedAt: Timestamp.now() };
@@ -237,25 +240,56 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       setUser(prevUser => {
         if (!prevUser) return null;
-        const updatedUser = { ...prevUser, ...dataToUpdate }; // Make sure to spread dataToUpdate which has the correct phoneNumber
+        const updatedUser = { ...prevUser, ...dataToUpdate, updatedAt: dataToUpdate.updatedAt }; // Ensure updatedAt is also updated
         persistUserSession(updatedUser);
         return updatedUser;
       });
-      toast({ title: "Profile Updated", description: "Your profile information has been saved." });
+      // Toast is handled by the calling page
     } catch (error: any) {
       console.error("AuthContext: Error updating user profile:", error);
-      toast({ title: "Update Error", description: error.message || "Could not update profile.", variant: "destructive" });
+      // Toast is handled by the calling page
       throw error;
-    } finally {
-      setIsProcessingAuth(false);
+    } 
+    // finally { // Removed
+    //   setIsProcessingAuth(false);
+    // }
+  };
+
+  const updateUserAcceptingBookings = async (userId: string, isAccepting: boolean) => {
+    // This function will be called from the BarberDashboardPage
+    // It can use setIsProcessingAuth if desired, or the page can handle its own loading state
+    // For consistency with other specific updates, let's assume the page handles its own loading state for this toggle.
+    try {
+      const userRef = doc(firestore, 'users', userId);
+      await updateDoc(userRef, {
+        isAcceptingBookings: isAccepting,
+        updatedAt: Timestamp.now(),
+      });
+
+      setUser(prevUser => {
+        if (!prevUser || prevUser.uid !== userId) return prevUser;
+        const updatedUser = { ...prevUser, isAcceptingBookings: isAccepting, updatedAt: Timestamp.now() };
+        persistUserSession(updatedUser);
+        return updatedUser;
+      });
+      // Toast message can be shown by the calling component (BarberDashboardPage)
+    } catch (error: any) {
+      console.error("AuthContext: Error updating isAcceptingBookings status:", error);
+      toast({ title: "Update Error", description: error.message || "Could not update booking status.", variant: "destructive" });
+      throw error;
     }
   };
+
 
   const signOutUser = async () => {
     setIsProcessingAuth(true);
     try {
       await firebaseSignOut(auth);
       // User & role will be cleared by onAuthStateChanged listener
+      // Clear role from local storage as well, so user goes to role selector.
+      localStorage.removeItem(LOCAL_STORAGE_ROLE_KEY);
+      setRoleState(null); 
+      toast({ title: "Signed Out", description: "You have been successfully signed out." });
     } catch (error: any) {
         console.error("AuthContext: Error signing out:", error);
         toast({ title: "Sign Out Error", description: "Could not sign out. Please try again.", variant: "destructive" });
@@ -271,14 +305,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       loadingAuth,
       initialRoleChecked,
       isProcessingAuth,
-      setIsProcessingAuth, // Exposed
-      setUser, // Exposed
+      setIsProcessingAuth, 
+      setUser, 
       setRole: setRoleContextAndStorage,
       registerWithEmailAndPassword,
       signInWithEmailAndPassword: newSignInWithEmailAndPassword,
       sendPasswordResetLink,
-      updateUserProfile, // New method
+      updateUserProfile, 
       signOut: signOutUser,
+      updateUserAcceptingBookings, // Exposed
     }}>
       {children}
     </AuthContext.Provider>
@@ -292,3 +327,4 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
+
