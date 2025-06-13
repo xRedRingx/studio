@@ -83,32 +83,32 @@ export default function UserNav() {
             <LayoutDashboard className="mr-2 h-4 w-4" />
             <span>Dashboard</span>
           </DropdownMenuItem>
-           <Link href="/profile/edit" passHref legacyBehavior>
-            <DropdownMenuItem className="text-base py-2.5 px-3 cursor-pointer">
+           <DropdownMenuItem asChild className="text-base py-2.5 px-3 cursor-pointer">
+            <Link href="/profile/edit">
               <Edit className="mr-2 h-4 w-4" />
               <span>Edit Profile</span>
-            </DropdownMenuItem>
-          </Link>
+            </Link>
+          </DropdownMenuItem>
           {role === 'barber' && (
             <>
-              <Link href="/barber/services" passHref legacyBehavior>
-                <DropdownMenuItem className="text-base py-2.5 px-3 cursor-pointer">
+              <DropdownMenuItem asChild className="text-base py-2.5 px-3 cursor-pointer">
+                <Link href="/barber/services">
                   <Scissors className="mr-2 h-4 w-4" />
                   <span>Manage Services</span>
-                </DropdownMenuItem>
-              </Link>
-              <Link href="/barber/schedule" passHref legacyBehavior>
-                <DropdownMenuItem className="text-base py-2.5 px-3 cursor-pointer">
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild className="text-base py-2.5 px-3 cursor-pointer">
+                <Link href="/barber/schedule">
                   <CalendarClock className="mr-2 h-4 w-4" />
                   <span>My Schedule</span>
-                </DropdownMenuItem>
-              </Link>
-              <Link href="/barber/availability" passHref legacyBehavior>
-                <DropdownMenuItem className="text-base py-2.5 px-3 cursor-pointer">
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild className="text-base py-2.5 px-3 cursor-pointer">
+                <Link href="/barber/availability">
                   <CalendarOff className="mr-2 h-4 w-4" />
                   <span>My Availability</span>
-                </DropdownMenuItem>
-              </Link>
+                </Link>
+              </DropdownMenuItem>
             </>
           )}
           {/* Placeholder for future settings if needed */}
