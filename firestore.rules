@@ -30,13 +30,22 @@ service cloud.firestore {
     function existingData() {
       return resource.data;
     }
-
-    function isNow(field) {
-      return field is timestamp && field == request.time;
-    }
     
     function isTimestamp(field) {
         return field is timestamp;
+    }
+
+    // Validates a timestamp provided by the client.
+    // Ensures it's a timestamp and not unreasonably in the past or future relative to server time.
+    function isClientProvidedTimestampValid(clientTs) {
+        return clientTs is timestamp &&
+               clientTs >= request.time - duration.value(5, 'm') && // Not more than 5 mins in the past
+               clientTs <= request.time + duration.value(5, 'm');   // Not more than 5 mins in the future
+    }
+    
+    // Use this for createdAt on create if client sends it, expecting it to be very close to now.
+    function isCreatedAtValid(clientTs) {
+        return isClientProvidedTimestampValid(clientTs);
     }
 
     function isMap(data) {
@@ -50,6 +59,13 @@ service cloud.firestore {
     function hasAtLeast(data, keys) {
         return data.keys().hasAll(keys);
     }
+
+    // Checks if only the specified fields (plus 'updatedAt') are being modified.
+    function isUpdatingOnlyAllowedFields(allowedToChangeKeys) {
+        let allAllowed = allowedToChangeKeys.concat(['updatedAt']);
+        let changedKeys = incomingData().diff(existingData()).affectedKeys();
+        return changedKeys.hasOnly(allAllowed);
+    }
     
     // =====================================================================
     // User Profile Rules
@@ -62,16 +78,26 @@ service cloud.firestore {
                     && incomingData().firstName is string && incomingData().lastName is string
                     && incomingData().email is string
                     && (incomingData().role == 'customer' || incomingData().role == 'barber')
-                    && isNow(incomingData().createdAt) && isNow(incomingData().updatedAt)
-                    && (!('isAcceptingBookings' in incomingData()) || incomingData().isAcceptingBookings is bool);
+                    && isClientProvidedTimestampValid(incomingData().createdAt) 
+                    && incomingData().updatedAt == incomingData().createdAt
+                    && (!('isAcceptingBookings' in incomingData()) || incomingData().isAcceptingBookings is bool)
+                    && (!('phoneNumber' in incomingData()) || incomingData().phoneNumber == null || incomingData().phoneNumber is string)
+                    && (!('address' in incomingData()) || incomingData().address == null || incomingData().address is string)
+                    && (!('fcmToken' in incomingData()) || incomingData().fcmToken == null || incomingData().fcmToken is string);
+
 
       allow update: if isSignedIn() && isOwner(userId)
-                    && !('role' in incomingData()) // Cannot change role
-                    && !('email' in incomingData()) // Cannot change email
-                    && !('createdAt' in incomingData()) // Cannot change creation date
-                    && isNow(incomingData().updatedAt)
+                    && !('role' in incomingData().diff(existingData()).affectedKeys()) // Cannot change role
+                    && !('email' in incomingData().diff(existingData()).affectedKeys()) // Cannot change email
+                    && !('createdAt' in incomingData().diff(existingData()).affectedKeys()) // Cannot change creation date
+                    && isClientProvidedTimestampValid(incomingData().updatedAt)
+                    && incomingData().updatedAt >= existingData().updatedAt
                     && (incomingData().firstName is string && incomingData().lastName is string)
-                    && (!('isAcceptingBookings' in incomingData()) || incomingData().isAcceptingBookings is bool);
+                    && (!('isAcceptingBookings' in incomingData()) || incomingData().isAcceptingBookings is bool || incomingData().isAcceptingBookings == null)
+                    && (!('phoneNumber' in incomingData()) || incomingData().phoneNumber == null || incomingData().phoneNumber is string)
+                    && (!('address' in incomingData()) || incomingData().address == null || incomingData().address is string)
+                    && (!('fcmToken' in incomingData()) || incomingData().fcmToken == null || incomingData().fcmToken is string);
+
     }
 
     // =====================================================================
@@ -86,15 +112,18 @@ service cloud.firestore {
                     && incomingData().name is string && incomingData().name.size() > 0
                     && incomingData().price is number && incomingData().price >= 0
                     && incomingData().duration is number && incomingData().duration > 0
-                    && isNow(incomingData().createdAt) && isNow(incomingData().updatedAt);
+                    && isClientProvidedTimestampValid(incomingData().createdAt) 
+                    && incomingData().updatedAt == incomingData().createdAt;
 
       allow update: if isSignedIn() && getUserRole(request.auth.uid) == 'barber'
                     && existingData().barberId == request.auth.uid
-                    && !('barberId' in incomingData()) && !('createdAt' in incomingData())
+                    && !('barberId' in incomingData().diff(existingData()).affectedKeys()) 
+                    && !('createdAt' in incomingData().diff(existingData()).affectedKeys())
                     && incomingData().name is string && incomingData().name.size() > 0
                     && incomingData().price is number && incomingData().price >= 0
                     && incomingData().duration is number && incomingData().duration > 0
-                    && isNow(incomingData().updatedAt);
+                    && isClientProvidedTimestampValid(incomingData().updatedAt)
+                    && incomingData().updatedAt >= existingData().updatedAt;
       
       allow delete: if isSignedIn() && getUserRole(request.auth.uid) == 'barber' && existingData().barberId == request.auth.uid;
     }
@@ -103,23 +132,25 @@ service cloud.firestore {
     // Barber Schedule Rules
     // =====================================================================
     match /barberSchedules/{barberId} {
-        allow read: if true;
+        allow read: if true; // Publicly readable
         allow write: if isSignedIn() && request.auth.uid == barberId && getUserRole(request.auth.uid) == 'barber'
-                    && hasAtLeast(incomingData(), ['schedule', 'updatedAt'])
+                    && hasAtLeast(incomingData(), ['barberId', 'schedule', 'updatedAt'])
+                    && incomingData().barberId == barberId // Ensure barberId in doc matches path
                     && incomingData().schedule is list && incomingData().schedule.size() == 7
-                    // Basic check on the first element as a sample validation
-                    && incomingData().schedule[0].day is string
-                    && incomingData().schedule[0].isOpen is bool
-                    && isNow(incomingData().updatedAt);
+                    && incomingData().schedule[0].day is string // Sample check
+                    && incomingData().schedule[0].isOpen is bool    // Sample check
+                    && isClientProvidedTimestampValid(incomingData().updatedAt)
+                    && (resource == null || incomingData().updatedAt >= existingData().updatedAt);
 
-        // Subcollection for unavailable dates
+
         match /unavailableDates/{dateId} {
-            allow read: if true;
+            allow read: if true; // Publicly readable
             allow create: if isSignedIn() && request.auth.uid == barberId && getUserRole(request.auth.uid) == 'barber'
-                        && hasAtLeast(incomingData(), ['date', 'createdAt'])
+                        && hasAtLeast(incomingData(), ['barberId', 'date', 'createdAt'])
+                        && incomingData().barberId == barberId // Ensure barberId in doc matches path
                         && incomingData().date == dateId
                         && (!('reason' in incomingData()) || incomingData().reason is string)
-                        && isNow(incomingData().createdAt);
+                        && isClientProvidedTimestampValid(incomingData().createdAt);
 
             allow delete: if isSignedIn() && request.auth.uid == barberId && getUserRole(request.auth.uid) == 'barber';
         }
@@ -128,35 +159,27 @@ service cloud.firestore {
     // =====================================================================
     // Appointment Rules
     // =====================================================================
-    function isAppointmentOwner() {
-        // This function will be called in an 'update' context, so 'resource.data' (existingData) is appropriate
+    function isAppointmentCustomer() {
         return existingData().customerId == request.auth.uid;
     }
 
-    function isBarberOfAppointment() {
-        // This function will be called in an 'update' context, so 'resource.data' (existingData) is appropriate
+    function isAppointmentBarber() {
         return existingData().barberId == request.auth.uid;
     }
-
-    function isValidAppointmentStatusTransition(fromStatus, toStatus) {
-        // Customer transitions
-        return (isAppointmentOwner() && (
-                    (fromStatus == 'upcoming' && toStatus == 'cancelled') ||
-                    (fromStatus == 'upcoming' && toStatus == 'customer-initiated-check-in') ||
-                    (fromStatus == 'barber-initiated-check-in' && toStatus == 'in-progress') || 
-                    (fromStatus == 'in-progress' && toStatus == 'customer-initiated-completion') ||
-                    (fromStatus == 'barber-initiated-completion' && toStatus == 'completed') 
-                )) ||
-               // Barber transitions
-               (isBarberOfAppointment() && (
-                    (fromStatus == 'upcoming' && toStatus == 'barber-initiated-check-in') ||
-                    (fromStatus == 'upcoming' && toStatus == 'cancelled') || // Barber can also cancel
-                    (fromStatus == 'customer-initiated-check-in' && toStatus == 'in-progress') ||
-                    (fromStatus == 'in-progress' && toStatus == 'barber-initiated-completion') ||
-                    (fromStatus == 'customer-initiated-completion' && toStatus == 'completed') ||
-                    // Barber managing walk-in
-                    (existingData().customerId == null && fromStatus == 'in-progress' && toStatus == 'completed')
-               ));
+    
+    // --- Helper: Validate immutable fields for appointment updates ---
+    function appointmentCoreFieldsUnchanged() {
+      return incomingData().barberId == existingData().barberId &&
+             incomingData().customerId == existingData().customerId &&
+             incomingData().customerName == existingData().customerName &&
+             incomingData().barberName == existingData().barberName &&
+             incomingData().serviceId == existingData().serviceId &&
+             incomingData().serviceName == existingData().serviceName &&
+             incomingData().price == existingData().price &&
+             incomingData().date == existingData().date &&
+             incomingData().startTime == existingData().startTime &&
+             incomingData().endTime == existingData().endTime &&
+             incomingData().createdAt == existingData().createdAt;
     }
 
     match /appointments/{appointmentId} {
@@ -166,26 +189,115 @@ service cloud.firestore {
                     && incomingData().customerId == request.auth.uid
                     && hasAtLeast(incomingData(), ['barberId', 'barberName', 'customerId', 'customerName', 'serviceId', 'serviceName', 'price', 'date', 'startTime', 'endTime', 'status', 'createdAt', 'updatedAt'])
                     && incomingData().barberId is string
-                    && incomingData().customerId is string // Ensure customerId is a string, not null for booked appts
                     && incomingData().serviceId is string
-                    && incomingData().date is string
-                    && incomingData().startTime is string
+                    && incomingData().date is string // Further validation (YYYY-MM-DD format) could be done with regex if needed
+                    && incomingData().startTime is string // Further validation (HH:MM AM/PM) could be done with regex
                     && incomingData().status == 'upcoming'
-                    && isNow(incomingData().createdAt) && isNow(incomingData().updatedAt)
+                    && isClientProvidedTimestampValid(incomingData().createdAt) 
+                    && incomingData().updatedAt == incomingData().createdAt
                     && incomingData().customerCheckedInAt == null
                     && incomingData().barberCheckedInAt == null
                     && incomingData().serviceActuallyStartedAt == null
                     && incomingData().customerMarkedDoneAt == null
                     && incomingData().barberMarkedDoneAt == null
                     && incomingData().serviceActuallyCompletedAt == null
-                    // Check if barber is accepting bookings
                     && getUserData(incomingData().barberId).get('isAcceptingBookings', true) == true;
 
-      allow update: if isSignedIn() && isNow(incomingData().updatedAt)
-                    && isValidAppointmentStatusTransition(existingData().status, incomingData().status);
-                    // More granular field checks based on status transition would be added here
+
+      allow update: if isSignedIn()
+                    && appointmentCoreFieldsUnchanged() // Ensure critical fields are not modified
+                    && isClientProvidedTimestampValid(incomingData().updatedAt)
+                    && incomingData().updatedAt >= existingData().updatedAt
+
+                    // Customer Actions
+                    && ((isAppointmentCustomer() && getUserRole(request.auth.uid) == 'customer' && (
+                        // Customer Check-in (from upcoming)
+                        (existingData().status == 'upcoming' && incomingData().status == 'customer-initiated-check-in' &&
+                            isUpdatingOnlyAllowedFields(['status', 'customerCheckedInAt']) &&
+                            isClientProvidedTimestampValid(incomingData().customerCheckedInAt)
+                        ) ||
+                        // Customer Check-in (from upcoming, if barber already checked in) -> In-Progress
+                        (existingData().status == 'upcoming' && existingData().barberCheckedInAt != null && incomingData().status == 'in-progress' &&
+                            isUpdatingOnlyAllowedFields(['status', 'customerCheckedInAt', 'serviceActuallyStartedAt']) &&
+                            isClientProvidedTimestampValid(incomingData().customerCheckedInAt) &&
+                            isClientProvidedTimestampValid(incomingData().serviceActuallyStartedAt) &&
+                            incomingData().customerCheckedInAt <= incomingData().serviceActuallyStartedAt // Ensure logical order
+                        ) ||
+                        // Customer Confirms Barber's Check-in -> In-Progress
+                        (existingData().status == 'barber-initiated-check-in' && incomingData().status == 'in-progress' &&
+                            isUpdatingOnlyAllowedFields(['status', 'customerCheckedInAt', 'serviceActuallyStartedAt']) &&
+                            isClientProvidedTimestampValid(incomingData().customerCheckedInAt) &&
+                            isClientProvidedTimestampValid(incomingData().serviceActuallyStartedAt) &&
+                            incomingData().customerCheckedInAt <= incomingData().serviceActuallyStartedAt // Ensure logical order
+                        ) ||
+                        // Customer Marks Done
+                        (existingData().status == 'in-progress' && incomingData().status == 'customer-initiated-completion' &&
+                            isUpdatingOnlyAllowedFields(['status', 'customerMarkedDoneAt']) &&
+                            isClientProvidedTimestampValid(incomingData().customerMarkedDoneAt)
+                        ) ||
+                        // Customer Confirms Barber's Completion -> Completed
+                        (existingData().status == 'barber-initiated-completion' && incomingData().status == 'completed' &&
+                            isUpdatingOnlyAllowedFields(['status', 'customerMarkedDoneAt', 'serviceActuallyCompletedAt']) &&
+                            isClientProvidedTimestampValid(incomingData().customerMarkedDoneAt) &&
+                            isClientProvidedTimestampValid(incomingData().serviceActuallyCompletedAt) &&
+                            incomingData().customerMarkedDoneAt <= incomingData().serviceActuallyCompletedAt // Ensure logical order
+                        ) ||
+                        // Customer Cancels Appointment
+                        ((existingData().status == 'upcoming' || existingData().status == 'customer-initiated-check-in' || existingData().status == 'barber-initiated-check-in') &&
+                         incomingData().status == 'cancelled' &&
+                            isUpdatingOnlyAllowedFields(['status']) // Only status and updatedAt
+                        )
+                    )) ||
+                    // Barber Actions
+                    (isAppointmentBarber() && getUserRole(request.auth.uid) == 'barber' && (
+                        // Barber Records Customer Arrival (from upcoming)
+                        (existingData().status == 'upcoming' && incomingData().status == 'barber-initiated-check-in' &&
+                            isUpdatingOnlyAllowedFields(['status', 'barberCheckedInAt']) &&
+                            isClientProvidedTimestampValid(incomingData().barberCheckedInAt)
+                        ) ||
+                        // Barber Records Arrival (from upcoming, if customer already checked in) -> In-Progress
+                        (existingData().status == 'upcoming' && existingData().customerCheckedInAt != null && incomingData().status == 'in-progress' &&
+                            isUpdatingOnlyAllowedFields(['status', 'barberCheckedInAt', 'serviceActuallyStartedAt']) &&
+                            isClientProvidedTimestampValid(incomingData().barberCheckedInAt) &&
+                            isClientProvidedTimestampValid(incomingData().serviceActuallyStartedAt) &&
+                            incomingData().barberCheckedInAt <= incomingData().serviceActuallyStartedAt
+                        ) ||
+                        // Barber Confirms Customer's Check-in -> In-Progress
+                        (existingData().status == 'customer-initiated-check-in' && incomingData().status == 'in-progress' &&
+                            isUpdatingOnlyAllowedFields(['status', 'barberCheckedInAt', 'serviceActuallyStartedAt']) &&
+                            isClientProvidedTimestampValid(incomingData().barberCheckedInAt) &&
+                            isClientProvidedTimestampValid(incomingData().serviceActuallyStartedAt) &&
+                            incomingData().barberCheckedInAt <= incomingData().serviceActuallyStartedAt
+                        ) ||
+                        // Barber Marks Done (for booked appointment)
+                        (existingData().customerId != null && existingData().status == 'in-progress' && incomingData().status == 'barber-initiated-completion' &&
+                            isUpdatingOnlyAllowedFields(['status', 'barberMarkedDoneAt']) &&
+                            isClientProvidedTimestampValid(incomingData().barberMarkedDoneAt)
+                        ) ||
+                        // Barber Marks Done (for walk-in appointment, customerId is null) -> Completed
+                        (existingData().customerId == null && existingData().status == 'in-progress' && incomingData().status == 'completed' &&
+                            isUpdatingOnlyAllowedFields(['status', 'barberMarkedDoneAt', 'serviceActuallyCompletedAt']) &&
+                            isClientProvidedTimestampValid(incomingData().barberMarkedDoneAt) &&
+                            isClientProvidedTimestampValid(incomingData().serviceActuallyCompletedAt) &&
+                            incomingData().barberMarkedDoneAt <= incomingData().serviceActuallyCompletedAt
+                        ) ||
+                        // Barber Confirms Customer's Completion -> Completed
+                        (existingData().status == 'customer-initiated-completion' && incomingData().status == 'completed' &&
+                            isUpdatingOnlyAllowedFields(['status', 'barberMarkedDoneAt', 'serviceActuallyCompletedAt']) &&
+                            isClientProvidedTimestampValid(incomingData().barberMarkedDoneAt) &&
+                            isClientProvidedTimestampValid(incomingData().serviceActuallyCompletedAt) &&
+                            incomingData().barberMarkedDoneAt <= incomingData().serviceActuallyCompletedAt
+                        ) ||
+                        // Barber Cancels Appointment
+                        ((existingData().status == 'upcoming' || existingData().status == 'customer-initiated-check-in' || existingData().status == 'barber-initiated-check-in') &&
+                         incomingData().status == 'cancelled' &&
+                            isUpdatingOnlyAllowedFields(['status']) // Only status and updatedAt
+                        )
+                    )));
 
       allow delete: if false; // Appointments should be 'cancelled' via update, not deleted
     }
   }
 }
+
+    
