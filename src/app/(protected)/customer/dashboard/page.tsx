@@ -5,12 +5,12 @@ import ProtectedPage from '@/components/layout/ProtectedPage';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
-import type { Appointment, AppUser } from '@/types';
+import type { Appointment, AppUser, AppointmentStatus } from '@/types';
 import { firestore } from '@/firebase/config';
 import { collection, query, where, getDocs, orderBy, Timestamp, doc, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { CalendarDays, Clock, Scissors, Eye, XCircle, Search, UserCircle } from 'lucide-react'; // Removed Ban
+import { CalendarDays, Clock, Scissors, Eye, XCircle, Search, UserCircle, Play, CheckSquare, LogIn } from 'lucide-react';
 import Link from 'next/link';
 import {
   AlertDialog,
@@ -52,6 +52,8 @@ export default function CustomerDashboardPage() {
   const [initialLoadComplete, setInitialLoadComplete] = useState(false);
   const [appointmentToCancel, setAppointmentToCancel] = useState<Appointment | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
+  const [isUpdatingAppointment, setIsUpdatingAppointment] = useState<string | null>(null);
+
 
   useEffect(() => {
     setToday(getTodayDateString());
@@ -86,8 +88,8 @@ export default function CustomerDashboardPage() {
         fetchedAppointments.push({ id: doc.id, ...doc.data() } as Appointment);
       });
 
-      const upcomingAppointments = fetchedAppointments
-        .filter(app => app.date >= today && app.status === 'upcoming') 
+      const activeAppointments = fetchedAppointments
+        .filter(app => app.status !== 'completed' && app.status !== 'cancelled') 
         .sort((a, b) => {
           if (a.date === b.date) {
             return timeToMinutes(a.startTime) - timeToMinutes(b.startTime);
@@ -95,8 +97,8 @@ export default function CustomerDashboardPage() {
           return a.date.localeCompare(b.date);
         });
 
-      setMyAppointments(upcomingAppointments);
-      setItemWithTimestampConversion(LS_MY_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD, upcomingAppointments);
+      setMyAppointments(activeAppointments);
+      setItemWithTimestampConversion(LS_MY_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD, activeAppointments);
     } catch (error) {
       console.error("Error fetching appointments:", error);
       toast({ title: "Error", description: "Could not fetch your appointments.", variant: "destructive" });
@@ -104,6 +106,91 @@ export default function CustomerDashboardPage() {
       setIsLoadingAppointments(false);
     }
   }, [user?.uid, toast, today]);
+
+  const handleAppointmentAction = async (appointmentId: string, action: 'CUSTOMER_CHECK_IN' | 'CUSTOMER_CONFIRM_START' | 'CUSTOMER_MARK_DONE' | 'CUSTOMER_CONFIRM_COMPLETION') => {
+    if (!user?.uid) {
+      toast({ title: "Error", description: "You must be logged in.", variant: "destructive" });
+      return;
+    }
+    setIsUpdatingAppointment(appointmentId);
+    const appointmentRef = doc(firestore, 'appointments', appointmentId);
+    const now = Timestamp.now();
+    let updateData: Partial<Appointment> = { updatedAt: now };
+    let newStatus: AppointmentStatus | undefined = undefined;
+    let successMessage = "";
+
+    try {
+      const currentAppointment = myAppointments.find(app => app.id === appointmentId);
+      if (!currentAppointment) {
+        toast({ title: "Error", description: "Appointment not found.", variant: "destructive" });
+        setIsUpdatingAppointment(null);
+        return;
+      }
+
+      switch (action) {
+        case 'CUSTOMER_CHECK_IN':
+          updateData.customerCheckedInAt = now;
+          if (currentAppointment.barberCheckedInAt) {
+            newStatus = 'in-progress';
+            updateData.serviceActuallyStartedAt = now;
+            successMessage = "Check-in confirmed, service started.";
+          } else {
+            newStatus = 'customer-initiated-check-in';
+            successMessage = "You've checked in. Waiting for barber to confirm.";
+          }
+          break;
+        case 'CUSTOMER_CONFIRM_START':
+          if (currentAppointment.status === 'barber-initiated-check-in') {
+            updateData.customerCheckedInAt = now;
+            updateData.serviceActuallyStartedAt = now;
+            newStatus = 'in-progress';
+            successMessage = "Your arrival confirmed, service started.";
+          }
+          break;
+        case 'CUSTOMER_MARK_DONE':
+          updateData.customerMarkedDoneAt = now;
+          if (currentAppointment.barberMarkedDoneAt) {
+            newStatus = 'completed';
+            updateData.serviceActuallyCompletedAt = now;
+            successMessage = "Service mutually completed.";
+          } else {
+            newStatus = 'customer-initiated-completion';
+            successMessage = "Service marked as done by you. Waiting for barber's confirmation.";
+          }
+          break;
+        case 'CUSTOMER_CONFIRM_COMPLETION':
+          if (currentAppointment.status === 'barber-initiated-completion') {
+            updateData.customerMarkedDoneAt = now;
+            updateData.serviceActuallyCompletedAt = now;
+            newStatus = 'completed';
+            successMessage = "Service mutually completed.";
+          }
+          break;
+      }
+
+      if (newStatus) {
+        updateData.status = newStatus;
+      }
+
+      await updateDoc(appointmentRef, updateData);
+
+      setMyAppointments(prev => {
+        const updatedList = prev.map(app =>
+          app.id === appointmentId ? { ...app, ...updateData, status: newStatus || app.status } : app
+        ).filter(app => app.status !== 'completed' && app.status !== 'cancelled'); // Remove completed/cancelled from active list
+        setItemWithTimestampConversion(LS_MY_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD, updatedList);
+        return updatedList;
+      });
+      toast({ title: "Success", description: successMessage || "Appointment updated." });
+
+    } catch (error) {
+      console.error("Error updating appointment:", error);
+      toast({ title: "Error", description: "Could not update appointment status.", variant: "destructive" });
+    } finally {
+      setIsUpdatingAppointment(null);
+    }
+  };
+
 
   const fetchAvailableBarbers = useCallback(async () => {
     setIsLoadingBarbers(true);
@@ -125,7 +212,7 @@ export default function CustomerDashboardPage() {
         phoneNumber: data.phoneNumber,
         address: data.address,
         isAcceptingBookings: isAccepting, 
-        email: data.email, // Ensure email is included
+        email: data.email,
         } as AppUser);
       });
       setAvailableBarbers(fetchedBarbersData);
@@ -177,6 +264,56 @@ export default function CustomerDashboardPage() {
     }
   };
 
+  const renderAppointmentActions = (appointment: Appointment) => {
+    const isProcessingThis = isUpdatingAppointment === appointment.id;
+    switch (appointment.status) {
+      case 'upcoming':
+        return (
+          <Button onClick={() => handleAppointmentAction(appointment.id, 'CUSTOMER_CHECK_IN')} size="sm" className="rounded-full h-9 px-4" disabled={isProcessingThis}>
+            {isProcessingThis ? <LoadingSpinner className="mr-1.5 h-4 w-4" /> : <LogIn className="mr-1.5 h-4 w-4" />} I'm Here (Check-In)
+          </Button>
+        );
+      case 'barber-initiated-check-in':
+        return (
+          <Button onClick={() => handleAppointmentAction(appointment.id, 'CUSTOMER_CONFIRM_START')} size="sm" className="rounded-full h-9 px-4" disabled={isProcessingThis}>
+            {isProcessingThis ? <LoadingSpinner className="mr-1.5 h-4 w-4" /> : <Play className="mr-1.5 h-4 w-4" />} Confirm Arrival & Start
+          </Button>
+        );
+      case 'customer-initiated-check-in':
+        return <p className="text-sm text-muted-foreground text-right">Waiting for barber to confirm...</p>;
+      case 'in-progress':
+        return (
+          <Button onClick={() => handleAppointmentAction(appointment.id, 'CUSTOMER_MARK_DONE')} size="sm" className="rounded-full h-9 px-4" disabled={isProcessingThis}>
+            {isProcessingThis ? <LoadingSpinner className="mr-1.5 h-4 w-4" /> : <CheckSquare className="mr-1.5 h-4 w-4" />} Mark Service Done
+          </Button>
+        );
+      case 'barber-initiated-completion':
+        return (
+          <Button onClick={() => handleAppointmentAction(appointment.id, 'CUSTOMER_CONFIRM_COMPLETION')} size="sm" className="rounded-full h-9 px-4" disabled={isProcessingThis}>
+            {isProcessingThis ? <LoadingSpinner className="mr-1.5 h-4 w-4" /> : <CheckSquare className="mr-1.5 h-4 w-4" />} Confirm Service Done
+          </Button>
+        );
+      case 'customer-initiated-completion':
+        return <p className="text-sm text-muted-foreground text-right">Waiting for barber to confirm completion...</p>;
+      default:
+        return null;
+    }
+  };
+  
+  const getStatusLabelForCustomer = (status: AppointmentStatus) => {
+    switch (status) {
+        case 'upcoming': return 'Upcoming';
+        case 'customer-initiated-check-in': return 'Awaiting Barber Confirmation';
+        case 'barber-initiated-check-in': return 'Barber Noted Your Arrival';
+        case 'in-progress': return 'Service In Progress';
+        case 'customer-initiated-completion': return 'Awaiting Barber Completion';
+        case 'barber-initiated-completion': return 'Barber Marked Done';
+        case 'completed': return 'Completed';
+        case 'cancelled': return 'Cancelled';
+        default: return status;
+    }
+  };
+
   return (
     <ProtectedPage expectedRole="customer">
       <div className="space-y-8">
@@ -186,8 +323,8 @@ export default function CustomerDashboardPage() {
         
         <Card className="border-none shadow-lg rounded-xl overflow-hidden">
           <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-card via-muted/10 to-card">
-            <CardTitle className="text-xl font-bold">Your Upcoming Appointments</CardTitle>
-            <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">View and manage your upcoming appointments.</CardDescription>
+            <CardTitle className="text-xl font-bold">Your Active Appointments</CardTitle>
+            <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage your check-ins and service completions.</CardDescription>
           </CardHeader>
           <CardContent className="p-4 md:p-6">
             {(isLoadingAppointments && !myAppointments.length) ? (
@@ -198,7 +335,7 @@ export default function CustomerDashboardPage() {
             ) : myAppointments.length === 0 ? (
               <div className="text-center py-6">
                 <CalendarDays className="mx-auto h-12 w-12 text-muted-foreground mb-3" />
-                <p className="text-base text-gray-500 dark:text-gray-400 mb-4">You have no upcoming appointments.</p>
+                <p className="text-base text-gray-500 dark:text-gray-400 mb-4">You have no active appointments.</p>
                  <Button asChild className="rounded-full h-12 px-6 text-base">
                     <Link href="#find-barber">Find a Barber</Link>
                 </Button>
@@ -215,6 +352,7 @@ export default function CustomerDashboardPage() {
                         <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center">
                           <UserCircle className="mr-2 h-4 w-4 flex-shrink-0" /> With: {app.barberName}
                         </p>
+                         <p className="text-xs text-muted-foreground capitalize">Status: {getStatusLabelForCustomer(app.status)}</p>
                       </div>
                       <div className="space-y-1 text-sm text-left md:text-right">
                         <p className="font-medium flex items-center md:justify-end text-base">
@@ -224,24 +362,25 @@ export default function CustomerDashboardPage() {
                           <Clock className="mr-2 h-4 w-4 flex-shrink-0" /> {app.startTime}
                         </p>
                       </div>
-                       {app.status === 'upcoming' && (
-                        <div className="md:col-span-3 flex justify-end pt-3 mt-3 border-t">
-                           <Button
-                            variant="destructive"
-                            size="sm"
-                            className="rounded-full h-9 px-4 text-sm"
-                            onClick={() => setAppointmentToCancel(app)}
-                            disabled={isCancelling}
-                          >
-                            {isCancelling && appointmentToCancel?.id === app.id ? (
-                              <LoadingSpinner className="mr-1.5 h-4 w-4" />
-                            ) : (
-                              <XCircle className="mr-1.5 h-4 w-4" />
-                            )}
-                            Cancel
-                          </Button>
+                      <div className="md:col-span-3 flex flex-col sm:flex-row justify-end items-center pt-3 mt-3 border-t gap-2">
+                          {app.status !== 'cancelled' && app.status !== 'completed' && renderAppointmentActions(app)}
+                          {(app.status === 'upcoming' || app.status === 'customer-initiated-check-in' || app.status === 'barber-initiated-check-in') && (
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              className="rounded-full h-9 px-4 text-sm"
+                              onClick={() => setAppointmentToCancel(app)}
+                              disabled={isCancelling || isUpdatingAppointment === app.id}
+                            >
+                              {isCancelling && appointmentToCancel?.id === app.id ? (
+                                <LoadingSpinner className="mr-1.5 h-4 w-4" />
+                              ) : (
+                                <XCircle className="mr-1.5 h-4 w-4" />
+                              )}
+                              Cancel
+                            </Button>
+                          )}
                         </div>
-                      )}
                     </CardContent>
                   </Card>
                 ))}
@@ -272,7 +411,7 @@ export default function CustomerDashboardPage() {
                   <Card key={barber.uid} className="shadow-md rounded-lg border hover:shadow-lg transition-shadow duration-200">
                     <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                       <div className="flex items-center gap-4 flex-grow">
-                        <UserCircle className="h-12 w-12 text-muted-foreground flex-shrink-0" />
+                        <UserCircle className="h-10 w-10 text-muted-foreground flex-shrink-0" />
                         <div className="flex-grow">
                           <h3 className="text-base font-semibold">
                             {barber.firstName} {barber.lastName}

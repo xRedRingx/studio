@@ -1,38 +1,33 @@
 
-import type { User as FirebaseUserAuth } from 'firebase/auth'; // Keep for potential other Firebase interactions if any
+import type { User as FirebaseUserAuth } from 'firebase/auth';
 import type { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'customer' | 'barber';
 
-// This interface might still be useful for other Firebase services, but not primary auth.
 export interface FirebaseUser extends FirebaseUserAuth {}
 
-// AppUser will now represent the user data stored in Firestore.
-// Firebase Auth will manage the core user identity (uid, email, emailVerified, displayName from Firebase profile).
 export interface AppUser {
-  uid: string; // Firebase Auth UID
+  uid: string;
   role?: UserRole;
   firstName?: string;
   lastName?: string;
-  email: string; // Primary identifier from Firebase Auth
-  phoneNumber?: string | null; // Optional, stored in Firestore
-  address?: string | null; // New: Barber's physical address
-  isAcceptingBookings?: boolean; // New: For barbers to toggle online booking visibility
-  fcmToken?: string | null; // FCM registration token
-  createdAt?: Timestamp; // Firestore timestamp
-  updatedAt?: Timestamp; // Firestore timestamp
-  // Fields from Firebase Auth user object that we might merge for convenience
-  displayName?: string | null; // Firebase Auth display name
-  // photoURL is removed
-  emailVerified?: boolean; // Firebase Auth email verification status
+  email: string;
+  phoneNumber?: string | null;
+  address?: string | null;
+  isAcceptingBookings?: boolean;
+  fcmToken?: string | null;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
+  displayName?: string | null;
+  emailVerified?: boolean;
 }
 
 export interface BarberService {
-  id: string; // Firestore document ID
-  barberId: string; // ID of the barber who offers this service
+  id: string;
+  barberId: string;
   name: string;
   price: number;
-  duration: number; // in minutes
+  duration: number;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -42,38 +37,55 @@ export type DayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Frida
 export interface DayAvailability {
   day: DayOfWeek;
   isOpen: boolean;
-  startTime: string; // e.g., "09:00 AM"
-  endTime: string;   // e.g., "05:00 PM"
+  startTime: string;
+  endTime: string;
 }
 
-// This will be the structure stored in Firestore for a barber's schedule
 export interface BarberScheduleDoc {
   barberId: string;
   schedule: DayAvailability[];
   updatedAt?: Timestamp;
 }
 
+export type AppointmentStatus =
+  | 'upcoming' // Initial state
+  | 'customer-initiated-check-in' // Customer clicked check-in
+  | 'barber-initiated-check-in'   // Barber recorded customer arrival / Walk-in initial
+  | 'in-progress'                 // Both customer and barber confirmed check-in / Service started
+  | 'customer-initiated-completion'// Customer clicked mark done
+  | 'barber-initiated-completion'  // Barber clicked mark done
+  | 'completed'                   // Both confirmed service is done
+  | 'cancelled';                  // Appointment cancelled
+
 export interface Appointment {
-  id:string; // Firestore document ID
-  barberId: string; // ID of the barber
-  barberName: string; // Name of the barber
-  customerId?: string | null; // ID of the customer who booked, optional for walk-ins
-  customerName: string; // Name of the customer (could be from AppUser or entered for walk-in)
-  serviceId: string; // ID of the service
+  id:string;
+  barberId: string;
+  barberName: string;
+  customerId?: string | null;
+  customerName: string;
+  serviceId: string;
   serviceName: string;
   price: number;
   date: string; // YYYY-MM-DD
   startTime: string; // e.g., "10:00 AM"
-  endTime: string; // e.g., "10:30 AM"
-  status: 'upcoming' | 'checked-in' | 'completed' | 'next' | 'cancelled';
+  endTime: string; // Original estimated end time, e.g., "10:30 AM"
+  status: AppointmentStatus;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
+
+  // New fields for mutual check-in/out
+  customerCheckedInAt?: Timestamp | null;
+  barberCheckedInAt?: Timestamp | null;
+  serviceActuallyStartedAt?: Timestamp | null; // When status becomes 'in-progress'
+  customerMarkedDoneAt?: Timestamp | null;
+  barberMarkedDoneAt?: Timestamp | null;
+  serviceActuallyCompletedAt?: Timestamp | null; // When status becomes 'completed'
 }
 
 export interface UnavailableDate {
-  id: string; // Firestore document ID, typically the date string 'YYYY-MM-DD'
-  barberId: string; // ID of the barber
-  date: string; // YYYY-MM-DD format
-  reason?: string; // Optional reason
+  id: string;
+  barberId: string;
+  date: string;
+  reason?: string;
   createdAt?: Timestamp;
 }

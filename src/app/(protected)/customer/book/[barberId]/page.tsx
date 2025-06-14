@@ -62,7 +62,7 @@ const formatDateToYYYYMMDD = (date: Date): string => {
 };
 
 const formatYYYYMMDDToDisplay = (dateStr: string): string => {
-  const date = new Date(dateStr + 'T00:00:00');
+  const date = new Date(dateStr + 'T00:00:00'); // Ensure parsing as local date
   return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 };
 
@@ -73,7 +73,7 @@ const formatSelectedDateForDisplay = (date: Date): string => {
 const getWeekBoundaries = (date: Date): { weekStart: Date, weekEnd: Date } => {
   const d = new Date(date);
   const day = d.getDay();
-  const diffToMonday = d.getDate() - day + (day === 0 ? -6 : 1);
+  const diffToMonday = d.getDate() - day + (day === 0 ? -6 : 1); // day 0 is Sunday
   const weekStart = new Date(d.getFullYear(), d.getMonth(), diffToMonday);
   weekStart.setHours(0, 0, 0, 0);
 
@@ -99,7 +99,7 @@ export default function BookingPage() {
   const [customerExistingAppointments, setCustomerExistingAppointments] = useState<Appointment[]>([]);
 
   const [selectedService, setSelectedService] = useState<BarberService | null>(null);
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date()); // Default to today
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<string | null>(null);
   const [availableTimeSlots, setAvailableTimeSlots] = useState<string[]>([]);
@@ -110,6 +110,8 @@ export default function BookingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [newlyBookedAppointment, setNewlyBookedAppointment] = useState<Appointment | null>(null);
+  
+  // Queue related states
   const [queuePosition, setQueuePosition] = useState<number | null>(null);
   const [estimatedWaitTime, setEstimatedWaitTime] = useState<number | null>(null);
   const [currentlyServingCustomerName, setCurrentlyServingCustomerName] = useState<string | null>(null);
@@ -131,10 +133,11 @@ export default function BookingPage() {
         const barberData = barberDocSnap.data() as AppUser;
         const isAccepting = barberData.isAcceptingBookings !== undefined && barberData.isAcceptingBookings !== null 
                             ? barberData.isAcceptingBookings 
-                            : true;
+                            : true; // Default to true if not set
         setBarber({ uid: barberDocSnap.id, ...barberData, isAcceptingBookings: isAccepting });
         
         if (!isAccepting) {
+            // If barber is not accepting bookings, no need to load services etc.
             setIsLoadingBarberDetails(false);
             return;
         }
@@ -145,6 +148,7 @@ export default function BookingPage() {
         return;
       }
 
+      // Fetch services only if barber is accepting bookings
       const servicesQuery = query(collection(firestore, 'services'), where('barberId', '==', barberId), orderBy('createdAt', 'desc'));
       const servicesSnapshot = await getDocs(servicesQuery);
       setServices(servicesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BarberService)));
@@ -154,12 +158,14 @@ export default function BookingPage() {
       if (scheduleDocSnap.exists()) {
         const barberScheduleDoc = scheduleDocSnap.data() as BarberScheduleDoc;
         const fetchedSchedule = barberScheduleDoc.schedule;
+        // Ensure schedule is sorted by daysOfWeekOrder and includes all days
         const sortedFetchedSchedule = daysOfWeekOrder.map(dayName => {
             const foundDay = fetchedSchedule.find(d => d.day === dayName);
-            return foundDay || { day: dayName, isOpen: false, startTime: '09:00 AM', endTime: '05:00 PM' };
+            return foundDay || { day: dayName, isOpen: false, startTime: '09:00 AM', endTime: '05:00 PM' }; // Default if day missing
         });
         setSchedule(sortedFetchedSchedule);
 
+        // Fetch unavailable dates
         const unavailableDatesColRef = collection(firestore, `barberSchedules/${barberId}/unavailableDates`);
         const unavailableDatesSnapshot = await getDocs(query(unavailableDatesColRef));
         const fetchedUnavailableDates: UnavailableDate[] = [];
@@ -169,14 +175,16 @@ export default function BookingPage() {
         setBarberUnavailableDates(fetchedUnavailableDates);
 
       } else {
+        // Default schedule if none found (all days closed)
         const defaultSchedule: DayAvailability[] = daysOfWeekOrder.map(day => ({ day: day as DayAvailability['day'], isOpen: false, startTime: '09:00 AM', endTime: '05:00 PM' }));
         setSchedule(defaultSchedule);
         setBarberUnavailableDates([]);
       }
 
+      // Fetch existing appointments for the next 7 days for this barber to calculate availability
       const dateQueryArray: string[] = [];
-      const currentDateIter = new Date();
-      for (let i = 0; i < 7; i++) {
+      const currentDateIter = new Date(); // Start from today for availability checks
+      for (let i = 0; i < 7; i++) { // Look 7 days ahead
         const futureDate = new Date(currentDateIter);
         futureDate.setDate(currentDateIter.getDate() + i);
         dateQueryArray.push(formatDateToYYYYMMDD(futureDate));
@@ -186,6 +194,7 @@ export default function BookingPage() {
         collection(firestore, 'appointments'),
         where('barberId', '==', barberId),
         where('date', 'in', dateQueryArray)
+        // No need to filter by status here, as all non-cancelled/non-completed appointments block time
       );
       const appointmentsSnapshot = await getDocs(appointmentsQuery);
       setExistingAppointments(appointmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment)));
@@ -202,16 +211,18 @@ export default function BookingPage() {
     if (!user?.uid) return;
     setIsLoadingCustomerAppointments(true);
     try {
+      // Fetch customer's appointments for this week and next week for validation
       const today = new Date();
       const currentWeek = getWeekBoundaries(today);
-      const nextWeek = getWeekBoundaries(new Date(new Date().setDate(today.getDate() + 7)));
+      const nextWeek = getWeekBoundaries(new Date(new Date().setDate(today.getDate() + 7))); // Get start of next week
 
       const appointmentsQuery = query(
         collection(firestore, 'appointments'),
         where('customerId', '==', user.uid),
+        // Query for appointments from the start of the current week to the end of the next week
         where('date', '>=', formatDateToYYYYMMDD(currentWeek.weekStart)),
         where('date', '<=', formatDateToYYYYMMDD(nextWeek.weekEnd)),
-        orderBy('date', 'asc')
+        orderBy('date', 'asc') // For easier processing if needed
       );
       const snapshot = await getDocs(appointmentsQuery);
       setCustomerExistingAppointments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment)));
@@ -242,9 +253,10 @@ export default function BookingPage() {
 
     const targetDateStr = formatDateToYYYYMMDD(selectedDate);
 
+    // Check if barber is unavailable on the selected date
     if (barberUnavailableDates.some(ud => ud.date === targetDateStr)) {
       setAvailableTimeSlots([]);
-      setSelectedTimeSlot(null);
+      setSelectedTimeSlot(null); // Reset selected time slot
       return;
     }
 
@@ -253,7 +265,7 @@ export default function BookingPage() {
 
     if (!daySchedule || !daySchedule.isOpen) {
       setAvailableTimeSlots([]);
-      setSelectedTimeSlot(null);
+      setSelectedTimeSlot(null); // Reset selected time slot
       return;
     }
 
@@ -263,10 +275,10 @@ export default function BookingPage() {
     const endTimeMinutes = timeToMinutes(daySchedule.endTime);
 
     const bookedSlots = existingAppointments
-      .filter(app => app.date === targetDateStr)
+      .filter(app => app.date === targetDateStr && app.status !== 'cancelled') // Consider only non-cancelled for availability
       .map(app => ({
         start: timeToMinutes(app.startTime),
-        end: timeToMinutes(app.endTime),
+        end: timeToMinutes(app.endTime), // Use original endTime for blocking
       }));
 
     while (currentTimeMinutes + serviceDuration <= endTimeMinutes) {
@@ -275,11 +287,12 @@ export default function BookingPage() {
         bookedSlot => currentTimeMinutes < bookedSlot.end && slotEndMinutes > bookedSlot.start
       );
 
+      // Check if slot is in the future (with a small buffer, e.g., 15 mins from now)
       let isSlotInFuture = true;
-      if (targetDateStr === formatDateToYYYYMMDD(new Date())) {
+      if (targetDateStr === formatDateToYYYYMMDD(new Date())) { // If selected date is today
         const now = new Date();
         const nowMinutes = now.getHours() * 60 + now.getMinutes();
-        const bufferMinutes = 15;
+        const bufferMinutes = 15; // Customer must book at least 15 mins in advance
         if (currentTimeMinutes < nowMinutes + bufferMinutes) {
           isSlotInFuture = false;
         }
@@ -288,10 +301,10 @@ export default function BookingPage() {
       if (isSlotFree && isSlotInFuture) {
         slots.push(minutesToTime(currentTimeMinutes));
       }
-      currentTimeMinutes += 15;
+      currentTimeMinutes += 15; // Check every 15 minutes
     }
     setAvailableTimeSlots(slots);
-    setSelectedTimeSlot(null);
+    setSelectedTimeSlot(null); // Reset selected time slot when date or service changes
   }, [selectedService, selectedDate, schedule, existingAppointments, barberUnavailableDates, barber?.isAcceptingBookings]);
 
 
@@ -304,7 +317,7 @@ export default function BookingPage() {
   const handleDateSelect = (date: Date | undefined) => {
     if (date) {
       setSelectedDate(date);
-      setSelectedTimeSlot(null);
+      setSelectedTimeSlot(null); // Reset time slot when date changes
       setIsCalendarOpen(false);
     }
   };
@@ -326,21 +339,24 @@ export default function BookingPage() {
   
     try {
       const todayStr = formatDateToYYYYMMDD(new Date());
+      // Fetch appointments for today that are upcoming, customer-initiated-check-in, barber-initiated-check-in, or in-progress
       const q = query(
         collection(firestore, 'appointments'),
         where('barberId', '==', barberId),
         where('date', '==', todayStr), 
-        where('status', 'in', ['upcoming', 'checked-in']),
+        where('status', 'in', ['upcoming', 'customer-initiated-check-in', 'barber-initiated-check-in', 'in-progress']),
         orderBy('startTime') 
       );
   
       const snapshot = await getDocs(q);
       let todaysOpenAppointments = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment));
       
-      todaysOpenAppointments.sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
-
-      if (bookedAppointment.date === todayStr && !todaysOpenAppointments.find(app => app.id === bookedAppointment.id)) {
+      // Ensure the newly booked appointment is in the list if it's for today and matches criteria
+      if (bookedAppointment.date === todayStr && 
+          ['upcoming', 'customer-initiated-check-in', 'barber-initiated-check-in', 'in-progress'].includes(bookedAppointment.status) &&
+          !todaysOpenAppointments.find(app => app.id === bookedAppointment.id)) {
           todaysOpenAppointments.push(bookedAppointment);
+          // Re-sort if added
           todaysOpenAppointments.sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime));
       }
   
@@ -348,46 +364,56 @@ export default function BookingPage() {
       let waitTime = 0;
       let servingName: string | null = null;
       let userIsNext = false;
-      let foundCurrentUser = false;
+      let foundCurrentUserInQueue = false;
   
-      for (let i = 0; i < todaysOpenAppointments.length; i++) {
-        const app = todaysOpenAppointments[i];
-        const serviceDetails = services.find(s => s.id === app.serviceId) || { duration: 30 }; 
-  
-        if (app.id === bookedAppointment.id) {
-          position = i + 1;
-          foundCurrentUser = true;
+      const currentAppointmentIndex = todaysOpenAppointments.findIndex(app => app.id === bookedAppointment.id);
+
+      if (currentAppointmentIndex !== -1) {
+        position = currentAppointmentIndex + 1;
+        foundCurrentUserInQueue = true;
+
+        // Calculate wait time based on appointments before the current user's
+        for (let i = 0; i < currentAppointmentIndex; i++) {
+          const app = todaysOpenAppointments[i];
+          const serviceDetails = services.find(s => s.id === app.serviceId) || { duration: 30 }; // Default duration if service not found
+          
+          if (app.status === 'in-progress') {
+             // Estimate remaining time for in-progress appointment
+             const startedAt = app.serviceActuallyStartedAt?.toDate() || new Date(app.date + 'T' + app.startTime); // Fallback to startTime
+             const elapsedMinutes = (new Date().getTime() - startedAt.getTime()) / (1000 * 60);
+             waitTime += Math.max(0, serviceDetails.duration - elapsedMinutes);
+          } else {
+            // For upcoming or checked-in (but not started), add full duration
+            waitTime += serviceDetails.duration;
+          }
         }
-  
-        if (app.status === 'checked-in') {
-          servingName = app.customerName;
-          if (!foundCurrentUser) {
-            waitTime += serviceDetails.duration;
-          }
-        } else if (app.status === 'upcoming') {
-          if (!foundCurrentUser) {
-            waitTime += serviceDetails.duration;
-          }
-          if (servingName && todaysOpenAppointments[i-1]?.status === 'checked-in' && app.id === bookedAppointment.id) {
+        
+        // Determine who is currently being served
+        const currentlyInProgress = todaysOpenAppointments.find(app => app.status === 'in-progress');
+        if (currentlyInProgress && currentlyInProgress.id !== bookedAppointment.id) {
+            servingName = currentlyInProgress.customerName;
+        }
+
+        // Check if current user is next
+        if (position === 1 && !currentlyInProgress) { // User is first and no one is being served
             userIsNext = true;
-          } else if (!servingName && i === 0 && app.id === bookedAppointment.id) {
-            userIsNext = true; 
-          }
+        } else if (currentlyInProgress && position === (todaysOpenAppointments.findIndex(app => app.id === currentlyInProgress.id) + 2) ) {
+            // User is right after the one being served
+            userIsNext = true;
         }
       }
       
-      if (position === 1 && !servingName) {
-        userIsNext = true;
-      }
-      
-      if (bookedAppointment.status === 'checked-in') {
+      // If the booked appointment itself is 'in-progress', then wait time is 0, position is effectively 1 (being served)
+      if (bookedAppointment.status === 'in-progress') {
           waitTime = 0;
           position = 1; 
-          userIsNext = false; 
+          userIsNext = false; // Not "next" because they are "current"
+          servingName = bookedAppointment.customerName;
       }
 
+
       setQueuePosition(position > 0 ? position : null);
-      setEstimatedWaitTime(waitTime);
+      setEstimatedWaitTime(waitTime > 0 ? Math.round(waitTime) : null);
       setCurrentlyServingCustomerName(servingName);
       setIsCurrentUserNext(userIsNext);
       setBookingStep('queued');
@@ -395,7 +421,7 @@ export default function BookingPage() {
     } catch (error) {
       console.error("Error calculating queue info:", error);
       toast({ title: "Queue Error", description: "Could not retrieve current queue information.", variant: "destructive" });
-      setBookingStep('confirmed');
+      setBookingStep('confirmed'); // Fallback to standard confirmation if queue info fails
     }
   };
 
@@ -404,7 +430,7 @@ export default function BookingPage() {
       toast({ title: "Error", description: "Missing booking information.", variant: "destructive" });
       return;
     }
-     if (barber.isAcceptingBookings === false) {
+     if (barber.isAcceptingBookings === false) { // Check again before final submission
       toast({ title: "Booking Not Allowed", description: "This barber is not currently accepting new online bookings.", variant: "destructive" });
       setIsSubmitting(false);
       return;
@@ -412,31 +438,34 @@ export default function BookingPage() {
     setIsSubmitting(true);
 
     const selectedDateStr = formatDateToYYYYMMDD(selectedDate);
-    const dailyBookings = customerExistingAppointments.filter(
-      app => app.date === selectedDateStr && app.customerId === user.uid
+    // Rule 1: One appointment per day with ANY barber
+    const dailyBookingsWithAnyBarber = customerExistingAppointments.filter(
+      app => app.date === selectedDateStr && app.customerId === user.uid && app.status !== 'cancelled'
     );
-    if (dailyBookings.length >= 1) {
+    if (dailyBookingsWithAnyBarber.length >= 1) {
       toast({
         title: "Booking Limit Reached",
-        description: "You can only book one appointment per day.",
+        description: "You can only book one appointment per day across all barbers.",
         variant: "destructive",
       });
       setIsSubmitting(false);
       return;
     }
 
+    // Rule 2: Max two appointments per week with ANY barber
     const { weekStart, weekEnd } = getWeekBoundaries(selectedDate);
-    const weeklyBookings = customerExistingAppointments.filter(app => {
-      const appDate = new Date(app.date + 'T00:00:00');
+    const weeklyBookingsWithAnyBarber = customerExistingAppointments.filter(app => {
+      const appDate = new Date(app.date + 'T00:00:00'); // Ensure local date interpretation
       return app.customerId === user.uid &&
+             app.status !== 'cancelled' &&
              appDate >= weekStart &&
              appDate <= weekEnd;
     });
 
-    if (weeklyBookings.length >= 2) {
+    if (weeklyBookingsWithAnyBarber.length >= 2) {
       toast({
         title: "Booking Limit Reached",
-        description: "You can only book two appointments per week.",
+        description: "You can only book two appointments per week across all barbers.",
         variant: "destructive",
       });
       setIsSubmitting(false);
@@ -448,8 +477,9 @@ export default function BookingPage() {
       const appointmentStartTime = selectedTimeSlot;
       const serviceDuration = selectedService.duration;
       const appointmentEndTime = minutesToTime(timeToMinutes(appointmentStartTime) + serviceDuration);
+      const now = Timestamp.now();
 
-      const newAppointmentData = {
+      const newAppointmentData: Omit<Appointment, 'id'> = {
         barberId: barber.uid, 
         barberName: `${barber.firstName} ${barber.lastName}`,
         customerId: user.uid,
@@ -460,23 +490,31 @@ export default function BookingPage() {
         date: appointmentDate,
         startTime: appointmentStartTime,
         endTime: appointmentEndTime,
-        status: 'upcoming' as Appointment['status'],
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
+        status: 'upcoming', // Initial status
+        createdAt: now,
+        updatedAt: now,
+        customerCheckedInAt: null,
+        barberCheckedInAt: null,
+        serviceActuallyStartedAt: null,
+        customerMarkedDoneAt: null,
+        barberMarkedDoneAt: null,
+        serviceActuallyCompletedAt: null,
       };
 
       const docRef = await addDoc(collection(firestore, 'appointments'), newAppointmentData);
       const finalAppointment: Appointment = { id: docRef.id, ...newAppointmentData };
       setNewlyBookedAppointment(finalAppointment);
       
+      // Add to local list of customer appointments to ensure validation works for immediate re-booking attempts
       setCustomerExistingAppointments(prev => [...prev, finalAppointment]);
 
       toast({ title: "Booking Confirmed!", description: "Your appointment has been successfully booked." });
       
+      // If appointment is for today, try to fetch queue info
       if (finalAppointment.date === formatDateToYYYYMMDD(new Date())) { 
         await fetchAndCalculateQueueInfo(finalAppointment);
       } else {
-        setBookingStep('confirmed'); 
+        setBookingStep('confirmed'); // If not for today, just show standard confirmation
       }
 
     } catch (error) {
@@ -516,7 +554,7 @@ export default function BookingPage() {
     );
   }
 
-  if (!barber) {
+  if (!barber) { // Should be caught by fetch logic, but good fallback
     return (
       <ProtectedPage expectedRole="customer">
         <div className="text-center py-10">
@@ -528,6 +566,7 @@ export default function BookingPage() {
     );
   }
   
+  // Check if barber is accepting bookings (value could be false, so check explicitly)
   const barberIsAcceptingBookings = barber.isAcceptingBookings !== undefined ? barber.isAcceptingBookings : true;
 
   if (!barberIsAcceptingBookings && bookingStep !== 'confirmed' && bookingStep !== 'queued') {
@@ -599,6 +638,7 @@ export default function BookingPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6 p-4 md:p-6">
+              {/* Barber's Weekly Availability Display */}
               {schedule.length > 0 && (
                 <div className="mb-6 p-4 border rounded-lg bg-card shadow-sm">
                   <h4 className="text-md font-semibold mb-3 text-foreground flex items-center">
@@ -608,7 +648,7 @@ export default function BookingPage() {
                   <div className="space-y-1.5">
                     {daysOfWeekOrder.map(dayName => {
                       const dayInfo = schedule.find(s => s.day === dayName);
-                      if (!dayInfo) return null; 
+                      if (!dayInfo) return null; // Should not happen if schedule is complete
                       return (
                         <div key={dayInfo.day} className="flex justify-between items-center text-sm">
                           <span className="text-gray-600 dark:text-gray-400">{dayInfo.day}</span>
@@ -624,6 +664,7 @@ export default function BookingPage() {
                 </div>
               )}
 
+              {/* Date Picker */}
               <div>
                 <Label className="text-base font-medium mb-2 block">Select Date</Label>
                  <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
@@ -647,22 +688,23 @@ export default function BookingPage() {
                         disabled={(date) =>
                           date < today || 
                           date > sevenDaysFromNow || 
-                          barberUnavailableDates.some(ud => ud.date === formatDateToYYYYMMDD(date))
+                          barberUnavailableDates.some(ud => ud.date === formatDateToYYYYMMDD(date)) // Disable if barber marked date unavailable
                         }
                         initialFocus
                       />
                     </PopoverContent>
                   </Popover>
-                  {isDateUnavailable && (
+                  {isDateUnavailable && ( // Show message if selected date is specifically marked unavailable
                     <p className="text-sm text-destructive flex items-center mt-1 mb-4">
                         <Ban className="h-4 w-4 mr-1.5" /> This date is unavailable.
                     </p>
                   )}
               </div>
 
+              {/* Time Slot Selector */}
               <div>
                 <Label className="text-base font-medium mb-3 block">Select Time Slot</Label>
-                {isDateUnavailable ? (
+                {isDateUnavailable ? ( // If date is marked as unavailable by barber
                      <p className="text-sm text-destructive">The barber is unavailable on this selected date.</p>
                 ) : availableTimeSlots.length > 0 ? (
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
@@ -677,7 +719,7 @@ export default function BookingPage() {
                       </Button>
                     ))}
                   </div>
-                ) : (
+                ) : ( // No slots available for other reasons (booked, closed, etc.)
                   <p className="text-sm text-gray-500 dark:text-gray-400">No available time slots for the selected service and date. This could be because all slots are booked, the barber is closed, or it's too late to book for today. Check the barber's weekly availability or try a different date/service.</p>
                 )}
               </div>
@@ -722,7 +764,7 @@ export default function BookingPage() {
           </Card>
         );
 
-        case 'confirmed':
+        case 'confirmed': // Standard confirmation if not for today or queue info fails
             return (
               <Card className="text-center border-none shadow-lg rounded-xl overflow-hidden p-4 md:p-6">
                 <CardHeader className="pt-4 pb-2">
@@ -741,7 +783,7 @@ export default function BookingPage() {
               </Card>
             );
         
-        case 'queued':
+        case 'queued': // Special confirmation screen if appointment is for today showing queue info
             return (
                 <Card className="text-center border-none shadow-lg rounded-xl overflow-hidden p-4 md:p-6">
                 <CardHeader className="pt-4 pb-2">
@@ -752,7 +794,7 @@ export default function BookingPage() {
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3 text-base pt-2">
-                    {newlyBookedAppointment && barber && (
+                    {newlyBookedAppointment && barber && ( // Ensure these are available
                     <div className="pb-3 mb-4 border-b border-border">
                         <p className="text-lg font-semibold text-foreground">Your Appointment:</p>
                         <p><span className="font-medium">{newlyBookedAppointment.serviceName}</span> with <span className="font-medium">{barber.firstName} {barber.lastName}</span></p>
@@ -762,7 +804,7 @@ export default function BookingPage() {
 
                     <div className="space-y-1.5">
                         {isCurrentUserNext && (
-                             <p className="text-xl font-semibold text-green-600">You are next in line!</p>
+                             <p className="text-xl font-semibold text-green-600">You are next in line! Please proceed to the barbershop.</p>
                         )}
                         {queuePosition && !isCurrentUserNext && (
                              <p className="text-lg">Your position: <span className="font-bold text-2xl text-primary">#{queuePosition}</span></p>
@@ -773,13 +815,13 @@ export default function BookingPage() {
                         {currentlyServingCustomerName && (
                         <p className="text-sm text-muted-foreground">Currently serving: <span className="font-medium text-foreground">{currentlyServingCustomerName}</span>.</p>
                         )}
-                        {!currentlyServingCustomerName && queuePosition === 1 && !isCurrentUserNext && (
+                        {!currentlyServingCustomerName && queuePosition === 1 && !isCurrentUserNext && ( // User is #1 but no one is being served yet
                              <p className="text-md text-muted-foreground">You are at the front of the queue. The barber will call you shortly.</p>
                         )}
                     </div>
 
                     <p className="text-xs text-muted-foreground pt-4">
-                        Note: Queue information is based on current bookings and may change.
+                        Note: Queue information is based on current bookings and may change. Please arrive on time for your appointment.
                     </p>
                     <Button onClick={() => router.push('/customer/dashboard')} className="mt-6 w-full max-w-xs mx-auto h-14 rounded-full text-lg">
                      <LayoutDashboard className="mr-2 h-5 w-5" /> Back to Dashboard
@@ -800,6 +842,7 @@ export default function BookingPage() {
             <h1 className="text-2xl font-bold font-headline">
             Book with {barber.firstName || APP_NAME}
             </h1>
+            {/* Allow cancellation only before confirmation step or if not already confirmed/queued */}
             { bookingStep !== 'selectService' && bookingStep !== 'queued' && bookingStep !== 'confirmed' && (
                  <Button variant="ghost" onClick={() => router.push('/customer/dashboard')} className="text-sm text-primary hover:bg-destructive/10 hover:text-destructive rounded-full px-3 py-1.5">
                     <X className="mr-1.5 h-4 w-4"/> Cancel Booking

@@ -2,9 +2,9 @@
 'use client';
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import type { Appointment, BarberService } from '@/types';
+import type { Appointment } from '@/types';
 import AppointmentCard from './AppointmentCard';
-import { CalendarDays, AlertTriangle } from 'lucide-react';
+import { CalendarDays } from 'lucide-react';
 import { useMemo, useState, useEffect } from 'react';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 
@@ -23,13 +23,11 @@ const timeToMinutes = (timeStr: string): number => {
 
 interface TodaysAppointmentsSectionProps {
   appointments: Appointment[];
-  onUpdateAppointmentStatus: (appointmentId: string, status: Appointment['status']) => Promise<void>;
-  isUpdatingAppointment: boolean;
-  // We might need services if we want to check duration for 'checked-in' staleness later
-  // services: BarberService[]; 
+  onAppointmentAction: (appointmentId: string, action: 'BARBER_CHECK_IN' | 'BARBER_CONFIRM_START' | 'BARBER_MARK_DONE' | 'BARBER_CONFIRM_COMPLETION') => Promise<void>;
+  isUpdatingAppointmentId: string | null;
 }
 
-export default function TodaysAppointmentsSection({ appointments, onUpdateAppointmentStatus, isUpdatingAppointment }: TodaysAppointmentsSectionProps) {
+export default function TodaysAppointmentsSection({ appointments, onAppointmentAction, isUpdatingAppointmentId }: TodaysAppointmentsSectionProps) {
   const [todayDate, setTodayDate] = useState<string | null>(null);
   const [currentTimeMinutes, setCurrentTimeMinutes] = useState<number>(0);
 
@@ -38,10 +36,9 @@ export default function TodaysAppointmentsSection({ appointments, onUpdateAppoin
     const now = new Date();
     setCurrentTimeMinutes(now.getHours() * 60 + now.getMinutes());
 
-    // Optional: Update current time periodically if the component stays mounted for long
     const timer = setInterval(() => {
-      const now = new Date();
-      setCurrentTimeMinutes(now.getHours() * 60 + now.getMinutes());
+      const nowLocal = new Date();
+      setCurrentTimeMinutes(nowLocal.getHours() * 60 + nowLocal.getMinutes());
     }, 60000); // Every minute
 
     return () => clearInterval(timer);
@@ -51,68 +48,24 @@ export default function TodaysAppointmentsSection({ appointments, onUpdateAppoin
     if (!todayDate) {
       return [];
     }
-    const STALE_THRESHOLD_MINUTES = 5; // e.g., 5 minutes past start time
+    const STALE_THRESHOLD_MINUTES = 5; 
 
     return appointments
-      .filter(app => app.date === todayDate && app.status !== 'cancelled')
-      .sort((a, b) => {
-        const dateForComparison = todayDate || '1970-01-01';
-        let timeAHours = parseInt(a.startTime.split(':')[0]);
-        const timeAMinutes = parseInt(a.startTime.split(':')[1].substring(0,2));
-        if (a.startTime.includes('PM') && timeAHours !== 12) timeAHours += 12;
-        if (a.startTime.includes('AM') && timeAHours === 12) timeAHours = 0;
-
-        let timeBHours = parseInt(b.startTime.split(':')[0]);
-        const timeBMinutes = parseInt(b.startTime.split(':')[1].substring(0,2));
-        if (b.startTime.includes('PM') && timeBHours !== 12) timeBHours += 12;
-        if (b.startTime.includes('AM') && timeBHours === 12) timeBHours = 0;
-        
-        const fullTimeA = new Date(`${dateForComparison}T00:00:00`);
-        fullTimeA.setHours(timeAHours, timeAMinutes);
-        
-        const fullTimeB = new Date(`${dateForComparison}T00:00:00`);
-        fullTimeB.setHours(timeBHours, timeBMinutes);
-
-        return fullTimeA.getTime() - fullTimeB.getTime();
-      })
-      .map((app, index, arr) => {
-        let displayStatus = app.status;
+      .filter(app => app.date === todayDate && app.status !== 'cancelled' && app.status !== 'completed')
+      .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime))
+      .map(app => {
         let isStale = false;
-
-        const firstUpcomingOrCheckedInIndex = arr.findIndex(a => a.status === 'upcoming' || a.status === 'checked-in');
-        if ((app.status === 'upcoming' || app.status === 'checked-in') && index === firstUpcomingOrCheckedInIndex) {
-          displayStatus = 'next';
-        }
-
         if (app.status === 'upcoming') {
           const appStartTimeMinutes = timeToMinutes(app.startTime);
           if (currentTimeMinutes > appStartTimeMinutes + STALE_THRESHOLD_MINUTES) {
             isStale = true;
           }
         }
-        // Future enhancement: check for stale 'checked-in' appointments
-        // if (app.status === 'checked-in') {
-        //   const service = services.find(s => s.id === app.serviceId);
-        //   if (service) {
-        //     const appStartTimeMinutes = timeToMinutes(app.startTime);
-        //     const expectedEndTimeMinutes = appStartTimeMinutes + service.duration;
-        //     if (currentTimeMinutes > expectedEndTimeMinutes + STALE_THRESHOLD_MINUTES) {
-        //       isStale = true;
-        //     }
-        //   }
-        // }
-
-        return { ...app, displayStatus, isStale };
+        // Note: "next" status is now primarily determined by AppointmentCard based on sorted list.
+        // Stale logic for other statuses ('customer-initiated-check-in', etc.) can be added here if needed.
+        return { ...app, isStale };
       });
   }, [appointments, todayDate, currentTimeMinutes]);
-
-  const handleCheckIn = async (appointmentId: string) => {
-    await onUpdateAppointmentStatus(appointmentId, 'checked-in');
-  };
-
-  const handleMarkDone = async (appointmentId: string) => {
-    await onUpdateAppointmentStatus(appointmentId, 'completed');
-  };
 
   if (!todayDate) {
     return (
@@ -147,16 +100,19 @@ export default function TodaysAppointmentsSection({ appointments, onUpdateAppoin
           <p className="text-base text-gray-500 dark:text-gray-400">No active appointments scheduled for today.</p>
         ) : (
           <div className="space-y-4">
-            {todaysAppointments.map((appointment) => (
-              <AppointmentCard
-                key={appointment.id}
-                appointment={{...appointment, status: appointment.displayStatus || appointment.status}}
-                onCheckIn={handleCheckIn}
-                onMarkDone={handleMarkDone}
-                isInteracting={isUpdatingAppointment}
-                isStale={appointment.isStale}
-              />
-            ))}
+            {todaysAppointments.map((appointment, index) => {
+              const isNextAppointment = index === 0 && (appointment.status === 'upcoming' || appointment.status === 'customer-initiated-check-in' || appointment.status === 'barber-initiated-check-in');
+              return (
+                <AppointmentCard
+                  key={appointment.id}
+                  appointment={appointment}
+                  onAppointmentAction={onAppointmentAction}
+                  isInteracting={isUpdatingAppointmentId === appointment.id}
+                  isStale={appointment.isStale}
+                  isNextCandidate={isNextAppointment}
+                />
+              );
+            })}
           </div>
         )}
       </CardContent>

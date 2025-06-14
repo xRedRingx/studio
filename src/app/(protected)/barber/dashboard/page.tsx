@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import ProtectedPage from '@/components/layout/ProtectedPage';
 import { useAuth } from '@/hooks/useAuth';
-import type { BarberService, Appointment, DayOfWeek, BarberScheduleDoc, UnavailableDate } from '@/types';
+import type { BarberService, Appointment, DayOfWeek, BarberScheduleDoc, UnavailableDate, AppointmentStatus } from '@/types';
 import TodaysAppointmentsSection from '@/components/barber/TodaysAppointmentsSection';
 import { firestore } from '@/firebase/config';
 import {
@@ -17,6 +17,7 @@ import {
   updateDoc,
   Timestamp,
   orderBy,
+  writeBatch,
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
@@ -29,8 +30,9 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { getItemWithTimestampRevival, setItemWithTimestampConversion, LS_SERVICES_KEY_DASHBOARD, LS_APPOINTMENTS_KEY_DASHBOARD } from '@/lib/localStorageUtils';
 import type { DayAvailability as ScheduleDayAvailability } from '@/types';
 import { getDoc as getFirestoreDoc } from 'firebase/firestore';
-import Link from 'next/link';
+// import Link from 'next/link'; // No longer used
 import { Alert, AlertDescription } from '@/components/ui/alert';
+
 
 const WalkInDialog = dynamic(() => import('@/components/barber/WalkInDialog'), {
   loading: () => <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-[100]"><LoadingSpinner className="h-8 w-8 text-primary" /></div>,
@@ -79,7 +81,7 @@ export default function BarberDashboardPage() {
 
   const [isLoadingServices, setIsLoadingServices] = useState(true);
   const [isLoadingAppointments, setIsLoadingAppointments] = useState(true);
-  const [isUpdatingAppointment, setIsUpdatingAppointment] = useState(false);
+  const [isUpdatingAppointment, setIsUpdatingAppointment] = useState<string | null>(null); // Store ID of appointment being updated
   const [isWalkInDialogOpen, setIsWalkInDialogOpen] = useState(false);
   const [isProcessingWalkIn, setIsProcessingWalkIn] = useState(false);
   const [isLoadingBarberSelfData, setIsLoadingBarberSelfData] = useState(true);
@@ -157,29 +159,97 @@ export default function BarberDashboardPage() {
     }
   }, [user?.uid, toast]);
 
-  const handleUpdateAppointmentStatus = async (appointmentId: string, status: Appointment['status']) => {
+  const handleAppointmentAction = async (appointmentId: string, action: 'BARBER_CHECK_IN' | 'BARBER_CONFIRM_START' | 'BARBER_MARK_DONE' | 'BARBER_CONFIRM_COMPLETION') => {
     if (!user?.uid) {
       toast({ title: "Error", description: "You must be logged in.", variant: "destructive" });
       return;
     }
-    setIsUpdatingAppointment(true);
+    setIsUpdatingAppointment(appointmentId);
+    const appointmentRef = doc(firestore, 'appointments', appointmentId);
+    const now = Timestamp.now();
+    let updateData: Partial<Appointment> = { updatedAt: now };
+    let newStatus: AppointmentStatus | undefined = undefined;
+    let successMessage = "";
+
     try {
-      const appointmentRef = doc(firestore, 'appointments', appointmentId);
-      const newUpdatedAt = Timestamp.now();
-      await updateDoc(appointmentRef, { status: status, updatedAt: newUpdatedAt });
-      setAppointments((prev) => {
-        const updated = prev.map((app) => (app.id === appointmentId ? { ...app, status, updatedAt: newUpdatedAt } : app));
-        setItemWithTimestampConversion(LS_APPOINTMENTS_KEY_DASHBOARD, updated);
-        return updated;
+      const currentAppointment = appointments.find(app => app.id === appointmentId);
+      if (!currentAppointment) {
+        toast({ title: "Error", description: "Appointment not found.", variant: "destructive" });
+        setIsUpdatingAppointment(null);
+        return;
+      }
+
+      switch (action) {
+        case 'BARBER_CHECK_IN': // Barber records customer arrival
+          updateData.barberCheckedInAt = now;
+          if (currentAppointment.customerCheckedInAt) {
+            newStatus = 'in-progress';
+            updateData.serviceActuallyStartedAt = now;
+            successMessage = "Service started with customer.";
+          } else {
+            newStatus = 'barber-initiated-check-in';
+            successMessage = "Customer arrival recorded. Waiting for customer to confirm check-in if booked.";
+          }
+          break;
+
+        case 'BARBER_CONFIRM_START': // Barber confirms customer's check-in and starts service
+          if (currentAppointment.status === 'customer-initiated-check-in') {
+            updateData.barberCheckedInAt = now;
+            updateData.serviceActuallyStartedAt = now;
+            newStatus = 'in-progress';
+            successMessage = "Service started.";
+          } else if (currentAppointment.customerId === null && currentAppointment.status === 'barber-initiated-check-in') { // Walk-in, barber is starting it
+            updateData.serviceActuallyStartedAt = now;
+            newStatus = 'in-progress';
+            successMessage = "Walk-in service started.";
+          }
+          break;
+
+        case 'BARBER_MARK_DONE': // Barber marks their part as done
+          updateData.barberMarkedDoneAt = now;
+          if (currentAppointment.customerMarkedDoneAt || currentAppointment.customerId === null) { // If customer also done OR it's a walk-in
+            newStatus = 'completed';
+            updateData.serviceActuallyCompletedAt = now;
+            successMessage = currentAppointment.customerId === null ? "Walk-in service completed." : "Service mutually completed.";
+          } else {
+            newStatus = 'barber-initiated-completion';
+            successMessage = "Service marked as done by you. Waiting for customer confirmation.";
+          }
+          break;
+
+        case 'BARBER_CONFIRM_COMPLETION': // Barber confirms customer's completion mark
+           if (currentAppointment.status === 'customer-initiated-completion') {
+            updateData.barberMarkedDoneAt = now;
+            updateData.serviceActuallyCompletedAt = now;
+            newStatus = 'completed';
+            successMessage = "Service mutually completed.";
+          }
+          break;
+      }
+
+      if (newStatus) {
+        updateData.status = newStatus;
+      }
+
+      await updateDoc(appointmentRef, updateData);
+
+      setAppointments(prev => {
+        const updatedList = prev.map(app =>
+          app.id === appointmentId ? { ...app, ...updateData, status: newStatus || app.status } : app
+        );
+        setItemWithTimestampConversion(LS_APPOINTMENTS_KEY_DASHBOARD, updatedList);
+        return updatedList;
       });
-      toast({ title: "Success", description: `Appointment status updated to ${status}.` });
+      toast({ title: "Success", description: successMessage || `Appointment updated.` });
+
     } catch (error) {
-      console.error("Error updating appointment status:", error);
+      console.error("Error updating appointment:", error);
       toast({ title: "Error", description: "Could not update appointment status.", variant: "destructive" });
     } finally {
-      setIsUpdatingAppointment(false);
+      setIsUpdatingAppointment(null);
     }
   };
+
 
   const fetchBarberSelfDataForWalkIn = useCallback(async () => {
     if (!user?.uid) return;
@@ -249,14 +319,17 @@ export default function BarberDashboardPage() {
     const scheduleEndTimeMinutes = timeToMinutes(daySchedule.endTime);
 
     const now = new Date();
+    const nowTimestamp = Timestamp.fromDate(now);
     const currentTimeMinutes = now.getHours() * 60 + now.getMinutes();
-    const earliestPossibleStartMinutes = Math.max(scheduleStartTimeMinutes, currentTimeMinutes + 5);
+    const earliestPossibleStartMinutes = Math.max(scheduleStartTimeMinutes, currentTimeMinutes + 5); // 5 min buffer
 
-    const todaysAppointments = appointments
-      .filter(app => app.date === todayDateStr)
+    const todaysAppointmentsForSlotFinding = appointments
+      .filter(app => app.date === todayDateStr && app.status !== 'cancelled' && app.status !== 'completed')
       .map(app => ({
         start: timeToMinutes(app.startTime),
-        end: timeToMinutes(app.endTime),
+        end: app.serviceActuallyStartedAt && app.status === 'in-progress'
+               ? timeToMinutes(app.startTime) + selectedService.duration // Use actual start + duration for in-progress
+               : timeToMinutes(app.endTime), // Otherwise, use original estimate
       }))
       .sort((a, b) => a.start - b.start);
 
@@ -264,7 +337,7 @@ export default function BarberDashboardPage() {
 
     for (let potentialStart = earliestPossibleStartMinutes; potentialStart + serviceDuration <= scheduleEndTimeMinutes; potentialStart += 15) {
         const potentialEnd = potentialStart + serviceDuration;
-        const isSlotFree = !todaysAppointments.some(
+        const isSlotFree = !todaysAppointmentsForSlotFinding.some(
             bookedSlot => potentialStart < bookedSlot.end && potentialEnd > bookedSlot.start
         );
         if (isSlotFree) {
@@ -272,13 +345,13 @@ export default function BarberDashboardPage() {
             break;
         }
     }
-
+    
     if (foundSlotStartMinutes === null) {
-      const lastAppointmentEnd = todaysAppointments.length > 0 ? todaysAppointments[todaysAppointments.length - 1].end : scheduleStartTimeMinutes;
+      const lastAppointmentEnd = todaysAppointmentsForSlotFinding.length > 0 ? todaysAppointmentsForSlotFinding[todaysAppointmentsForSlotFinding.length - 1].end : scheduleStartTimeMinutes;
       const potentialStartAfterLast = Math.max(earliestPossibleStartMinutes, lastAppointmentEnd);
       if (potentialStartAfterLast + serviceDuration <= scheduleEndTimeMinutes) {
           const potentialEnd = potentialStartAfterLast + serviceDuration;
-           const isSlotFree = !todaysAppointments.some(
+           const isSlotFree = !todaysAppointmentsForSlotFinding.some(
             bookedSlot => potentialStartAfterLast < bookedSlot.end && potentialEnd > bookedSlot.start
           );
           if(isSlotFree){
@@ -286,6 +359,7 @@ export default function BarberDashboardPage() {
           }
       }
     }
+
 
     if (foundSlotStartMinutes === null) {
       toast({ title: "No Slot Available", description: "Could not find an immediate available time slot for this service.", variant: "destructive" });
@@ -297,20 +371,26 @@ export default function BarberDashboardPage() {
     const appointmentEndTime = minutesToTime(foundSlotStartMinutes + serviceDuration);
 
     try {
-      const newAppointmentData = {
+      const newAppointmentData: Omit<Appointment, 'id'> = {
         barberId: user.uid,
         barberName: `${user.firstName} ${user.lastName}`,
-        customerId: null,
+        customerId: null, // Walk-in
         customerName: customerName,
         serviceId: selectedService.id,
         serviceName: selectedService.name,
         price: selectedService.price,
         date: todayDateStr,
         startTime: appointmentStartTime,
-        endTime: appointmentEndTime,
-        status: 'checked-in' as Appointment['status'],
-        createdAt: Timestamp.now(),
-        updatedAt: Timestamp.now(),
+        endTime: appointmentEndTime, // Original estimated end time
+        status: 'in-progress', // Walk-ins start as in-progress
+        createdAt: nowTimestamp,
+        updatedAt: nowTimestamp,
+        barberCheckedInAt: nowTimestamp, // Barber is checking them in
+        customerCheckedInAt: nowTimestamp, // Implicit customer check-in for walk-in
+        serviceActuallyStartedAt: nowTimestamp, // Service starts immediately
+        customerMarkedDoneAt: null,
+        barberMarkedDoneAt: null,
+        serviceActuallyCompletedAt: null,
       };
 
       const docRef = await addDoc(collection(firestore, 'appointments'), newAppointmentData);
@@ -325,7 +405,7 @@ export default function BarberDashboardPage() {
         return updated;
       });
 
-      toast({ title: "Walk-In Added!", description: `${customerName}'s appointment for ${selectedService.name} at ${appointmentStartTime} has been added.` });
+      toast({ title: "Walk-In Added!", description: `${customerName}'s appointment for ${selectedService.name} at ${appointmentStartTime} has been added and started.` });
       setIsWalkInDialogOpen(false);
     } catch (error) {
       console.error("Error adding walk-in appointment:", error);
@@ -349,7 +429,7 @@ export default function BarberDashboardPage() {
     } catch (error) {
       console.error("Error updating accepting bookings status:", error);
       toast({ title: "Error", description: "Could not update your booking status.", variant: "destructive" });
-      setLocalIsAcceptingBookings(!newCheckedState);
+      setLocalIsAcceptingBookings(!newCheckedState); // Revert on error
     } finally {
       setIsUpdatingAcceptingBookings(false);
     }
@@ -381,7 +461,7 @@ export default function BarberDashboardPage() {
               </h1>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span tabIndex={isAddWalkInDisabled ? 0 : -1}>
+                  <span tabIndex={isAddWalkInDisabled ? 0 : -1}> {/* For Tooltip to work on disabled button */}
                     <Button
                       onClick={() => setIsWalkInDialogOpen(true)}
                       className="w-full sm:w-auto h-11 rounded-full px-6 text-base"
@@ -444,8 +524,8 @@ export default function BarberDashboardPage() {
           ) : (
             <TodaysAppointmentsSection
               appointments={appointments}
-              onUpdateAppointmentStatus={handleUpdateAppointmentStatus}
-              isUpdatingAppointment={isUpdatingAppointment}
+              onAppointmentAction={handleAppointmentAction}
+              isUpdatingAppointmentId={isUpdatingAppointment}
             />
           )}
         </div>
