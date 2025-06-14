@@ -1,0 +1,242 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper function to check if user is the owner of a document based on a field
+    function isDocumentOwner(doc, fieldName) {
+      return request.auth.uid == doc[fieldName];
+    }
+
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth.uid != null;
+    }
+
+    // Helper function to get the role of the requesting user
+    function getRequestingUserRole() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+
+    // Helper function to check if a value is a timestamp or null
+    function isTimestampOrNull(value) {
+      return value == null || value is timestamp;
+    }
+
+    // Helper function to check if specific fields are the only ones being changed
+    function isOnlyUpdatingAllowedFields(allowedFields) {
+      let incomingKeys = request.resource.data.keys();
+      let currentKeys = resource.data.keys();
+      let allAffectedKeys = incomingKeys.concat(currentKeys).toSet();
+      // Ensure that all keys in the diff are in the allowedFields list.
+      // And that no fields in allowedFields are being removed if they weren't null.
+      // And that no fields NOT in allowedFields are being added or changed.
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(allowedFields);
+    }
+
+    // Function to validate core appointment fields that should not change after creation
+    function coreAppointmentFieldsUnchanged() {
+      return request.resource.data.barberId == resource.data.barberId &&
+             request.resource.data.customerId == resource.data.customerId &&
+             request.resource.data.serviceId == resource.data.serviceId &&
+             request.resource.data.serviceName == resource.data.serviceName &&
+             request.resource.data.price == resource.data.price &&
+             request.resource.data.date == resource.data.date &&
+             request.resource.data.startTime == resource.data.startTime &&
+             request.resource.data.endTime == resource.data.endTime &&
+             request.resource.data.createdAt == resource.data.createdAt;
+    }
+
+    // Function to validate initial data for a new appointment
+    function isValidNewAppointmentData(isWalkIn) {
+      let data = request.resource.data;
+      return data.barberId is string &&
+             data.barberName is string &&
+             (isWalkIn ? data.customerId == null : (data.customerId is string && data.customerId == request.auth.uid)) &&
+             data.customerName is string &&
+             data.serviceId is string &&
+             data.serviceName is string &&
+             data.price is number && data.price >= 0 &&
+             data.date is string && data.date.matches("^[0-9]{4}-[0-9]{2}-[0-9]{2}$") &&
+             data.startTime is string && data.endTime is string &&
+             data.status == (isWalkIn ? 'in-progress' : 'upcoming') &&
+             data.createdAt == request.time &&
+             data.updatedAt == request.time &&
+             (isWalkIn ? (
+                isTimestampOrNull(data.customerCheckedInAt) && data.customerCheckedInAt == request.time && // For walk-in, customerCheckedInAt is set by barber
+                isTimestampOrNull(data.barberCheckedInAt) && data.barberCheckedInAt == request.time &&
+                isTimestampOrNull(data.serviceActuallyStartedAt) && data.serviceActuallyStartedAt == request.time
+             ) : (
+                data.customerCheckedInAt == null &&
+                data.barberCheckedInAt == null &&
+                data.serviceActuallyStartedAt == null
+             )) &&
+             data.customerMarkedDoneAt == null &&
+             data.barberMarkedDoneAt == null &&
+             data.serviceActuallyCompletedAt == null;
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated(); // Allow any authenticated user to read basic profile info (e.g. for booking)
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid; // User creates their own document
+      allow update: if isDocumentOwner(request.resource.data, 'uid') &&
+                       request.resource.data.updatedAt == request.time &&
+                       (
+                         // General profile updates
+                         isOnlyUpdatingAllowedFields(['firstName', 'lastName', 'phoneNumber', 'address', 'updatedAt', 'fcmToken']) ||
+                         // Barber specific update for accepting bookings
+                         (getRequestingUserRole() == 'barber' && isOnlyUpdatingAllowedFields(['isAcceptingBookings', 'updatedAt', 'fcmToken'])) ||
+                         // System/User updating their FCM token (common for both)
+                         isOnlyUpdatingAllowedFields(['fcmToken', 'updatedAt'])
+                       ) &&
+                       // Prevent changing critical fields like role, email, uid after creation by user
+                       request.resource.data.uid == resource.data.uid &&
+                       request.resource.data.email == resource.data.email &&
+                       request.resource.data.role == resource.data.role &&
+                       request.resource.data.createdAt == resource.data.createdAt;
+      // No client-side delete for user documents.
+    }
+
+    match /services/{serviceId} {
+      allow read: if isAuthenticated();
+      allow create: if getRequestingUserRole() == 'barber' &&
+                       isDocumentOwner(request.resource.data, 'barberId') &&
+                       request.resource.data.createdAt == request.time &&
+                       request.resource.data.updatedAt == request.time;
+      allow update: if getRequestingUserRole() == 'barber' &&
+                       isDocumentOwner(resource.data, 'barberId') && // Check existing doc owner
+                       request.resource.data.barberId == resource.data.barberId && // BarberId cannot change
+                       request.resource.data.updatedAt == request.time;
+      allow delete: if getRequestingUserRole() == 'barber' && isDocumentOwner(resource.data, 'barberId');
+    }
+
+    match /barberSchedules/{barberId} {
+      allow read: if isAuthenticated();
+      allow create, update: if getRequestingUserRole() == 'barber' && request.auth.uid == barberId &&
+                               request.resource.data.barberId == barberId &&
+                               request.resource.data.updatedAt == request.time;
+      // Deleting entire schedule doc is not typical; managed via updates.
+
+      match /unavailableDates/{dateId} {
+        allow read: if isAuthenticated();
+        allow create: if getRequestingUserRole() == 'barber' && request.auth.uid == barberId &&
+                         request.resource.data.barberId == barberId &&
+                         request.resource.data.date == dateId && // dateId should be YYYY-MM-DD
+                         request.resource.data.createdAt == request.time;
+        allow delete: if getRequestingUserRole() == 'barber' && request.auth.uid == barberId;
+        // No update for unavailable dates; delete and re-create if needed.
+      }
+    }
+
+    match /appointments/{appointmentId} {
+      allow read: if isAuthenticated() &&
+                     (isDocumentOwner(resource.data, 'customerId') || isDocumentOwner(resource.data, 'barberId'));
+
+      allow create: if isAuthenticated() &&
+                      (
+                        // Customer creating a booked appointment
+                        (getRequestingUserRole() == 'customer' && isValidNewAppointmentData(false)) ||
+                        // Barber creating a walk-in appointment
+                        (getRequestingUserRole() == 'barber' && isDocumentOwner(request.resource.data, 'barberId') && isValidNewAppointmentData(true))
+                      );
+      
+      allow update: if isAuthenticated() &&
+                       (isDocumentOwner(resource.data, 'customerId') || isDocumentOwner(resource.data, 'barberId')) &&
+                       coreAppointmentFieldsUnchanged() && // Ensure core fields are not changed
+                       request.resource.data.updatedAt == request.time &&
+                       (
+                         // Transition: upcoming -> customer-initiated-check-in (by Customer)
+                         (resource.data.status == 'upcoming' && request.resource.data.status == 'customer-initiated-check-in' &&
+                          request.auth.uid == resource.data.customerId &&
+                          isOnlyUpdatingAllowedFields(['status', 'updatedAt', 'customerCheckedInAt']) &&
+                          request.resource.data.customerCheckedInAt == request.time &&
+                          request.resource.data.barberCheckedInAt == resource.data.barberCheckedInAt && // Ensure other timestamps not touched
+                          request.resource.data.serviceActuallyStartedAt == resource.data.serviceActuallyStartedAt 
+                         ) ||
+                         // Transition: customer-initiated-check-in -> in-progress (by Barber)
+                         (resource.data.status == 'customer-initiated-check-in' && request.resource.data.status == 'in-progress' &&
+                          request.auth.uid == resource.data.barberId &&
+                          isOnlyUpdatingAllowedFields(['status', 'updatedAt', 'barberCheckedInAt', 'serviceActuallyStartedAt']) &&
+                          request.resource.data.barberCheckedInAt == request.time &&
+                          request.resource.data.serviceActuallyStartedAt == request.time &&
+                          request.resource.data.customerCheckedInAt == resource.data.customerCheckedInAt // Ensure customer's timestamp not touched by barber
+                         ) ||
+                         // Transition: upcoming -> barber-initiated-check-in (by Barber)
+                         (resource.data.status == 'upcoming' && request.resource.data.status == 'barber-initiated-check-in' &&
+                          request.auth.uid == resource.data.barberId &&
+                          isOnlyUpdatingAllowedFields(['status', 'updatedAt', 'barberCheckedInAt']) &&
+                          request.resource.data.barberCheckedInAt == request.time &&
+                          request.resource.data.customerCheckedInAt == resource.data.customerCheckedInAt &&
+                          request.resource.data.serviceActuallyStartedAt == resource.data.serviceActuallyStartedAt
+                         ) ||
+                         // Transition: barber-initiated-check-in -> in-progress (by Customer)
+                         (resource.data.status == 'barber-initiated-check-in' && request.resource.data.status == 'in-progress' &&
+                          request.auth.uid == resource.data.customerId &&
+                          isOnlyUpdatingAllowedFields(['status', 'updatedAt', 'customerCheckedInAt', 'serviceActuallyStartedAt']) &&
+                          request.resource.data.customerCheckedInAt == request.time &&
+                          request.resource.data.serviceActuallyStartedAt == request.time &&
+                          request.resource.data.barberCheckedInAt == resource.data.barberCheckedInAt
+                         ) ||
+                         // Transition: in-progress -> customer-initiated-completion (by Customer)
+                         (resource.data.status == 'in-progress' && request.resource.data.status == 'customer-initiated-completion' &&
+                          request.auth.uid == resource.data.customerId &&
+                          isOnlyUpdatingAllowedFields(['status', 'updatedAt', 'customerMarkedDoneAt']) &&
+                          request.resource.data.customerMarkedDoneAt == request.time &&
+                          request.resource.data.barberMarkedDoneAt == resource.data.barberMarkedDoneAt &&
+                          request.resource.data.serviceActuallyCompletedAt == resource.data.serviceActuallyCompletedAt
+                         ) ||
+                         // Transition: customer-initiated-completion -> completed (by Barber)
+                         (resource.data.status == 'customer-initiated-completion' && request.resource.data.status == 'completed' &&
+                          request.auth.uid == resource.data.barberId &&
+                          isOnlyUpdatingAllowedFields(['status', 'updatedAt', 'barberMarkedDoneAt', 'serviceActuallyCompletedAt']) &&
+                          request.resource.data.barberMarkedDoneAt == request.time &&
+                          request.resource.data.serviceActuallyCompletedAt == request.time &&
+                          request.resource.data.customerMarkedDoneAt == resource.data.customerMarkedDoneAt
+                         ) ||
+                         // Transition: in-progress -> barber-initiated-completion OR completed (for walk-in) (by Barber)
+                         (resource.data.status == 'in-progress' &&
+                          request.auth.uid == resource.data.barberId &&
+                          request.resource.data.barberMarkedDoneAt == request.time &&
+                          request.resource.data.customerMarkedDoneAt == resource.data.customerMarkedDoneAt &&
+                          (
+                            // Booked appointment
+                            (resource.data.customerId != null && request.resource.data.status == 'barber-initiated-completion' &&
+                             isOnlyUpdatingAllowedFields(['status', 'updatedAt', 'barberMarkedDoneAt']) &&
+                             request.resource.data.serviceActuallyCompletedAt == resource.data.serviceActuallyCompletedAt
+                            ) ||
+                            // Walk-in appointment (directly to completed)
+                            (resource.data.customerId == null && request.resource.data.status == 'completed' &&
+                             isOnlyUpdatingAllowedFields(['status', 'updatedAt', 'barberMarkedDoneAt', 'serviceActuallyCompletedAt']) &&
+                             request.resource.data.serviceActuallyCompletedAt == request.time
+                            )
+                          )
+                         ) ||
+                         // Transition: barber-initiated-completion -> completed (by Customer)
+                         (resource.data.status == 'barber-initiated-completion' && request.resource.data.status == 'completed' &&
+                          request.auth.uid == resource.data.customerId &&
+                          isOnlyUpdatingAllowedFields(['status', 'updatedAt', 'customerMarkedDoneAt', 'serviceActuallyCompletedAt']) &&
+                          request.resource.data.customerMarkedDoneAt == request.time &&
+                          request.resource.data.serviceActuallyCompletedAt == request.time &&
+                          request.resource.data.barberMarkedDoneAt == resource.data.barberMarkedDoneAt
+                         ) ||
+                         // Transition: (upcoming OR *-initiated-check-in) -> cancelled (by Customer)
+                         ((resource.data.status == 'upcoming' || resource.data.status == 'customer-initiated-check-in' || resource.data.status == 'barber-initiated-check-in') &&
+                          request.resource.data.status == 'cancelled' &&
+                          request.auth.uid == resource.data.customerId &&
+                          isOnlyUpdatingAllowedFields(['status', 'updatedAt']) &&
+                          // Ensure timestamps are not being illicitly set during cancellation
+                          request.resource.data.customerCheckedInAt == resource.data.customerCheckedInAt &&
+                          request.resource.data.barberCheckedInAt == resource.data.barberCheckedInAt &&
+                          request.resource.data.serviceActuallyStartedAt == resource.data.serviceActuallyStartedAt &&
+                          request.resource.data.customerMarkedDoneAt == resource.data.customerMarkedDoneAt &&
+                          request.resource.data.barberMarkedDoneAt == resource.data.barberMarkedDoneAt &&
+                          request.resource.data.serviceActuallyCompletedAt == resource.data.serviceActuallyCompletedAt
+                         )
+                       );
+      allow delete: if false; // Generally disallow client-side deletes of appointments to preserve history.
+    }
+  }
+}
+
+    
