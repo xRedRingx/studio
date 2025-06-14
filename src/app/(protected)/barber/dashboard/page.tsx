@@ -382,6 +382,7 @@ export default function BarberDashboardPage() {
               </h1>
               <Tooltip>
                 <TooltipTrigger asChild>
+                  {/* Wrap button in a span for Tooltip to work correctly when button is disabled */}
                   <span tabIndex={isAddWalkInDisabled ? 0 : -1}> 
                     <Button 
                       onClick={() => setIsWalkInDialogOpen(true)} 
