@@ -23,8 +23,8 @@ export default function AuthFormWrapper({ title, description, role, children, fo
           <Link href="/" aria-label="Go to homepage" className="mx-auto mb-6 flex justify-center">
             <BarberFlowLogo className="h-10 w-auto" />
           </Link>
-          <CardTitle className="font-headline text-2xl font-bold">{title} {roleText}</CardTitle>
-          <CardDescription className="text-sm text-gray-500 pt-2">
+          <CardTitle className="font-headline text-xl sm:text-2xl font-bold">{title} {roleText}</CardTitle>
+          <CardDescription className="text-sm sm:text-base text-gray-500 pt-2">
             {description}
           </CardDescription>
         </CardHeader>
@@ -43,3 +43,4 @@ export default function AuthFormWrapper({ title, description, role, children, fo
     </div>
   );
 }
+
