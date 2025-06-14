@@ -16,6 +16,7 @@ export interface AppUser {
   lastName?: string;
   email: string; // Primary identifier from Firebase Auth
   phoneNumber?: string | null; // Optional, stored in Firestore
+  address?: string | null; // New: Barber's physical address
   isAcceptingBookings?: boolean; // New: For barbers to toggle online booking visibility
   fcmToken?: string | null; // FCM registration token
   createdAt?: Timestamp; // Firestore timestamp

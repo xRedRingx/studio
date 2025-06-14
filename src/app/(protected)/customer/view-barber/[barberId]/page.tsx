@@ -12,7 +12,7 @@ import { firestore } from '@/firebase/config';
 import { collection, doc, getDoc, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { ArrowLeft, CalendarPlus, Scissors, DollarSign, Clock, UserCircle, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, CalendarPlus, Scissors, DollarSign, Clock, UserCircle, AlertTriangle, MapPin } from 'lucide-react';
 import Link from 'next/link';
 
 export default function ViewBarberPage() {
@@ -38,7 +38,6 @@ export default function ViewBarberPage() {
 
       if (barberDocSnap.exists() && barberDocSnap.data().role === 'barber') {
         const barberData = barberDocSnap.data() as AppUser;
-        // Default isAcceptingBookings to true if undefined or null for backward compatibility
         const isAccepting = barberData.isAcceptingBookings !== undefined && barberData.isAcceptingBookings !== null
                             ? barberData.isAcceptingBookings
                             : true;
@@ -95,7 +94,6 @@ export default function ViewBarberPage() {
     );
   }
 
-  // Ensure isAcceptingBookings defaults to true if undefined for display logic
   const barberIsAcceptingBookings = barber.isAcceptingBookings !== undefined ? barber.isAcceptingBookings : true;
 
   return (
@@ -107,13 +105,18 @@ export default function ViewBarberPage() {
 
         <Card className="border-none shadow-lg rounded-xl overflow-hidden">
           <CardHeader className="p-4 md:p-6">
-            <div className="flex items-center space-x-3">
-                <UserCircle className="h-10 w-10 text-primary" />
+            <div className="flex items-start space-x-3">
+                <UserCircle className="h-10 w-10 text-primary flex-shrink-0 mt-1" />
                 <div>
                     <CardTitle className="text-2xl font-bold">
                     {barber.firstName} {barber.lastName}
                     </CardTitle>
-                    <CardDescription className="text-sm text-gray-500">View services and book an appointment.</CardDescription>
+                    <CardDescription className="text-sm text-gray-500 mt-0.5">View services and book an appointment.</CardDescription>
+                    {barber.address && (
+                      <p className="text-sm text-gray-500 flex items-center mt-1.5">
+                        <MapPin className="mr-1.5 h-4 w-4 text-gray-400 flex-shrink-0" /> {barber.address}
+                      </p>
+                    )}
                 </div>
             </div>
           </CardHeader>
@@ -158,16 +161,15 @@ export default function ViewBarberPage() {
 
           <CardFooter className="p-4 md:p-6 border-t mt-auto">
             <Button
-                asChild={barberIsAcceptingBookings} // Only allow Link behavior if accepting bookings
+                asChild={barberIsAcceptingBookings} 
                 className="w-full sm:w-auto h-14 rounded-full text-lg"
-                disabled={!barberIsAcceptingBookings} // Visually disable if not accepting
+                disabled={!barberIsAcceptingBookings} 
             >
               {barberIsAcceptingBookings ? (
                 <Link href={`/customer/book/${barberId}`}>
                   <CalendarPlus className="mr-2 h-5 w-5" /> Book with {barber.firstName}
                 </Link>
               ) : (
-                // Fallback content for disabled button or non-Link scenario
                 <><CalendarPlus className="mr-2 h-5 w-5" /> Not Accepting Bookings</>
               )}
             </Button>

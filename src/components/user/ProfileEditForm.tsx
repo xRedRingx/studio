@@ -14,15 +14,16 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 const profileEditSchema = z.object({
   firstName: z.string().min(1, "First name is required").max(50, "First name must be less than 50 characters"),
   lastName: z.string().min(1, "Last name is required").max(50, "Last name must be less than 50 characters"),
-  email: z.string().email("Invalid email address").optional(), // Email is not editable here, but shown for context
+  email: z.string().email("Invalid email address").optional(),
   phoneNumber: z.string().regex(/^(\+[1-9]\d{1,14})?$/, "Phone number must be in E.164 format (e.g., +12223334444) or empty").optional().or(z.literal('')),
+  address: z.string().max(100, "Address must be less than 100 characters").optional().or(z.literal('')),
 });
 
 type ProfileEditFormValues = z.infer<typeof profileEditSchema>;
 
 interface ProfileEditFormProps {
   currentUser: AppUser;
-  onSubmit: (data: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber'>>) => Promise<void>;
+  onSubmit: (data: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber' | 'address'>>) => Promise<void>;
   isSubmitting: boolean;
 }
 
@@ -32,16 +33,18 @@ export default function ProfileEditForm({ currentUser, onSubmit, isSubmitting }:
     defaultValues: {
       firstName: currentUser.firstName || '',
       lastName: currentUser.lastName || '',
-      email: currentUser.email || '', // Display only, not part of submission for update
+      email: currentUser.email || '', 
       phoneNumber: currentUser.phoneNumber || '',
+      address: currentUser.address || '',
     },
   });
 
   const handleFormSubmit = (values: ProfileEditFormValues) => {
-    const dataToSubmit: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber'>> = {
+    const dataToSubmit: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber' | 'address'>> = {
         firstName: values.firstName,
         lastName: values.lastName,
-        phoneNumber: values.phoneNumber // Will be handled as null if empty by parent
+        phoneNumber: values.phoneNumber || null,
+        address: values.address || null,
     };
     onSubmit(dataToSubmit);
   };
@@ -104,6 +107,19 @@ export default function ProfileEditForm({ currentUser, onSubmit, isSubmitting }:
                     <FormLabel className="text-base">Phone Number</FormLabel>
                     <FormControl>
                         <Input type="tel" placeholder="e.g. +14155552671 (Optional)" {...field} className="text-base h-12" autoComplete="tel" inputMode="tel" disabled={isSubmitting} />
+                    </FormControl>
+                    <FormMessage />
+                    </FormItem>
+                )}
+                />
+                <FormField
+                control={form.control}
+                name="address"
+                render={({ field }) => (
+                    <FormItem>
+                    <FormLabel className="text-base">Address (Optional for Customers)</FormLabel>
+                    <FormControl>
+                        <Input placeholder="e.g. 123 Main St, Anytown" {...field} className="text-base h-12" autoComplete="street-address" disabled={isSubmitting} />
                     </FormControl>
                     <FormMessage />
                     </FormItem>

@@ -18,6 +18,7 @@ const userDetailsSchema = z.object({
   lastName: z.string().min(1, "Last name is required").max(50, "Last name must be less than 50 characters"),
   email: z.string().email("Invalid email address"),
   phoneNumber: z.string().regex(/^\+[1-9]\d{1,14}$/, "Phone number must be in E.164 format (e.g., +12223334444)").optional().or(z.literal('')),
+  address: z.string().max(100, "Address must be less than 100 characters").optional().or(z.literal('')),
   password: z.string().min(6, "Password must be at least 6 characters"),
   confirmPassword: z.string().min(6, "Confirm password must be at least 6 characters"),
 }).refine(data => data.password === data.confirmPassword, {
@@ -42,6 +43,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
       lastName: '',
       email: '',
       phoneNumber: '',
+      address: '',
       password: '',
       confirmPassword: '',
     },
@@ -60,9 +62,10 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
         lastName: values.lastName,
         email: values.email,
         phoneNumber: values.phoneNumber || null,
+        address: values.address || null,
         password_original_do_not_use: values.password, 
         role: role,
-        isAcceptingBookings: role === 'barber' ? true : undefined, // Initialize for barbers
+        isAcceptingBookings: role === 'barber' ? true : undefined, 
       };
       await registerWithEmailAndPassword(userDetailsForApi);
     } catch (error) {
@@ -127,6 +130,19 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
             </FormItem>
           )}
         />
+         <FormField
+            control={form.control}
+            name="address"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel className="text-base">Address (Optional)</FormLabel>
+                <FormControl>
+                  <Input placeholder="e.g. 123 Main St, Anytown" {...field} className="text-base h-12" autoComplete="street-address" disabled={isProcessingAuth} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
         <FormField
           control={form.control}
           name="password"

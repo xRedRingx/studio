@@ -15,6 +15,7 @@ import {
   type User as FirebaseUser
 } from 'firebase/auth';
 import { collection, doc, getDoc, setDoc, updateDoc, Timestamp, serverTimestamp } from 'firebase/firestore'; // Added updateDoc
+
 import { useToast } from '@/hooks/use-toast';
 
 interface AuthContextType {
@@ -31,7 +32,7 @@ interface AuthContextType {
   ) => Promise<void>;
   signInWithEmailAndPassword: (email: string, password_original_do_not_use: string) => Promise<void>;
   sendPasswordResetLink: (email: string) => Promise<void>;
-  updateUserProfile: (userId: string, updates: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber'>>) => Promise<void>;
+  updateUserProfile: (userId: string, updates: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber' | 'address'>>) => Promise<void>;
   signOut: () => Promise<void>;
   updateUserAcceptingBookings: (userId: string, isAccepting: boolean) => Promise<void>;
   updateUserFCMToken: (userId: string, token: string | null) => Promise<void>;
@@ -61,8 +62,9 @@ const createUserDocument = async (firebaseUser: FirebaseUser, additionalData: Pa
         firstName: additionalData.firstName || '',
         lastName: additionalData.lastName || '',
         phoneNumber: additionalData.phoneNumber || null,
+        address: additionalData.address || null, // Save address
         isAcceptingBookings: additionalData.role === 'barber' ? (additionalData.isAcceptingBookings !== undefined ? additionalData.isAcceptingBookings : true) : undefined,
-        fcmToken: null, // Initialize fcmToken
+        fcmToken: null, 
         ...additionalData,
       });
     } catch (error) {
@@ -106,8 +108,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             firstName: firestoreUser.firstName,
             lastName: firestoreUser.lastName,
             phoneNumber: firestoreUser.phoneNumber,
+            address: firestoreUser.address, // Load address
             isAcceptingBookings: firestoreUser.role === 'barber' ? (firestoreUser.isAcceptingBookings !== undefined ? firestoreUser.isAcceptingBookings : true) : undefined,
-            fcmToken: firestoreUser.fcmToken || null, // Load fcmToken
+            fcmToken: firestoreUser.fcmToken || null,
             createdAt: firestoreUser.createdAt,
             updatedAt: firestoreUser.updatedAt,
           };
@@ -152,7 +155,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
      userDetails: Omit<AppUser, 'uid' | 'createdAt' | 'updatedAt' | 'displayName' | 'photoURL' | 'emailVerified' | 'fcmToken'> & { password_original_do_not_use: string }
   ) => {
     setIsProcessingAuth(true);
-    const { email, password_original_do_not_use, firstName, lastName, role: userRole, phoneNumber, isAcceptingBookings } = userDetails;
+    const { email, password_original_do_not_use, firstName, lastName, role: userRole, phoneNumber, address, isAcceptingBookings } = userDetails;
 
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password_original_do_not_use);
@@ -163,9 +166,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         lastName,
         role: userRole,
         phoneNumber: phoneNumber || null,
+        address: address || null, // Pass address
         email,
         isAcceptingBookings: userRole === 'barber' ? (isAcceptingBookings !== undefined ? isAcceptingBookings : true) : undefined,
-        fcmToken: null, // Initialized here as well
+        fcmToken: null, 
       };
       await createUserDocument(firebaseUser, firestoreData);
 
@@ -228,7 +232,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const updateUserProfile = async (userId: string, updates: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber'>>) => {
+  const updateUserProfile = async (userId: string, updates: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber' | 'address'>>) => {
     try {
       const userRef = doc(firestore, 'users', userId);
       const dataToUpdate: any = { ...updates, updatedAt: Timestamp.now() };
@@ -236,6 +240,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (updates.phoneNumber === '' || updates.phoneNumber === undefined) {
         dataToUpdate.phoneNumber = null;
       }
+      if (updates.address === '' || updates.address === undefined) {
+        dataToUpdate.address = null;
+      }
+
 
       await updateDoc(userRef, dataToUpdate);
 
@@ -343,4 +351,3 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
-
