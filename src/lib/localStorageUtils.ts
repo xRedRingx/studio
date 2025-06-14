@@ -92,3 +92,4 @@ export const setSimpleItem = (key: string, value: any): void => {
     console.warn(`Error setting localStorage key "${key}":`, error);
   }
 };
+
