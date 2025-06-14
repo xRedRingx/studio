@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useRef, useEffect } from 'react';
@@ -28,7 +29,7 @@ export function CustomOtpInput({
     const firstEmptyIndex = value.length;
     if (firstEmptyIndex < valueLength) {
         inputRefs.current[firstEmptyIndex]?.focus();
-    } else {
+    } else if (valueLength > 0) { // Ensure there's at least one input to focus
         inputRefs.current[0]?.focus();
     }
   }, []); // Run only on mount
@@ -97,7 +98,9 @@ export function CustomOtpInput({
     // Set focus to the input after the pasted content
     const nextFocusIndex = Math.min(newValue.length, valueLength - 1);
     setTimeout(() => { // Use timeout to ensure state update has rendered
-      inputRefs.current[nextFocusIndex]?.focus();
+      if (inputRefs.current[nextFocusIndex]) {
+        inputRefs.current[nextFocusIndex]?.focus();
+      }
     }, 0);
   };
   
@@ -111,8 +114,21 @@ export function CustomOtpInput({
   return (
     <div
       className="flex items-center justify-center gap-2"
+      role="group"
+      aria-label="One-time password input"
       // Attach the paste handler to the container
-      onPaste={(e) => handlePaste(e.clipboardData.getData('text'), 0)}
+      onPaste={(e) => {
+        // Find the currently focused input index, or default to 0
+        let pasteStartIndex = 0;
+        const activeElement = document.activeElement;
+        if (activeElement instanceof HTMLInputElement) {
+            const foundIndex = inputRefs.current.indexOf(activeElement);
+            if (foundIndex !== -1) {
+                pasteStartIndex = foundIndex;
+            }
+        }
+        handlePaste(e.clipboardData.getData('text'), pasteStartIndex);
+      }}
     >
       {Array(valueLength)
         .fill('')
@@ -133,6 +149,7 @@ export function CustomOtpInput({
             onKeyDown={(e) => handleKeyDown(e, index)}
             onFocus={handleFocus}
             disabled={disabled}
+            aria-label={`Enter digit ${index + 1} of ${valueLength}`}
             className={cn(
               "relative flex h-14 w-14 items-center justify-center rounded-md border border-input text-lg transition-all text-center",
               "focus:z-10 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
@@ -143,3 +160,4 @@ export function CustomOtpInput({
     </div>
   );
 }
+
