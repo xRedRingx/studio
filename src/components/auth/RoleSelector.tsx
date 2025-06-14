@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useRouter } from 'next/navigation';
@@ -11,11 +12,17 @@ import { APP_NAME } from '@/lib/constants';
 
 export default function RoleSelector() {
   const router = useRouter();
-  const { setRole } = useAuth();
+  const { setRole } = useAuth(); // Only need setRole for customer path now
 
-  const handleRoleSelection = (selectedRole: UserRole) => {
-    setRole(selectedRole);
-    router.push(`/${selectedRole}/register`);
+  const handleCustomerSelection = () => {
+    setRole('customer'); // Set role directly for customer
+    router.push(`/customer/register`);
+  };
+
+  const handleBarberSelection = () => {
+    // Navigate to the verification page for barbers
+    // The role will be set on that page after successful verification
+    router.push(`/barber/verify`); 
   };
 
   return (
@@ -32,7 +39,7 @@ export default function RoleSelector() {
         </CardHeader>
         <CardContent className="space-y-4 p-6 sm:p-8">
           <Button
-            onClick={() => handleRoleSelection('customer')}
+            onClick={handleCustomerSelection}
             className="w-full h-14 rounded-full text-lg transform transition-all duration-200 ease-in-out hover:scale-105"
             variant="outline"
             aria-label="I am a Customer"
@@ -40,7 +47,7 @@ export default function RoleSelector() {
             <User className="mr-3 h-6 w-6" /> I'm a Customer
           </Button>
           <Button
-            onClick={() => handleRoleSelection('barber')}
+            onClick={handleBarberSelection}
             className="w-full h-14 rounded-full text-lg transform transition-all duration-200 ease-in-out hover:scale-105"
             aria-label="I am a Barber"
           >
@@ -49,7 +56,7 @@ export default function RoleSelector() {
         </CardContent>
       </Card>
        <p className="mt-8 text-center text-sm text-gray-500">
-        Your role selection helps us tailor your experience. <br/> This can only be set once.
+        Your role selection helps us tailor your experience.
       </p>
     </div>
   );

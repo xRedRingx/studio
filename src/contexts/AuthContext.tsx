@@ -62,7 +62,7 @@ const createUserDocument = async (firebaseUser: FirebaseUser, additionalData: Pa
         firstName: additionalData.firstName || '',
         lastName: additionalData.lastName || '',
         phoneNumber: additionalData.phoneNumber || null,
-        address: additionalData.address || null, // Save address
+        address: additionalData.address || null, 
         isAcceptingBookings: additionalData.role === 'barber' ? (additionalData.isAcceptingBookings !== undefined ? additionalData.isAcceptingBookings : true) : undefined,
         fcmToken: null, 
         ...additionalData,
@@ -108,7 +108,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             firstName: firestoreUser.firstName,
             lastName: firestoreUser.lastName,
             phoneNumber: firestoreUser.phoneNumber,
-            address: firestoreUser.address, // Load address
+            address: firestoreUser.address, 
             isAcceptingBookings: firestoreUser.role === 'barber' ? (firestoreUser.isAcceptingBookings !== undefined ? firestoreUser.isAcceptingBookings : true) : undefined,
             fcmToken: firestoreUser.fcmToken || null,
             createdAt: firestoreUser.createdAt,
@@ -116,21 +116,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           };
           setUser(appUser);
           persistUserSession(appUser);
-          if (appUser.role) setRoleContextAndStorage(appUser.role);
+          // If role in Firestore differs from localStorage, update localStorage.
+          // Also, ensure context role is set from Firestore if available.
+          if (firestoreUser.role && firestoreUser.role !== role) {
+             setRoleContextAndStorage(firestoreUser.role);
+          } else if (firestoreUser.role) {
+             setRoleState(firestoreUser.role); // Ensure context has role if it's in Firestore
+          }
+
         } else {
-          console.warn("AuthContext: Firebase user exists but no Firestore document found. User might need to complete registration.");
+          console.warn("AuthContext: Firebase user exists but no Firestore document found. User might need to complete registration or was deleted.");
           setUser(null);
           clearUserSession();
+          // Do not clear LOCAL_STORAGE_ROLE_KEY here, to remember intent for login page
         }
       } else {
         setUser(null);
         clearUserSession();
+        // Do not clear LOCAL_STORAGE_ROLE_KEY here
       }
       setLoadingAuth(false);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [role]); // Added role to dependency array to handle updates from firestore
 
 
   const setRoleContextAndStorage = (newRole: UserRole) => {
@@ -166,7 +175,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         lastName,
         role: userRole,
         phoneNumber: phoneNumber || null,
-        address: address || null, // Pass address
+        address: address || null, 
         email,
         isAcceptingBookings: userRole === 'barber' ? (isAcceptingBookings !== undefined ? isAcceptingBookings : true) : undefined,
         fcmToken: null, 
@@ -181,7 +190,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const createdUser = userDocSnap.data() as AppUser;
       
       setUser(createdUser);
-      if (createdUser.role) setRoleContextAndStorage(createdUser.role);
+      if (createdUser.role) setRoleContextAndStorage(createdUser.role); // Ensure role is set in context and storage
       persistUserSession(createdUser);
 
       toast({ title: "Registration Successful!", description: "Your account has been created." });
@@ -202,7 +211,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsProcessingAuth(true);
     try {
       await signInWithEmailAndPassword(auth, email, password_original_do_not_use);
-      // User object will be set by onAuthStateChanged listener
+      // User object and role will be set by onAuthStateChanged listener
+      // The listener will also handle setting the role in localStorage if it's different
       toast({ title: "Login Successful!", description: "Welcome back!" });
     } catch (error: any) {
       console.error("AuthContext: Error signing in:", error);
@@ -223,9 +233,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       await firebaseSendPasswordResetEmail(auth, email);
     } catch (error: any) {
       console.error("AuthContext: Error sending password reset email:", error);
-      if (error.code !== 'auth/user-not-found') {
+      if (error.code !== 'auth/user-not-found') { // Don't reveal if user exists
          toast({ title: "Password Reset Error", description: error.message || "Could not send reset link. Please try again.", variant: "destructive" });
-      }
+      } // Success toast is shown in ForgotPasswordForm to confirm sending attempt
       throw error; 
     } finally {
       setIsProcessingAuth(false);
@@ -305,12 +315,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signOutUser = async () => {
     setIsProcessingAuth(true);
     try {
-      if (user?.uid && user.fcmToken) {
-        // Optionally, clear the FCM token from Firestore on sign-out
-        // await updateUserFCMToken(user.uid, null); // This would also update local user state before sign out
-      }
       await firebaseSignOut(auth);
-      localStorage.removeItem(LOCAL_STORAGE_ROLE_KEY);
+      // User session (AppUser object) is cleared by onAuthStateChanged.
+      // Role in localStorage (LOCAL_STORAGE_ROLE_KEY) is intentionally NOT cleared here.
+      // This allows `src/app/page.tsx` to redirect to the correct login page.
+      // The context's 'role' state is cleared to trigger re-evaluation on the main page.
       setRoleState(null); 
       toast({ title: "Signed Out", description: "You have been successfully signed out." });
     } catch (error: any) {
