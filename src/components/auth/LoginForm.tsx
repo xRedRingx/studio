@@ -58,7 +58,7 @@ export default function LoginForm({ role }: LoginFormProps) {
             <FormItem>
               <FormLabel className="text-base">Email Address</FormLabel>
               <FormControl>
-                <Input type="email" placeholder="e.g. user@example.com" {...field} className="text-base h-12" autoComplete="email" inputMode="email" disabled={isProcessingAuth} />
+                <Input type="email" placeholder="e.g. user@example.com" {...field} className="text-base h-12 rounded-md" autoComplete="email" inputMode="email" disabled={isProcessingAuth} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -76,7 +76,7 @@ export default function LoginForm({ role }: LoginFormProps) {
                 </Link>
               </div>
               <FormControl>
-                <Input type="password" placeholder="Enter password" {...field} className="text-base h-12" autoComplete="current-password" disabled={isProcessingAuth} />
+                <Input type="password" placeholder="Enter password" {...field} className="text-base h-12 rounded-md" autoComplete="current-password" disabled={isProcessingAuth} />
               </FormControl>
               <FormMessage />
             </FormItem>

@@ -26,7 +26,6 @@ export default function ProfileEditPage() {
 
   const handleUpdateProfile = async (
     data: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber' | 'address'>>
-    // photoFile parameter removed
   ) => {
     if (!user?.uid) {
       toast({ title: "Error", description: "User not found.", variant: "destructive" });
@@ -36,7 +35,6 @@ export default function ProfileEditPage() {
     setIsUpdatingProfile(true);
 
     try {
-      // Call updateUserProfile without photoFile
       await updateUserProfile(user.uid, data);
       toast({ title: "Success", description: "Your profile has been updated." });
     } catch (error) {
@@ -62,7 +60,7 @@ export default function ProfileEditPage() {
   return (
     <ProtectedPage>
       <div className="space-y-6 max-w-2xl mx-auto">
-        <h1 className="text-2xl font-bold font-headline">Edit Your Profile</h1>
+        <h1 className="text-2xl font-bold font-headline text-center sm:text-left">Edit Your Profile</h1>
         {user ? (
           <ProfileEditForm
             currentUser={user}
@@ -79,5 +77,3 @@ export default function ProfileEditPage() {
     </ProtectedPage>
   );
 }
-
-    

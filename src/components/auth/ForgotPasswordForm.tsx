@@ -54,7 +54,7 @@ export default function ForgotPasswordForm() {
                   type="email" 
                   placeholder="e.g. user@example.com" 
                   {...field} 
-                  className="text-base h-12" 
+                  className="text-base h-12 rounded-md" 
                   autoComplete="email" 
                   inputMode="email" 
                   disabled={isProcessingAuth}

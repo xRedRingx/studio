@@ -6,29 +6,26 @@ import { User, Scissors } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
-import type { UserRole } from '@/types';
 import { BarberFlowLogo } from '@/components/icons/BarberFlowLogo';
 import { APP_NAME } from '@/lib/constants';
 
 export default function RoleSelector() {
   const router = useRouter();
-  const { setRole } = useAuth(); // Only need setRole for customer path now
+  const { setRole } = useAuth(); 
 
   const handleCustomerSelection = () => {
-    setRole('customer'); // Set role directly for customer
+    setRole('customer');
     router.push(`/customer/register`);
   };
 
   const handleBarberSelection = () => {
-    // Navigate to the verification page for barbers
-    // The role will be set on that page after successful verification
     router.push(`/barber/verify`); 
   };
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4 sm:p-6">
-      <Card className="w-full max-w-md shadow-xl border-none">
-        <CardHeader className="text-center p-6">
+      <Card className="w-full max-w-md shadow-xl border-none rounded-xl">
+        <CardHeader className="text-center p-6 md:p-8">
           <div className="mx-auto mb-6 flex justify-center">
             <BarberFlowLogo className="h-12 w-auto" />
           </div>
@@ -55,7 +52,7 @@ export default function RoleSelector() {
           </Button>
         </CardContent>
       </Card>
-       <p className="mt-8 text-center text-sm text-gray-500">
+       <p className="mt-8 text-center text-sm text-gray-500 px-4">
         Your role selection helps us tailor your experience.
       </p>
     </div>

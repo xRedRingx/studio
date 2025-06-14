@@ -4,7 +4,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import ProtectedPage from '@/components/layout/ProtectedPage';
-import { useAuth } from '@/hooks/useAuth';
 import type { AppUser, BarberService } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -12,12 +11,11 @@ import { firestore } from '@/firebase/config';
 import { collection, doc, getDoc, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { ArrowLeft, CalendarPlus, Scissors, DollarSign, Clock, UserCircle, AlertTriangle, MapPin } from 'lucide-react';
+import { ArrowLeft, CalendarPlus, Scissors, DollarSign, Clock, UserCircle, AlertTriangle, MapPin, Info } from 'lucide-react';
 import Link from 'next/link';
 
 
 export default function ViewBarberPage() {
-  const { user } = useAuth();
   const router = useRouter();
   const params = useParams();
   const barberId = params.barberId as string;
@@ -43,10 +41,10 @@ export default function ViewBarberPage() {
                             ? barberData.isAcceptingBookings
                             : true;
         setBarber({ 
+            uid: barberDocSnap.id, // Ensure uid is set
             id: barberDocSnap.id, 
             ...barberData, 
             isAcceptingBookings: isAccepting,
-            // photoURL removed
         });
       } else {
         toast({ title: "Error", description: "Barber not found.", variant: "destructive" });
@@ -91,6 +89,7 @@ export default function ViewBarberPage() {
     return (
       <ProtectedPage expectedRole="customer">
         <div className="text-center py-10">
+          <UserCircle className="mx-auto h-16 w-16 text-muted-foreground mb-4" />
           <h2 className="text-xl font-bold text-destructive">Barber information not available.</h2>
           <Button onClick={() => router.push('/customer/dashboard')} className="mt-6 h-12 rounded-full px-6 text-base">
             Back to Dashboard
@@ -110,9 +109,9 @@ export default function ViewBarberPage() {
         </Button>
 
         <Card className="border-none shadow-lg rounded-xl overflow-hidden">
-          <CardHeader className="p-4 md:p-6">
-            <div className="flex items-start space-x-4">
-                <UserCircle className="h-20 w-20 sm:h-24 sm:w-24 text-muted-foreground flex-shrink-0" /> {/* Placeholder for Avatar */}
+          <CardHeader className="p-4 md:p-6 bg-muted/30">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-3 sm:space-y-0 sm:space-x-4">
+                <UserCircle className="h-20 w-20 sm:h-24 sm:w-24 text-muted-foreground flex-shrink-0" />
                 <div className="pt-1">
                     <CardTitle className="text-2xl sm:text-3xl font-bold">
                     {barber.firstName} {barber.lastName}
@@ -129,13 +128,13 @@ export default function ViewBarberPage() {
 
           <CardContent className="p-4 md:p-6">
             {!barberIsAcceptingBookings && (
-                <div className="mb-6 p-4 border-l-4 border-yellow-500 bg-yellow-50 rounded-md shadow-sm">
+                <div className="mb-6 p-4 border-l-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20 rounded-md shadow-sm">
                     <div className="flex">
                         <div className="flex-shrink-0">
                         <AlertTriangle className="h-5 w-5 text-yellow-500" aria-hidden="true" />
                         </div>
                         <div className="ml-3">
-                        <p className="text-sm text-yellow-700">
+                        <p className="text-sm text-yellow-700 dark:text-yellow-300">
                             {barber.firstName} is not currently accepting new online bookings. Please check back later.
                         </p>
                         </div>
@@ -161,14 +160,17 @@ export default function ViewBarberPage() {
                 ))}
               </div>
             ) : (
-              <p className="text-base text-gray-500">This barber has not listed any services yet.</p>
+              <div className="text-center py-6">
+                <Info className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
+                <p className="text-base text-gray-500">This barber has not listed any services yet.</p>
+              </div>
             )}
           </CardContent>
 
           <CardFooter className="p-4 md:p-6 border-t mt-auto">
             <Button
                 asChild={barberIsAcceptingBookings} 
-                className="w-full sm:w-auto h-14 rounded-full text-lg"
+                className="w-full sm:w-auto h-14 rounded-full text-lg px-8"
                 disabled={!barberIsAcceptingBookings} 
             >
               {barberIsAcceptingBookings ? (

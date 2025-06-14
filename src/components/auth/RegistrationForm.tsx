@@ -57,7 +57,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
 
   async function onSubmit(values: UserDetailsFormValues) {
     try {
-      const userDetailsForApi: Omit<AppUser, 'uid' | 'createdAt' | 'updatedAt' | 'displayName' | 'photoURL' | 'emailVerified'> & { password_original_do_not_use: string } = {
+      const userDetailsForApi: Omit<AppUser, 'uid' | 'createdAt' | 'updatedAt' | 'displayName' | 'emailVerified' | 'fcmToken' | 'photoURL'> & { password_original_do_not_use: string } = {
         firstName: values.firstName,
         lastName: values.lastName,
         email: values.email,
@@ -76,7 +76,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 mt-6">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-x-6 sm:gap-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4">
           <FormField
             control={form.control}
             name="firstName"
@@ -84,7 +84,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
               <FormItem>
                 <FormLabel className="text-base">First Name</FormLabel>
                 <FormControl>
-                  <Input placeholder="Enter first name" {...field} className="text-base h-12" autoComplete="given-name" disabled={isProcessingAuth} />
+                  <Input placeholder="Enter first name" {...field} className="text-base h-12 rounded-md" autoComplete="given-name" disabled={isProcessingAuth} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -97,7 +97,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
               <FormItem>
                 <FormLabel className="text-base">Last Name</FormLabel>
                 <FormControl>
-                  <Input placeholder="Enter last name" {...field} className="text-base h-12" autoComplete="family-name" disabled={isProcessingAuth} />
+                  <Input placeholder="Enter last name" {...field} className="text-base h-12 rounded-md" autoComplete="family-name" disabled={isProcessingAuth} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -111,7 +111,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
             <FormItem>
               <FormLabel className="text-base">Email Address</FormLabel>
               <FormControl>
-                <Input type="email" placeholder="e.g. user@example.com" {...field} className="text-base h-12" autoComplete="email" inputMode="email" disabled={isProcessingAuth} />
+                <Input type="email" placeholder="e.g. user@example.com" {...field} className="text-base h-12 rounded-md" autoComplete="email" inputMode="email" disabled={isProcessingAuth} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -124,7 +124,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
             <FormItem>
               <FormLabel className="text-base">Phone Number (Optional)</FormLabel>
               <FormControl>
-                <Input type="tel" placeholder="e.g. +14155552671" {...field} className="text-base h-12" autoComplete="tel" inputMode="tel" disabled={isProcessingAuth} />
+                <Input type="tel" placeholder="e.g. +14155552671" {...field} className="text-base h-12 rounded-md" autoComplete="tel" inputMode="tel" disabled={isProcessingAuth} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -137,7 +137,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
               <FormItem>
                 <FormLabel className="text-base">Address (Optional)</FormLabel>
                 <FormControl>
-                  <Input placeholder="e.g. 123 Main St, Anytown" {...field} className="text-base h-12" autoComplete="street-address" disabled={isProcessingAuth} />
+                  <Input placeholder="e.g. 123 Main St, Anytown" {...field} className="text-base h-12 rounded-md" autoComplete="street-address" disabled={isProcessingAuth} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -150,7 +150,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
             <FormItem>
               <FormLabel className="text-base">Password</FormLabel>
               <FormControl>
-                <Input type="password" placeholder="Enter password" {...field} className="text-base h-12" autoComplete="new-password" disabled={isProcessingAuth} />
+                <Input type="password" placeholder="Enter password" {...field} className="text-base h-12 rounded-md" autoComplete="new-password" disabled={isProcessingAuth} />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -163,7 +163,7 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
             <FormItem>
               <FormLabel className="text-base">Confirm Password</FormLabel>
               <FormControl>
-                <Input type="password" placeholder="Confirm password" {...field} className="text-base h-12" autoComplete="new-password" disabled={isProcessingAuth} />
+                <Input type="password" placeholder="Confirm password" {...field} className="text-base h-12 rounded-md" autoComplete="new-password" disabled={isProcessingAuth} />
               </FormControl>
               <FormMessage />
             </FormItem>

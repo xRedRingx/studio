@@ -18,8 +18,8 @@ export default function AuthFormWrapper({ title, description, role, children, fo
   
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4 sm:p-6">
-      <Card className="w-full max-w-md shadow-xl border-none">
-        <CardHeader className="text-center p-4 md:p-6">
+      <Card className="w-full max-w-md shadow-xl border-none rounded-xl">
+        <CardHeader className="text-center p-6 md:p-8">
           <Link href="/" aria-label="Go to homepage" className="mx-auto mb-6 flex justify-center">
             <BarberFlowLogo className="h-10 w-auto" />
           </Link>
@@ -28,7 +28,7 @@ export default function AuthFormWrapper({ title, description, role, children, fo
             {description}
           </CardDescription>
         </CardHeader>
-        <CardContent className="p-4 md:p-6 sm:p-8">
+        <CardContent className="px-6 pb-6 md:px-8 md:pb-8">
           {children}
         </CardContent>
       </Card>
@@ -43,4 +43,3 @@ export default function AuthFormWrapper({ title, description, role, children, fo
     </div>
   );
 }
-

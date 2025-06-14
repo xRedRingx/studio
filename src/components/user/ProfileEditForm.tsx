@@ -11,6 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import type { AppUser } from '@/types';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { UserCircle } from 'lucide-react';
 
 const profileEditSchema = z.object({
   firstName: z.string().min(1, "First name is required").max(50, "First name must be less than 50 characters"),
@@ -66,9 +67,14 @@ export default function ProfileEditForm({ currentUser, onSubmit, isSubmitting }:
 
   return (
     <Card className="border-none shadow-lg rounded-xl overflow-hidden">
-        <CardHeader className="p-4 md:p-6">
-            <CardTitle className="text-xl font-bold">Your Information</CardTitle>
-            <CardDescription className="text-sm text-gray-500">Update your personal details. Email address is managed via your authentication provider (e.g., Google) or Firebase Console.</CardDescription>
+        <CardHeader className="p-4 md:p-6 bg-muted/30">
+            <div className="flex items-center space-x-4">
+                <UserCircle className="h-16 w-16 text-muted-foreground" />
+                <div>
+                    <CardTitle className="text-xl font-bold">Your Information</CardTitle>
+                    <CardDescription className="text-sm text-gray-500 mt-1">Update your personal details. Email address cannot be changed here.</CardDescription>
+                </div>
+            </div>
         </CardHeader>
         <CardContent className="p-4 md:p-6">
             <Form {...form}>
@@ -82,7 +88,7 @@ export default function ProfileEditForm({ currentUser, onSubmit, isSubmitting }:
                     <FormItem>
                         <FormLabel className="text-base">First Name</FormLabel>
                         <FormControl>
-                        <Input placeholder="Enter first name" {...field} className="text-base h-12" autoComplete="given-name" disabled={isSubmitting} />
+                        <Input placeholder="Enter first name" {...field} className="text-base h-12 rounded-md" autoComplete="given-name" disabled={isSubmitting} />
                         </FormControl>
                         <FormMessage />
                     </FormItem>
@@ -95,7 +101,7 @@ export default function ProfileEditForm({ currentUser, onSubmit, isSubmitting }:
                     <FormItem>
                         <FormLabel className="text-base">Last Name</FormLabel>
                         <FormControl>
-                        <Input placeholder="Enter last name" {...field} className="text-base h-12" autoComplete="family-name" disabled={isSubmitting} />
+                        <Input placeholder="Enter last name" {...field} className="text-base h-12 rounded-md" autoComplete="family-name" disabled={isSubmitting} />
                         </FormControl>
                         <FormMessage />
                     </FormItem>
@@ -107,9 +113,9 @@ export default function ProfileEditForm({ currentUser, onSubmit, isSubmitting }:
                     name="email"
                     render={({ field }) => (
                         <FormItem>
-                        <FormLabel className="text-base">Email Address (Cannot Change)</FormLabel>
+                        <FormLabel className="text-base">Email Address</FormLabel>
                         <FormControl>
-                            <Input type="email" {...field} className="text-base h-12 bg-muted/50" disabled={true} />
+                            <Input type="email" {...field} className="text-base h-12 rounded-md bg-muted/50 cursor-not-allowed" disabled={true} />
                         </FormControl>
                         <FormMessage />
                         </FormItem>
@@ -120,9 +126,9 @@ export default function ProfileEditForm({ currentUser, onSubmit, isSubmitting }:
                 name="phoneNumber"
                 render={({ field }) => (
                     <FormItem>
-                    <FormLabel className="text-base">Phone Number</FormLabel>
+                    <FormLabel className="text-base">Phone Number (Optional)</FormLabel>
                     <FormControl>
-                        <Input type="tel" placeholder="e.g. +14155552671 (Optional)" {...field} className="text-base h-12" autoComplete="tel" inputMode="tel" disabled={isSubmitting} />
+                        <Input type="tel" placeholder="e.g. +14155552671" {...field} className="text-base h-12 rounded-md" autoComplete="tel" inputMode="tel" disabled={isSubmitting} />
                     </FormControl>
                     <FormMessage />
                     </FormItem>
@@ -133,18 +139,20 @@ export default function ProfileEditForm({ currentUser, onSubmit, isSubmitting }:
                 name="address"
                 render={({ field }) => (
                     <FormItem>
-                    <FormLabel className="text-base">Address (Optional for Customers)</FormLabel>
+                    <FormLabel className="text-base">Address (Optional)</FormLabel>
                     <FormControl>
-                        <Input placeholder="e.g. 123 Main St, Anytown" {...field} className="text-base h-12" autoComplete="street-address" disabled={isSubmitting} />
+                        <Input placeholder="e.g. 123 Main St, Anytown" {...field} className="text-base h-12 rounded-md" autoComplete="street-address" disabled={isSubmitting} />
                     </FormControl>
                     <FormMessage />
                     </FormItem>
                 )}
                 />
-                <Button type="submit" className="w-full sm:w-auto h-12 rounded-full text-base px-8 mt-4" disabled={isSubmitting}>
-                {isSubmitting && <LoadingSpinner className="mr-2 h-5 w-5" />}
-                {isSubmitting ? 'Saving Changes...' : 'Save Changes'}
-                </Button>
+                <div className="pt-2">
+                  <Button type="submit" className="w-full sm:w-auto h-12 rounded-full text-base px-8" disabled={isSubmitting}>
+                  {isSubmitting && <LoadingSpinner className="mr-2 h-5 w-5" />}
+                  {isSubmitting ? 'Saving Changes...' : 'Save Changes'}
+                  </Button>
+                </div>
             </form>
             </Form>
         </CardContent>

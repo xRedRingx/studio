@@ -10,7 +10,7 @@ import { firestore } from '@/firebase/config';
 import { collection, query, where, getDocs, orderBy, Timestamp, doc, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { CalendarDays, Clock, Scissors, UserCircle, ChevronRight, XCircle, Ban, Eye } from 'lucide-react';
+import { CalendarDays, Clock, Scissors, UserCircle, Eye, XCircle, Ban, Search } from 'lucide-react';
 import Link from 'next/link';
 import {
   AlertDialog,
@@ -123,8 +123,8 @@ export default function CustomerDashboardPage() {
         lastName: data.lastName,
         role: data.role,
         phoneNumber: data.phoneNumber,
+        address: data.address,
         isAcceptingBookings: isAccepting, 
-        // photoURL removed
         } as AppUser);
       });
       setAvailableBarbers(fetchedBarbersData);
@@ -184,8 +184,8 @@ export default function CustomerDashboardPage() {
         </h1>
         
         <Card className="border-none shadow-lg rounded-xl overflow-hidden">
-          <CardHeader className="p-4 md:p-6">
-            <CardTitle className="text-2xl font-bold">Your Upcoming Appointments</CardTitle>
+          <CardHeader className="p-4 md:p-6 bg-muted/30">
+            <CardTitle className="text-xl font-bold">Your Upcoming Appointments</CardTitle>
             <CardDescription className="text-sm text-gray-500 mt-1">View and manage your upcoming appointments.</CardDescription>
           </CardHeader>
           <CardContent className="p-4 md:p-6">
@@ -196,6 +196,7 @@ export default function CustomerDashboardPage() {
               </div>
             ) : myAppointments.length === 0 ? (
               <div className="text-center py-6">
+                <CalendarDays className="mx-auto h-12 w-12 text-muted-foreground mb-3" />
                 <p className="text-base text-gray-500 mb-4">You have no upcoming appointments.</p>
                  <Button asChild className="rounded-full h-12 px-6 text-base">
                     <Link href="#find-barber">Find a Barber</Link>
@@ -205,29 +206,29 @@ export default function CustomerDashboardPage() {
               <div className="space-y-4">
                 {myAppointments.map(app => (
                   <Card key={app.id} className="shadow-md rounded-lg border overflow-hidden">
-                    <CardContent className="p-4 grid grid-cols-1 md:grid-cols-3 gap-2 md:gap-4 items-start">
-                      <div className="md:col-span-2 space-y-1">
+                    <CardContent className="p-4 grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 items-start">
+                      <div className="md:col-span-2 space-y-1.5">
                         <h3 className="text-base font-semibold text-primary flex items-center">
-                          <Scissors className="mr-2 h-5 w-5" /> {app.serviceName}
+                          <Scissors className="mr-2 h-5 w-5 flex-shrink-0" /> {app.serviceName}
                         </h3>
                         <p className="text-sm text-gray-500 flex items-center">
-                          <UserCircle className="mr-2 h-4 w-4" /> With: {app.barberName}
+                          <UserCircle className="mr-2 h-4 w-4 flex-shrink-0" /> With: {app.barberName}
                         </p>
                       </div>
                       <div className="space-y-1 text-sm text-left md:text-right">
                         <p className="font-medium flex items-center md:justify-end text-base">
-                          <CalendarDays className="mr-2 h-4 w-4" /> {formatDate(app.date)}
+                          <CalendarDays className="mr-2 h-4 w-4 flex-shrink-0" /> {formatDate(app.date)}
                         </p>
                         <p className="text-[#0088E0] flex items-center md:justify-end">
-                          <Clock className="mr-2 h-4 w-4" /> {app.startTime}
+                          <Clock className="mr-2 h-4 w-4 flex-shrink-0" /> {app.startTime}
                         </p>
                       </div>
                        {app.status === 'upcoming' && (
-                        <div className="md:col-span-3 flex justify-end pt-2 mt-2 border-t border-gray-200">
+                        <div className="md:col-span-3 flex justify-end pt-3 mt-3 border-t">
                            <Button
                             variant="destructive"
                             size="sm"
-                            className="rounded-full h-9 px-3"
+                            className="rounded-full h-9 px-4 text-sm"
                             onClick={() => setAppointmentToCancel(app)}
                             disabled={isCancelling}
                           >
@@ -249,8 +250,8 @@ export default function CustomerDashboardPage() {
         </Card>
 
         <Card id="find-barber" className="border-none shadow-lg rounded-xl overflow-hidden">
-          <CardHeader className="p-4 md:p-6">
-            <CardTitle className="text-2xl font-bold">Explore Barbers</CardTitle>
+          <CardHeader className="p-4 md:p-6 bg-muted/30">
+            <CardTitle className="text-xl font-bold">Explore Barbers</CardTitle>
             <CardDescription className="text-sm text-gray-500 mt-1">Discover services offered by our talented barbers.</CardDescription>
           </CardHeader>
           <CardContent className="p-4 md:p-6">
@@ -260,26 +261,29 @@ export default function CustomerDashboardPage() {
                 <p className="ml-3 text-base">Loading available barbers...</p>
               </div>
             ) : availableBarbers.length === 0 ? (
-              <p className="text-base text-gray-500">No barbers are currently listed or accepting online bookings.</p>
+              <div className="text-center py-6">
+                <Search className="mx-auto h-12 w-12 text-muted-foreground mb-3" />
+                <p className="text-base text-gray-500">No barbers are currently listed or accepting online bookings.</p>
+              </div>
             ) : (
               <div className="space-y-4">
                 {availableBarbers.map(barber => (
                   <Card key={barber.uid} className="shadow-md rounded-lg border">
-                    <CardContent className="p-4 flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-3 flex-grow">
-                        <UserCircle className="h-12 w-12 text-muted-foreground" /> {/* Placeholder for Avatar */}
-                        <div>
+                    <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-4 flex-grow">
+                        <UserCircle className="h-12 w-12 text-muted-foreground flex-shrink-0" />
+                        <div className="flex-grow">
                           <h3 className="text-base font-semibold">
                             {barber.firstName} {barber.lastName}
                           </h3>
                            {barber.address && (
-                            <p className="text-xs text-gray-500 truncate max-w-[150px] sm:max-w-[200px]">
+                            <p className="text-xs text-gray-500 truncate max-w-[150px] sm:max-w-full">
                                 {barber.address}
                             </p>
                             )}
                         </div>
                       </div>
-                      <Button asChild variant="outline" size="sm" className="rounded-full h-10 px-4 text-base flex-shrink-0">
+                      <Button asChild variant="outline" size="sm" className="rounded-full h-10 px-4 text-sm sm:text-base flex-shrink-0 w-full sm:w-auto mt-3 sm:mt-0">
                         <Link href={`/customer/view-barber/${barber.uid}`}>
                            <Eye className="mr-2 h-4 w-4" /> View Profile
                         </Link>
@@ -294,10 +298,10 @@ export default function CustomerDashboardPage() {
       </div>
       {appointmentToCancel && (
         <AlertDialog open={!!appointmentToCancel} onOpenChange={(open) => !open && setAppointmentToCancel(null)}>
-          <AlertDialogContent>
+          <AlertDialogContent className="rounded-xl">
             <AlertDialogHeader>
               <AlertDialogTitle className="text-xl font-bold">Confirm Cancellation</AlertDialogTitle>
-              <AlertDialogDescription className="text-base text-gray-500">
+              <AlertDialogDescription className="text-base text-gray-500 pt-1">
                 Are you sure you want to cancel your appointment for <span className="font-semibold">{appointmentToCancel.serviceName}</span>
                 {' '}with <span className="font-semibold">{appointmentToCancel.barberName}</span> on <span className="font-semibold">{formatDate(appointmentToCancel.date)} at {appointmentToCancel.startTime}</span>?
                 This action cannot be undone.

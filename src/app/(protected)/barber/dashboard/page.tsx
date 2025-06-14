@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import ProtectedPage from '@/components/layout/ProtectedPage';
 import { useAuth } from '@/hooks/useAuth';
-import type { BarberService, Appointment, DayOfWeek, BarberScheduleDoc, UnavailableDate, AppUser } from '@/types';
+import type { BarberService, Appointment, DayOfWeek, BarberScheduleDoc, UnavailableDate } from '@/types';
 import TodaysAppointmentsSection from '@/components/barber/TodaysAppointmentsSection';
 import { firestore } from '@/firebase/config';
 import {
@@ -15,14 +15,12 @@ import {
   addDoc,
   doc,
   updateDoc,
-  deleteDoc,
-  orderBy,
   Timestamp,
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Settings2, LayoutDashboard } from 'lucide-react'; 
+import { PlusCircle, Settings2 } from 'lucide-react'; 
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'; 
@@ -68,7 +66,7 @@ const INITIAL_SCHEDULE_FOR_WALKIN_CHECK: ScheduleDayAvailability[] = (['Monday',
 
 
 export default function BarberDashboardPage() {
-  const { user, setUser, updateUserAcceptingBookings } = useAuth();
+  const { user, updateUserAcceptingBookings } = useAuth();
   const { toast } = useToast();
 
   const [services, setServices] = useState<BarberService[]>([]);
@@ -348,6 +346,8 @@ export default function BarberDashboardPage() {
     } catch (error) {
       console.error("Error updating accepting bookings status:", error);
       toast({ title: "Error", description: "Could not update your booking status.", variant: "destructive" });
+      // Revert local state on failure
+      setLocalIsAcceptingBookings(!newCheckedState);
     } finally {
       setIsUpdatingAcceptingBookings(false);
     }
@@ -375,14 +375,14 @@ export default function BarberDashboardPage() {
         <div className="space-y-8">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <h1 className="text-2xl font-bold font-headline">
-              Barber Dashboard, {user?.firstName || user?.displayName || 'Barber'}!
+              Welcome, {user?.firstName || user?.displayName || 'Barber'}!
               </h1>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <span tabIndex={isAddWalkInDisabled ? 0 : -1}> 
                     <Button 
                       onClick={() => setIsWalkInDialogOpen(true)} 
-                      className="w-full sm:w-auto h-11 rounded-full" 
+                      className="w-full sm:w-auto h-11 rounded-full px-6 text-base" 
                       disabled={isAddWalkInDisabled}
                       aria-describedby={isAddWalkInDisabled ? "add-walkin-tooltip" : undefined}
                     >
@@ -399,10 +399,8 @@ export default function BarberDashboardPage() {
               </Tooltip>
           </div>
 
-          {/* Removed the "Complete Your Profile" Alert */}
-
           <Card className="border-none shadow-lg rounded-xl overflow-hidden">
-            <CardHeader className="p-4 md:p-6">
+            <CardHeader className="p-4 md:p-6 bg-muted/30">
               <CardTitle className="text-xl font-bold flex items-center">
                 <Settings2 className="mr-2 h-5 w-5 text-primary" />
                 Online Booking Status
@@ -424,7 +422,10 @@ export default function BarberDashboardPage() {
                   {isUpdatingAcceptingBookings && <LoadingSpinner className="h-5 w-5 text-primary ml-2" />}
                 </div>
               ) : (
-                <p>Loading booking status...</p>
+                <div className="flex items-center">
+                   <LoadingSpinner className="h-5 w-5 text-primary mr-2" />
+                   <p>Loading booking status...</p>
+                </div>
               )}
                <p className="text-sm text-gray-500 mt-2">
                 Turn this off to temporarily prevent new customers from booking online. Existing appointments will not be affected.
@@ -458,5 +459,3 @@ export default function BarberDashboardPage() {
     </ProtectedPage>
   );
 }
-
-    

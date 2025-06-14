@@ -1,7 +1,6 @@
 
 'use client';
 
-import type { ChangeEvent } from 'react';
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import ProtectedPage from '@/components/layout/ProtectedPage';
@@ -14,12 +13,12 @@ import { firestore } from '@/firebase/config';
 import { collection, doc, getDoc, getDocs, query, where, addDoc, Timestamp, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { AlertCircle, CalendarDays, CheckCircle, ChevronLeft, Clock, DollarSign, Scissors, Users, Info, Ban, AlertTriangle, Forward, CircleUser, Check, Edit, LayoutDashboard } from 'lucide-react';
+import { AlertCircle, CalendarDays, CheckCircle, ChevronLeft, Clock, DollarSign, Scissors, Users, Info, Ban, AlertTriangle, Forward, CircleUser, Check, LayoutDashboard, X } from 'lucide-react';
 import { APP_NAME } from '@/lib/constants';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
-import { Progress } from '@/components/ui/progress'; // For visual stepper
+import { Progress } from '@/components/ui/progress'; 
 
 type BookingStep = 'selectService' | 'selectDateTime' | 'confirm' | 'confirmed' | 'queued';
 
@@ -130,13 +129,11 @@ export default function BookingPage() {
       const barberDocSnap = await getDoc(barberDocRef);
       if (barberDocSnap.exists() && barberDocSnap.data().role === 'barber') {
         const barberData = barberDocSnap.data() as AppUser;
-        // Default isAcceptingBookings to true if undefined or null
         const isAccepting = barberData.isAcceptingBookings !== undefined && barberData.isAcceptingBookings !== null 
                             ? barberData.isAcceptingBookings 
                             : true;
-        setBarber({ id: barberDocSnap.id, ...barberData, isAcceptingBookings: isAccepting });
+        setBarber({ uid: barberDocSnap.id, ...barberData, isAcceptingBookings: isAccepting });
         
-        // If barber is not accepting bookings, no need to fetch other data for booking
         if (!isAccepting) {
             setIsLoadingBarberDetails(false);
             return;
@@ -208,7 +205,6 @@ export default function BookingPage() {
       const today = new Date();
       const currentWeek = getWeekBoundaries(today);
       const nextWeek = getWeekBoundaries(new Date(new Date().setDate(today.getDate() + 7)));
-
 
       const appointmentsQuery = query(
         collection(firestore, 'appointments'),
@@ -503,7 +499,7 @@ export default function BookingPage() {
         <p className="text-sm text-muted-foreground">
           Step {currentStepNumber} of {totalBookingSteps}: <span className="font-semibold text-foreground">{currentStepTitle}</span>
         </p>
-        <Progress value={progressValue} className="w-full h-2" />
+        <Progress value={progressValue} className="w-full h-2 rounded-full" />
       </div>
     );
   };
@@ -524,6 +520,7 @@ export default function BookingPage() {
     return (
       <ProtectedPage expectedRole="customer">
         <div className="text-center py-10">
+          <AlertCircle className="mx-auto h-16 w-16 text-destructive mb-4" />
           <h2 className="text-2xl font-bold text-destructive">Barber not found.</h2>
           <Button onClick={() => router.push('/customer/dashboard')} className="mt-6 h-14 rounded-full px-8 text-lg">Go Back</Button>
         </div>
@@ -541,7 +538,7 @@ export default function BookingPage() {
           <h1 className="text-2xl font-bold font-headline">
             Booking Not Available
           </h1>
-          <p className="text-base text-gray-600">
+          <p className="text-base text-gray-600 dark:text-gray-400">
             {barber.firstName} {barber.lastName} is not currently accepting new online bookings. Please check back later or contact them directly.
           </p>
           <Button onClick={() => router.push(`/customer/view-barber/${barberId}`)} className="mt-6 h-12 rounded-full px-6 text-base">
@@ -556,23 +553,26 @@ export default function BookingPage() {
     switch (bookingStep) {
       case 'selectService':
         return (
-          <Card className="border-none shadow-none">
-            <CardHeader className="p-4 md:p-6">
-              <CardTitle className="text-2xl font-bold">Select a Service</CardTitle>
-              <CardDescription className="text-sm text-gray-500">Choose from the services offered by {barber.firstName || 'this barber'}.</CardDescription>
+          <Card className="border-none shadow-lg rounded-xl overflow-hidden">
+            <CardHeader className="p-4 md:p-6 bg-muted/30">
+              <CardTitle className="text-xl font-bold">Select a Service</CardTitle>
+              <CardDescription className="text-sm text-gray-500 mt-1">Choose from the services offered by {barber.firstName || 'this barber'}.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 p-4 md:p-6">
               {services.length === 0 ? (
-                <p className="text-sm text-gray-500">This barber has not listed any services yet.</p>
+                <div className="text-center py-6">
+                  <Info className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
+                  <p className="text-base text-gray-500">This barber has not listed any services yet.</p>
+                </div>
               ) : (
                 services.map(service => (
                   <Button
                     key={service.id}
                     variant="outline"
-                    className="w-full justify-start text-left h-auto py-4 px-4 rounded-lg border shadow-sm hover:bg-accent/10"
+                    className="w-full justify-start text-left h-auto py-4 px-4 rounded-lg border shadow-sm hover:bg-accent/50"
                     onClick={() => handleServiceSelect(service.id)}
                   >
-                    <div className="flex flex-col">
+                    <div className="flex flex-col flex-grow">
                       <span className="font-semibold text-base">{service.name}</span>
                       <span className="text-sm text-gray-500 mt-1">
                         <DollarSign className="inline h-4 w-4 mr-1" />{service.price.toFixed(2)}
@@ -580,7 +580,7 @@ export default function BookingPage() {
                         <span className="text-[#0088E0]">{service.duration} min</span>
                       </span>
                     </div>
-                    <ChevronLeft className="h-5 w-5 ml-auto text-gray-400 transform rotate-180" />
+                    <ChevronLeft className="h-5 w-5 ml-auto text-gray-400 transform rotate-180 flex-shrink-0" />
                   </Button>
                 ))
               )}
@@ -591,10 +591,10 @@ export default function BookingPage() {
       case 'selectDateTime':
         const isDateUnavailable = barberUnavailableDates.some(ud => ud.date === formatDateToYYYYMMDD(selectedDate));
         return (
-          <Card className="border-none shadow-none">
-            <CardHeader className="p-4 md:p-6">
-              <CardTitle className="text-2xl font-bold">Pick Date & Time</CardTitle>
-              <CardDescription className="text-sm text-gray-500">
+          <Card className="border-none shadow-lg rounded-xl overflow-hidden">
+            <CardHeader className="p-4 md:p-6 bg-muted/30">
+              <CardTitle className="text-xl font-bold">Pick Date & Time</CardTitle>
+              <CardDescription className="text-sm text-gray-500 mt-1">
                 Selected service: <span className="font-semibold text-foreground">{selectedService?.name}</span>
               </CardDescription>
             </CardHeader>
@@ -611,7 +611,7 @@ export default function BookingPage() {
                       if (!dayInfo) return null; 
                       return (
                         <div key={dayInfo.day} className="flex justify-between items-center text-sm">
-                          <span className="text-gray-600">{dayInfo.day}</span>
+                          <span className="text-gray-600 dark:text-gray-400">{dayInfo.day}</span>
                           {dayInfo.isOpen ? (
                             <span className="font-medium text-[#0088E0]">{dayInfo.startTime} &ndash; {dayInfo.endTime}</span>
                           ) : (
@@ -631,7 +631,7 @@ export default function BookingPage() {
                       <Button
                         variant={"outline"}
                         className={cn(
-                          "w-full sm:w-[280px] justify-start text-left font-normal h-12 text-base mb-1",
+                          "w-full sm:w-[280px] justify-start text-left font-normal h-12 text-base mb-1 rounded-md",
                           !selectedDate && "text-muted-foreground"
                         )}
                       >
@@ -639,7 +639,7 @@ export default function BookingPage() {
                         {selectedDate ? formatSelectedDateForDisplay(selectedDate) : <span>Pick a date</span>}
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
+                    <PopoverContent className="w-auto p-0 rounded-lg">
                       <Calendar
                         mode="single"
                         selected={selectedDate}
@@ -678,10 +678,10 @@ export default function BookingPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-500">No available time slots for the selected service and date. This could be because all slots are booked, the barber is closed, or it's too late to book for today. Check the barber's weekly availability or try a different date/service.</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">No available time slots for the selected service and date. This could be because all slots are booked, the barber is closed, or it's too late to book for today. Check the barber's weekly availability or try a different date/service.</p>
                 )}
               </div>
-              <div className="flex flex-col sm:flex-row justify-between pt-6 space-y-3 sm:space-y-0 sm:space-x-3">
+              <div className="flex flex-col sm:flex-row justify-between items-center pt-6 space-y-3 sm:space-y-0 sm:space-x-3 border-t mt-4">
                 <Button variant="outline" onClick={() => setBookingStep('selectService')} className="w-full sm:w-auto h-12 rounded-full text-base">
                     <ChevronLeft className="mr-2 h-4 w-4" /> Back to Services
                 </Button>
@@ -695,21 +695,21 @@ export default function BookingPage() {
 
       case 'confirm':
         return (
-          <Card className="border-none shadow-none">
-            <CardHeader className="p-4 md:p-6">
-              <CardTitle className="text-2xl font-bold">Confirm Booking</CardTitle>
-              <CardDescription className="text-sm text-gray-500">Please review your appointment details.</CardDescription>
+          <Card className="border-none shadow-lg rounded-xl overflow-hidden">
+            <CardHeader className="p-4 md:p-6 bg-muted/30">
+              <CardTitle className="text-xl font-bold">Confirm Booking</CardTitle>
+              <CardDescription className="text-sm text-gray-500 mt-1">Please review your appointment details.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3 p-4 md:p-6">
-              <div className="space-y-2 text-base border-b pb-4 mb-4">
-                 <p className="font-semibold text-lg text-primary mb-2">Review Details:</p>
+            <CardContent className="space-y-4 p-4 md:p-6">
+              <div className="space-y-2 text-base border rounded-lg p-4 shadow-sm bg-card">
+                 <p className="font-semibold text-lg text-primary mb-3">Review Details:</p>
                 <p><Scissors className="inline mr-2 h-5 w-5 text-gray-500" /> Service: <span className="font-medium">{selectedService?.name}</span></p>
                 <p><CircleUser className="inline mr-2 h-5 w-5 text-gray-500" /> With: <span className="font-medium">{barber.firstName} {barber.lastName}</span></p>
                 <p><CalendarDays className="inline mr-2 h-5 w-5 text-gray-500" /> Date: <span className="font-medium">{selectedDate ? formatSelectedDateForDisplay(selectedDate) : ''}</span></p>
                 <p><Clock className="inline mr-2 h-5 w-5 text-gray-500" /> Time: <span className="font-medium text-[#0088E0]">{selectedTimeSlot}</span></p>
                 <p><DollarSign className="inline mr-2 h-5 w-5 text-gray-500" /> Price: <span className="font-medium">${selectedService?.price.toFixed(2)}</span></p>
               </div>
-              <div className="flex flex-col sm:flex-row justify-between pt-4 space-y-3 sm:space-y-0 sm:space-x-3">
+              <div className="flex flex-col sm:flex-row justify-between items-center pt-6 space-y-3 sm:space-y-0 sm:space-x-3 border-t mt-4">
                 <Button variant="outline" onClick={() => setBookingStep('selectDateTime')} className="w-full sm:w-auto h-12 rounded-full text-base">
                      <ChevronLeft className="mr-2 h-4 w-4" /> Back
                 </Button>
@@ -724,12 +724,12 @@ export default function BookingPage() {
 
         case 'confirmed':
             return (
-              <Card className="text-center border-none shadow-none p-4 md:p-6">
-                <CardHeader>
+              <Card className="text-center border-none shadow-lg rounded-xl overflow-hidden p-4 md:p-6">
+                <CardHeader className="pt-4 pb-2">
                   <CheckCircle className="mx-auto h-16 w-16 text-green-500 mb-4" />
                   <CardTitle className="text-2xl font-bold">Booking Confirmed!</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-2 text-base">
+                <CardContent className="space-y-2 text-base pt-2">
                   <p>Your appointment for <span className="font-semibold">{newlyBookedAppointment?.serviceName}</span></p>
                   <p>with <span className="font-semibold">{barber.firstName} {barber.lastName}</span></p>
                   <p>on <span className="font-semibold">{formatYYYYMMDDToDisplay(newlyBookedAppointment?.date || '')} at <span className="text-[#0088E0]">{newlyBookedAppointment?.startTime}</span></span></p>
@@ -743,15 +743,15 @@ export default function BookingPage() {
         
         case 'queued':
             return (
-                <Card className="text-center border-none shadow-none p-4 md:p-6">
-                <CardHeader>
+                <Card className="text-center border-none shadow-lg rounded-xl overflow-hidden p-4 md:p-6">
+                <CardHeader className="pt-4 pb-2">
                     {isCurrentUserNext && <AlertCircle className="mx-auto h-16 w-16 text-primary mb-4" />}
                     {!isCurrentUserNext && queuePosition && <Users className="mx-auto h-16 w-16 text-primary mb-4" />}
                     <CardTitle className="text-2xl font-bold">
                     {isCurrentUserNext ? "You're Next!" : (queuePosition ? `You are #${queuePosition} in line` : "Queue Information")}
                     </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-3 text-base">
+                <CardContent className="space-y-3 text-base pt-2">
                     {newlyBookedAppointment && barber && (
                     <div className="pb-3 mb-4 border-b border-border">
                         <p className="text-lg font-semibold text-foreground">Your Appointment:</p>
@@ -801,8 +801,8 @@ export default function BookingPage() {
             Book with {barber.firstName || APP_NAME}
             </h1>
             { bookingStep !== 'selectService' && bookingStep !== 'queued' && bookingStep !== 'confirmed' && (
-                 <Button variant="link" onClick={() => router.push('/customer/dashboard')} className="text-sm text-primary">
-                    Cancel & Go Back
+                 <Button variant="ghost" onClick={() => router.push('/customer/dashboard')} className="text-sm text-primary hover:bg-destructive/10 hover:text-destructive rounded-full px-3 py-1.5">
+                    <X className="mr-1.5 h-4 w-4"/> Cancel Booking
                 </Button>
             )}
         </div>
@@ -812,6 +812,3 @@ export default function BookingPage() {
     </ProtectedPage>
   );
 }
-
-
-    

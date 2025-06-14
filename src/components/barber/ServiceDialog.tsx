@@ -75,9 +75,9 @@ export default function ServiceDialog({ isOpen, onClose, onSubmit, serviceToEdit
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && !isSubmitting && onClose()}>
-      <DialogContent className="sm:max-w-md rounded-lg">
+      <DialogContent className="sm:max-w-md rounded-xl">
         <DialogHeader className="p-6 pb-4">
-          <DialogTitle className="text-2xl font-bold">{serviceToEdit ? 'Edit Service' : 'Add New Service'}</DialogTitle>
+          <DialogTitle className="text-xl font-bold">{serviceToEdit ? 'Edit Service' : 'Add New Service'}</DialogTitle>
           <DialogDescription className="text-sm text-gray-500 pt-1">
             {serviceToEdit ? 'Update the details of your service.' : 'Fill in the details for your new service.'}
           </DialogDescription>
@@ -91,7 +91,7 @@ export default function ServiceDialog({ isOpen, onClose, onSubmit, serviceToEdit
                 <FormItem>
                   <FormLabel className="text-base">Service Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., Men's Haircut" {...field} disabled={isSubmitting} className="h-11 text-base" />
+                    <Input placeholder="e.g., Men's Haircut" {...field} disabled={isSubmitting} className="h-11 text-base rounded-md" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -104,7 +104,7 @@ export default function ServiceDialog({ isOpen, onClose, onSubmit, serviceToEdit
                 <FormItem>
                   <FormLabel className="text-base">Price ($)</FormLabel>
                   <FormControl>
-                    <Input type="number" placeholder="e.g., 30" {...field} step="0.01" disabled={isSubmitting} className="h-11 text-base"/>
+                    <Input type="number" placeholder="e.g., 30" {...field} step="0.01" disabled={isSubmitting} className="h-11 text-base rounded-md"/>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -117,7 +117,7 @@ export default function ServiceDialog({ isOpen, onClose, onSubmit, serviceToEdit
                 <FormItem>
                   <FormLabel className="text-base">Duration (minutes)</FormLabel>
                   <FormControl>
-                    <Input type="number" placeholder="e.g., 30" {...field} step="5" disabled={isSubmitting} className="h-11 text-base"/>
+                    <Input type="number" placeholder="e.g., 30" {...field} step="5" disabled={isSubmitting} className="h-11 text-base rounded-md"/>
                   </FormControl>
                   <FormMessage />
                 </FormItem>
