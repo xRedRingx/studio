@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from 'react'; // Import useState
+import { useState } from 'react'; 
 import ProtectedPage from '@/components/layout/ProtectedPage';
 import ProfileEditForm from '@/components/user/ProfileEditForm';
 import { useAuth } from '@/hooks/useAuth';
@@ -10,9 +10,9 @@ import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 
 export default function ProfileEditPage() {
-  const { user, setUser, updateUserProfile, loadingAuth } = useAuth(); // Removed isProcessingAuth, setIsProcessingAuth for this page's direct use
+  const { user, updateUserProfile, loadingAuth } = useAuth(); 
   const { toast } = useToast();
-  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false); // New local state for submission
+  const [isUpdatingProfile, setIsUpdatingProfile] = useState(false);
 
   if (!user && !loadingAuth) {
     return (
@@ -24,29 +24,26 @@ export default function ProfileEditPage() {
     );
   }
 
-  const handleUpdateProfile = async (data: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber'>>) => {
+  const handleUpdateProfile = async (
+    data: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber' | 'address'>>,
+    photoFile?: File | null // Added photoFile parameter
+  ) => {
     if (!user?.uid) {
       toast({ title: "Error", description: "User not found.", variant: "destructive" });
       return;
     }
 
-    setIsUpdatingProfile(true); // Use local state
+    setIsUpdatingProfile(true);
 
     try {
-      // Call updateUserProfile from AuthContext, which no longer sets isProcessingAuth itself for this action
-      await updateUserProfile(user.uid, data);
-      // The setUser logic is handled within updateUserProfile or by onAuthStateChanged if email/photoURL were also updated (not the case here)
-      // AuthContext's updateUserProfile will update the user in its own state and localStorage.
-
-      // No need to manually call setUser here if AuthContext handles it post-update.
-      // However, the `updateUserProfile` in AuthContext *does* call setUser.
-
+      // Pass photoFile to updateUserProfile in AuthContext
+      await updateUserProfile(user.uid, data, photoFile);
       toast({ title: "Success", description: "Your profile has been updated." });
     } catch (error) {
       console.error("Error updating profile:", error);
       toast({ title: "Error", description: "Could not update profile. Please try again.", variant: "destructive" });
     } finally {
-       setIsUpdatingProfile(false); // Use local state
+       setIsUpdatingProfile(false);
     }
   };
   
@@ -70,7 +67,7 @@ export default function ProfileEditPage() {
           <ProfileEditForm
             currentUser={user}
             onSubmit={handleUpdateProfile}
-            isSubmitting={isUpdatingProfile} // Pass down the local submitting state
+            isSubmitting={isUpdatingProfile} 
           />
         ) : (
            <div className="flex items-center justify-center py-10">
@@ -82,4 +79,3 @@ export default function ProfileEditPage() {
     </ProtectedPage>
   );
 }
-

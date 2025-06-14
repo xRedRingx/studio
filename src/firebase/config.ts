@@ -5,6 +5,7 @@ import { getAuth } from 'firebase/auth';
 // Import initializeFirestore for settings, and also getFirestore if it's needed elsewhere without re-init
 import { initializeFirestore, CACHE_SIZE_UNLIMITED, memoryLocalCache, persistentLocalCache } from 'firebase/firestore';
 import { getMessaging } from 'firebase/messaging'; // Added
+import { getStorage } from 'firebase/storage'; // Added for Firebase Storage
 
 
 const firebaseConfig = {
@@ -34,6 +35,9 @@ const messaging = (typeof window !== 'undefined' && typeof navigator !== 'undefi
   ? getMessaging(app)
   : null;
 
+// Initialize Firebase Storage
+const storage = getStorage(app);
 
-export { app, auth, firestore, messaging };
+
+export { app, auth, firestore, messaging, storage }; // Export storage
 

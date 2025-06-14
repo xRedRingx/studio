@@ -6,7 +6,6 @@ import ProtectedPage from '@/components/layout/ProtectedPage';
 import { useAuth } from '@/hooks/useAuth';
 import type { BarberService, Appointment, DayOfWeek, BarberScheduleDoc, UnavailableDate, AppUser } from '@/types';
 import TodaysAppointmentsSection from '@/components/barber/TodaysAppointmentsSection';
-// import WalkInDialog from '@/components/barber/WalkInDialog'; // Removed direct import
 import { firestore } from '@/firebase/config';
 import {
   collection,
@@ -23,14 +22,16 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Settings2, LayoutDashboard } from 'lucide-react';
+import { PlusCircle, Settings2, LayoutDashboard, AlertTriangle, Edit } from 'lucide-react'; // Added AlertTriangle, Edit
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'; // Added CardDescription
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; 
 import { getItemWithTimestampRevival, setItemWithTimestampConversion, LS_SERVICES_KEY_DASHBOARD, LS_APPOINTMENTS_KEY_DASHBOARD } from '@/lib/localStorageUtils';
 import type { DayAvailability as ScheduleDayAvailability } from '@/types';
 import { getDoc as getFirestoreDoc } from 'firebase/firestore';
+import Link from 'next/link'; // Added Link
+import { Alert, AlertTitle, AlertDescription as ShadAlertDescription } from '@/components/ui/alert'; // Added Alert components
 
 const WalkInDialog = dynamic(() => import('@/components/barber/WalkInDialog'), {
   loading: () => <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-[100]"><LoadingSpinner className="h-8 w-8 text-primary" /></div>,
@@ -94,10 +95,10 @@ export default function BarberDashboardPage() {
   }, []);
 
  useEffect(() => {
-    if (user) { // Initialize local state when user data is available or changes
+    if (user) { 
       setLocalIsAcceptingBookings(user.isAcceptingBookings !== undefined ? user.isAcceptingBookings : true);
     }
-  }, [user]); // Dependency array includes 'user'
+  }, [user]); 
 
 
   useEffect(() => {
@@ -349,8 +350,6 @@ export default function BarberDashboardPage() {
     } catch (error) {
       console.error("Error updating accepting bookings status:", error);
       toast({ title: "Error", description: "Could not update your booking status.", variant: "destructive" });
-      // Revert optimistic update on error by syncing with the actual user context
-      // This will be handled by the useEffect that depends on `user`
     } finally {
       setIsUpdatingAcceptingBookings(false);
     }
@@ -382,7 +381,6 @@ export default function BarberDashboardPage() {
               </h1>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  {/* Wrap button in a span for Tooltip to work correctly when button is disabled */}
                   <span tabIndex={isAddWalkInDisabled ? 0 : -1}> 
                     <Button 
                       onClick={() => setIsWalkInDialogOpen(true)} 
@@ -402,6 +400,19 @@ export default function BarberDashboardPage() {
                 )}
               </Tooltip>
           </div>
+
+          {user && !user.photoURL && (
+            <Alert variant="default" className="border-yellow-500/50 bg-yellow-50/70 dark:bg-yellow-900/30 dark:border-yellow-700/50 shadow-md">
+              <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+              <AlertTitle className="font-semibold text-yellow-800 dark:text-yellow-300">Complete Your Profile</AlertTitle>
+              <ShadAlertDescription className="text-yellow-700 dark:text-yellow-400/90">
+                Please upload a profile picture to make your profile more appealing to customers.
+                <Button asChild variant="link" className="p-0 h-auto ml-1 text-yellow-700 dark:text-yellow-400 hover:text-yellow-800 dark:hover:text-yellow-300 font-semibold">
+                  <Link href="/profile/edit">Update Profile <Edit className="ml-1.5 h-3.5 w-3.5" /></Link>
+                </Button>
+              </ShadAlertDescription>
+            </Alert>
+          )}
 
           <Card className="border-none shadow-lg rounded-xl overflow-hidden">
             <CardHeader className="p-4 md:p-6">
@@ -460,5 +471,3 @@ export default function BarberDashboardPage() {
     </ProtectedPage>
   );
 }
-
-    
