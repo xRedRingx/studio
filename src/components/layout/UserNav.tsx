@@ -42,13 +42,9 @@ export default function UserNav() {
       setNotificationStatus('granted');
     } else {
       // If no token, rely on the initial permission set or if it changed via our prompt
-      // This primarily ensures that if a token is cleared, we don't incorrectly stay in 'granted' state locally
-      // if the browser permission itself is still 'granted'. The button would then show "Enable Notifications" to re-fetch.
       if (typeof window !== 'undefined' && 'Notification' in window && messaging) {
           if (Notification.permission === 'denied') setNotificationStatus('denied');
           else if (Notification.permission === 'default') setNotificationStatus('prompt');
-          // If Notification.permission is 'granted' but no fcmToken, it means we should try to get it.
-          // 'prompt' state for notificationStatus will allow the user to click "Enable Notifications".
           else if (Notification.permission === 'granted') setNotificationStatus('prompt'); 
       }
     }
@@ -65,15 +61,15 @@ export default function UserNav() {
       toast({ title: "Error", description: "Messaging service or user not available.", variant: "destructive" });
       return;
     }
-    // Check current actual browser permission before proceeding, in case it changed
+    
     if (Notification.permission === 'denied') {
-        setNotificationStatus('denied'); // Update local state if it was out of sync
+        setNotificationStatus('denied'); 
         toast({ title: "Permission Denied", description: "Please enable notifications in your browser settings for this site.", variant: "destructive" });
-        if (user.fcmToken) await updateUserFCMToken(user.uid, null); // Clear token if permission is now denied
+        if (user.fcmToken) await updateUserFCMToken(user.uid, null); 
         return;
     }
     if (Notification.permission === 'granted' && user.fcmToken) {
-        setNotificationStatus('granted'); // Update local state
+        setNotificationStatus('granted'); 
         toast({ title: "Notifications", description: "Notifications are already enabled."});
         return;
     }
@@ -81,13 +77,12 @@ export default function UserNav() {
     setIsProcessingFCM(true);
     try {
       const permission = await Notification.requestPermission();
-      setNotificationStatus(permission); // Update state immediately based on user's choice
+      setNotificationStatus(permission); 
 
       if (permission === 'granted') {
         const currentToken = await getToken(messaging, { vapidKey: "BFYxArauaN91bGFF6uqe6uljMXgcvXJtUSc_BDmUG4EjiVSaAhBZ2uwxWnGFiwm9oWGzMx6YPBGnijsE0OcP0no" }); 
         if (currentToken) {
           await updateUserFCMToken(user.uid, currentToken);
-          // Toast for success is handled by updateUserFCMToken
         } else {
           toast({ title: "Token Error", description: "Could not retrieve notification token. Ensure your VAPID key is correct and Firebase setup is complete.", variant: "destructive" });
           await updateUserFCMToken(user.uid, null); 
@@ -95,7 +90,7 @@ export default function UserNav() {
       } else if (permission === 'denied') {
         toast({ title: "Permission Denied", description: "You will not receive notifications.", variant: "destructive" });
         await updateUserFCMToken(user.uid, null); 
-      } else { // 'default' - user dismissed the prompt
+      } else { 
         toast({ title: "Notifications", description: "Permission not granted. You can try again later." });
       }
     } catch (error) {
@@ -132,8 +127,7 @@ export default function UserNav() {
 
   const isNotificationFeatureAvailable = notificationStatus !== 'unavailable' && !!messaging;
   const isCurrentlyEnabledWithToken = notificationStatus === 'granted' && !!user.fcmToken;
-  const isPermissionHardDenied = notificationStatus === 'denied'; // Browser permission is explicitly denied
-  // Prompting if permission is 'default', or if 'granted' but we don't have a token (need to retry fetch)
+  const isPermissionHardDenied = notificationStatus === 'denied';
   const isPromptingForPermission = notificationStatus === 'prompt' || (notificationStatus === 'granted' && !user.fcmToken);
 
 
