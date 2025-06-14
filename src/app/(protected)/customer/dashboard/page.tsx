@@ -23,6 +23,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { getItemWithTimestampRevival, setItemWithTimestampConversion, LS_MY_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD, getSimpleItem, setSimpleItem, LS_AVAILABLE_BARBERS_KEY_CUSTOMER_DASHBOARD } from '@/lib/localStorageUtils';
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 
 const getTodayDateString = () => {
@@ -40,6 +41,19 @@ const timeToMinutes = (timeStr: string): number => {
   return hours * 60 + minutes;
 };
 
+const getInitials = (firstName?: string | null, lastName?: string | null, email?: string | null) => {
+    if (firstName && lastName) {
+      return `${firstName[0]}${lastName[0]}`.toUpperCase();
+    }
+    if (firstName) {
+      return firstName.substring(0, 2).toUpperCase();
+    }
+    if (email) {
+      return email.substring(0, 2).toUpperCase();
+    }
+    return "BR"; // Barber initials
+};
+
 
 export default function CustomerDashboardPage() {
   const { user } = useAuth();
@@ -55,7 +69,7 @@ export default function CustomerDashboardPage() {
 
   useEffect(() => {
     setToday(getTodayDateString());
-    if (typeof window !== 'undefined') { // Ensure this check is here before any localStorage access
+    if (typeof window !== 'undefined') { 
         const cachedMyAppointments = getItemWithTimestampRevival<Appointment[]>(LS_MY_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD);
         if (cachedMyAppointments) {
             setMyAppointments(cachedMyAppointments);
@@ -116,8 +130,6 @@ export default function CustomerDashboardPage() {
         const data = doc.data();
         const isAccepting = data.isAcceptingBookings !== undefined && data.isAcceptingBookings !== null ? data.isAcceptingBookings : true;
         
-        // We still list barbers even if they are not accepting bookings,
-        // their profile page will indicate this status.
         fetchedBarbersData.push({
         uid: doc.id,
         id: doc.id, 
@@ -125,6 +137,7 @@ export default function CustomerDashboardPage() {
         lastName: data.lastName,
         role: data.role,
         phoneNumber: data.phoneNumber,
+        photoURL: data.photoURL || null, // Ensure photoURL is included
         isAcceptingBookings: isAccepting, 
         } as AppUser);
       });
@@ -266,15 +279,30 @@ export default function CustomerDashboardPage() {
               <div className="space-y-4">
                 {availableBarbers.map(barber => (
                   <Card key={barber.uid} className="shadow-md rounded-lg border">
-                    <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                      <div>
-                        <h3 className="text-base font-semibold">
-                          {barber.firstName} {barber.lastName}
-                        </h3>
+                    <CardContent className="p-4 flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-3 flex-grow">
+                        <Avatar className="h-12 w-12 border">
+                          <AvatarImage 
+                            src={barber.photoURL || `https://placehold.co/80x80.png`} 
+                            alt={`${barber.firstName} ${barber.lastName}`}
+                            data-ai-hint={!barber.photoURL ? "person portrait" : undefined}
+                          />
+                          <AvatarFallback>{getInitials(barber.firstName, barber.lastName, barber.email)}</AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <h3 className="text-base font-semibold">
+                            {barber.firstName} {barber.lastName}
+                          </h3>
+                           {barber.address && (
+                            <p className="text-xs text-gray-500 truncate max-w-[150px] sm:max-w-[200px]">
+                                {barber.address}
+                            </p>
+                            )}
+                        </div>
                       </div>
-                      <Button asChild variant="outline" size="sm" className="rounded-full h-10 px-4 text-base w-full sm:w-auto">
+                      <Button asChild variant="outline" size="sm" className="rounded-full h-10 px-4 text-base flex-shrink-0">
                         <Link href={`/customer/view-barber/${barber.uid}`}>
-                           <Eye className="mr-2 h-4 w-4" /> View Services 
+                           <Eye className="mr-2 h-4 w-4" /> View Profile
                         </Link>
                       </Button>
                     </CardContent>
