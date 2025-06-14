@@ -25,8 +25,8 @@ export default function ProfileEditPage() {
   }
 
   const handleUpdateProfile = async (
-    data: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber' | 'address'>>,
-    photoFile?: File | null // Added photoFile parameter
+    data: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber' | 'address'>>
+    // photoFile parameter removed
   ) => {
     if (!user?.uid) {
       toast({ title: "Error", description: "User not found.", variant: "destructive" });
@@ -36,8 +36,8 @@ export default function ProfileEditPage() {
     setIsUpdatingProfile(true);
 
     try {
-      // Pass photoFile to updateUserProfile in AuthContext
-      await updateUserProfile(user.uid, data, photoFile);
+      // Call updateUserProfile without photoFile
+      await updateUserProfile(user.uid, data);
       toast({ title: "Success", description: "Your profile has been updated." });
     } catch (error) {
       console.error("Error updating profile:", error);
@@ -79,3 +79,5 @@ export default function ProfileEditPage() {
     </ProtectedPage>
   );
 }
+
+    

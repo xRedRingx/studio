@@ -22,16 +22,14 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Settings2, LayoutDashboard, AlertTriangle, Edit } from 'lucide-react'; // Added AlertTriangle, Edit
+import { PlusCircle, Settings2, LayoutDashboard } from 'lucide-react'; 
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'; // Added CardDescription
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'; 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; 
 import { getItemWithTimestampRevival, setItemWithTimestampConversion, LS_SERVICES_KEY_DASHBOARD, LS_APPOINTMENTS_KEY_DASHBOARD } from '@/lib/localStorageUtils';
 import type { DayAvailability as ScheduleDayAvailability } from '@/types';
 import { getDoc as getFirestoreDoc } from 'firebase/firestore';
-import Link from 'next/link'; // Added Link
-import { Alert, AlertTitle, AlertDescription as ShadAlertDescription } from '@/components/ui/alert'; // Added Alert components
 
 const WalkInDialog = dynamic(() => import('@/components/barber/WalkInDialog'), {
   loading: () => <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-[100]"><LoadingSpinner className="h-8 w-8 text-primary" /></div>,
@@ -401,18 +399,7 @@ export default function BarberDashboardPage() {
               </Tooltip>
           </div>
 
-          {user && !user.photoURL && (
-            <Alert variant="default" className="border-yellow-500/50 bg-yellow-50/70 dark:bg-yellow-900/30 dark:border-yellow-700/50 shadow-md">
-              <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
-              <AlertTitle className="font-semibold text-yellow-800 dark:text-yellow-300">Complete Your Profile</AlertTitle>
-              <ShadAlertDescription className="text-yellow-700 dark:text-yellow-400/90">
-                Please upload a profile picture to make your profile more appealing to customers.
-                <Button asChild variant="link" className="p-0 h-auto ml-1 text-yellow-700 dark:text-yellow-400 hover:text-yellow-800 dark:hover:text-yellow-300 font-semibold">
-                  <Link href="/profile/edit">Update Profile <Edit className="ml-1.5 h-3.5 w-3.5" /></Link>
-                </Button>
-              </ShadAlertDescription>
-            </Alert>
-          )}
+          {/* Removed the "Complete Your Profile" Alert */}
 
           <Card className="border-none shadow-lg rounded-xl overflow-hidden">
             <CardHeader className="p-4 md:p-6">
@@ -471,3 +458,5 @@ export default function BarberDashboardPage() {
     </ProtectedPage>
   );
 }
+
+    
