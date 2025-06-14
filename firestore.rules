@@ -1,127 +1,79 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper Functions
-    function isAuthenticated() {
-      return request.auth != null;
-    }
-
-    function isUser(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-
-    function isRole(role) {
-      return isAuthenticated() && request.auth.token.role == role;
-    }
-
-    function isBarber() {
-      return isRole('barber');
-    }
-
-    function isCustomer() {
-      return isRole('customer');
-    }
-
-    function getRole() {
-      return request.auth.token.role;
-    }
-
+    // Helper function to get incoming data
     function incomingData() {
       return request.resource.data;
     }
 
-    function existingData() {
-      return resource.data;
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
     }
 
-    // User Profile Rules
-    match /users/{userId} {
-      allow read: if isAuthenticated(); // Any authenticated user can read any profile (e.g., for barber listings)
-      allow create: if request.auth.uid == userId && // User can create their own profile document
-                       incomingData().uid == userId &&
-                       (incomingData().role == 'customer' || incomingData().role == 'barber') &&
-                       incomingData().email == request.auth.token.email &&
-                       incomingData().firstName is string && incomingData().firstName.size() > 0 &&
-                       incomingData().lastName is string && incomingData().lastName.size() > 0 &&
-                       (incomingData().phoneNumber == null || (incomingData().phoneNumber is string && incomingData().phoneNumber.matches('^\\+[1-9]\\d{1,14}$|^$'))) &&
-                       (incomingData().address == null || (incomingData().address is string && incomingData().address.size() <= 100)) &&
-                       (!('isAcceptingBookings' in incomingData()) || incomingData().isAcceptingBookings is bool) && // if present, must be bool
-                       incomingData().createdAt == request.time && // Server timestamp on create
-                       incomingData().updatedAt == request.time;  // Server timestamp on create
-
-      allow update: if isUser(userId) && // User can update their own profile
-                       incomingData().uid == existingData().uid && // Cannot change UID
-                       incomingData().email == existingData().email && // Cannot change email via this update
-                       incomingData().role == existingData().role && // Cannot change role
-                       incomingData().createdAt == existingData().createdAt && // Cannot change creation date
-                       incomingData().updatedAt == request.time && // Must set updatedAt to server time
-                       incomingData().firstName is string && incomingData().firstName.size() > 0 &&
-                       incomingData().lastName is string && incomingData().lastName.size() > 0 &&
-                       (incomingData().phoneNumber == null || (incomingData().phoneNumber is string && incomingData().phoneNumber.matches('^\\+[1-9]\\d{1,14}$|^$'))) &&
-                       (incomingData().address == null || (incomingData().address is string && incomingData().address.size() <= 100)) &&
-                       (!('isAcceptingBookings' in incomingData()) || incomingData().isAcceptingBookings is bool) && // if present, must be bool
-                       // Check allowed fields for update (preventing role, email, uid, createdAt change)
-                       incomingData().keys().hasOnly(['uid', 'role', 'firstName', 'lastName', 'email', 'phoneNumber', 'address', 'isAcceptingBookings', 'fcmToken', 'createdAt', 'updatedAt', 'displayName', 'emailVerified']);
+    // Helper function to check user role from Firestore document
+    function getRole(userId) {
+      let userDocPath = /databases/$(database)/documents/users/$(userId);
+      return exists(userDocPath) ? get(userDocPath).data.role : null;
     }
 
-    // Appointment Rules
-    function isAppointmentOwner() {
-      // For reads, either customer or barber of the appointment
-      return request.auth.uid == resource.data.customerId || request.auth.uid == resource.data.barberId;
+    // Helper: Is the acting user the customer for the appointment?
+    function isCustomerForAppointment(appointmentData) {
+      return isAuthenticated() && request.auth.uid == appointmentData.customerId;
     }
 
-    function isAppointmentParticipantForWrite() {
-      // For writes, either customer or barber of the appointment based on incoming data
-      return request.auth.uid == request.resource.data.customerId || request.auth.uid == request.resource.data.barberId;
+    // Helper: Is the acting user the barber for the appointment?
+    function isBarberForAppointment(appointmentData) {
+      return isAuthenticated() && request.auth.uid == appointmentData.barberId;
     }
 
+    // Helper: Is the user creating their own appointment as a customer?
     function isCreatingOwnAppointmentAsCustomer() {
-      return request.auth.uid == request.resource.data.customerId && isCustomer();
+      return isAuthenticated() &&
+             request.auth.uid == incomingData().customerId &&
+             getRole(request.auth.uid) == 'customer';
     }
 
-    function isCreatingWalkInAsBarber() {
-      return request.auth.uid == request.resource.data.barberId && isBarber() && request.resource.data.customerId == null;
-    }
-
-    // Helper: Validates base fields for an appointment on create
+    // Helper: Check base fields for appointment creation by customer or walk-in by barber
     function isValidAppointmentBaseDataForCreate(data) {
+      let isWalkIn = data.customerId == null;
       return data.barberId is string &&
              data.barberName is string &&
-             (data.customerId is string || data.customerId == null) && // customerId can be null for walk-ins
+             (isWalkIn ? data.customerId == null : data.customerId is string) && // customerId is string or null for walk-in
              data.customerName is string &&
              data.serviceId is string &&
              data.serviceName is string &&
              data.price is number && data.price >= 0 &&
              data.date is string && data.date.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
-             data.startTime is string && data.startTime.matches('^(0[1-9]|1[0-2]):[0-5][0-9] (AM|PM)$') &&
-             data.endTime is string && data.endTime.matches('^(0[1-9]|1[0-2]):[0-5][0-9] (AM|PM)$') &&
-             (data.status == 'upcoming' || (data.status == 'in-progress' && data.customerId == null)); // Walk-ins start as 'in-progress'
+             data.startTime is string && data.startTime.matches('^\\d{2}:\\d{2} (AM|PM)$') &&
+             data.endTime is string && data.endTime.matches('^\\d{2}:\\d{2} (AM|PM)$') &&
+             (isWalkIn ? data.status == 'in-progress' : data.status == 'upcoming'); // Walk-ins start as 'in-progress'
     }
 
-    // Helper: Validates timestamp fields for creation
+    // Helper: Validate timestamps for appointment creation
     function areTimestampsValidForCreate(data) {
       let isWalkIn = data.customerId == null;
-      return data.createdAt is timestamp &&
-             data.updatedAt is timestamp &&
-             data.createdAt == data.updatedAt && // On create, these must be equal client-provided timestamps
-             (isWalkIn ? (
-                data.customerCheckedInAt is timestamp && data.customerCheckedInAt == data.createdAt &&
-                data.barberCheckedInAt is timestamp && data.barberCheckedInAt == data.createdAt &&
-                data.serviceActuallyStartedAt is timestamp && data.serviceActuallyStartedAt == data.createdAt
-             ) : (
-                data.customerCheckedInAt == null &&
+      return data.createdAt is timestamp && data.updatedAt is timestamp && data.createdAt == data.updatedAt &&
+             (isWalkIn ?
+               (data.customerCheckedInAt == data.createdAt && // For walk-ins, these are set at creation
+                data.barberCheckedInAt == data.createdAt &&
+                data.serviceActuallyStartedAt == data.createdAt &&
+                data.customerMarkedDoneAt == null &&
+                data.barberMarkedDoneAt == null &&
+                data.serviceActuallyCompletedAt == null)
+             : // For regular customer bookings
+               (data.customerCheckedInAt == null &&
                 data.barberCheckedInAt == null &&
-                data.serviceActuallyStartedAt == null
-             )) &&
-             data.customerMarkedDoneAt == null &&
-             data.barberMarkedDoneAt == null &&
-             data.serviceActuallyCompletedAt == null;
+                data.serviceActuallyStartedAt == null &&
+                data.customerMarkedDoneAt == null &&
+                data.barberMarkedDoneAt == null &&
+                data.serviceActuallyCompletedAt == null)
+             );
     }
 
-    // Helper: Ensures only allowed fields are present on create
+    // Helper: Ensure only allowed fields are present on creation
     function hasOnlyAllowedFieldsForCreate(data) {
       let allowedFields = [
         'barberId', 'barberName', 'customerId', 'customerName',
@@ -133,170 +85,213 @@ service cloud.firestore {
       return data.keys().hasOnly(allowedFields);
     }
 
-    // Validates fields that should not change after creation
-    function coreAppointmentFieldsUnchanged(incoming, existing) {
-      return incoming.barberId == existing.barberId &&
-             incoming.barberName == existing.barberName &&
-             incoming.customerId == existing.customerId &&
-             incoming.customerName == existing.customerName &&
-             incoming.serviceId == existing.serviceId &&
-             incoming.serviceName == existing.serviceName &&
-             incoming.price == existing.price &&
-             incoming.date == existing.date &&
-             incoming.startTime == existing.startTime &&
-             incoming.endTime == existing.endTime &&
-             incoming.createdAt == existing.createdAt; // createdAt is immutable
+    // Helper: Check if the barber is accepting bookings
+    function isBarberAcceptingBookings(barberId) {
+      let barberDocPath = /databases/$(database)/documents/users/$(barberId);
+      // If barber document doesn't exist, or isAcceptingBookings is explicitly false, deny.
+      // Defaults to true if field is missing.
+      return exists(barberDocPath) && get(barberDocPath).data.get('isAcceptingBookings', true) == true;
     }
 
-    // Rules for appointment status transitions and who can make them.
-    function isValidAppointmentUpdate(data, existingData) {
-      let newStatus = data.status;
-      let oldStatus = existingData.status;
-      let userRole = getRole();
-      let userId = request.auth.uid;
+    // Users collection rules
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if request.auth.uid == userId &&
+                       request.resource.data.role in ['customer', 'barber'] &&
+                       (request.resource.data.role == 'barber' ?
+                         (!('isAcceptingBookings' in request.resource.data) || request.resource.data.isAcceptingBookings == true || request.resource.data.isAcceptingBookings == null) : // null also defaults to true logic in app
+                         !('isAcceptingBookings' in request.resource.data)
+                       ) &&
+                       request.resource.data.firstName is string && request.resource.data.firstName.size() > 0 &&
+                       request.resource.data.lastName is string && request.resource.data.lastName.size() > 0 &&
+                       request.resource.data.email == request.auth.token.email &&
+                       (!('phoneNumber' in request.resource.data) || request.resource.data.phoneNumber is string || request.resource.data.phoneNumber == null) &&
+                       (!('address' in request.resource.data) || request.resource.data.address is string || request.resource.data.address == null) &&
+                       request.resource.data.createdAt is timestamp && request.resource.data.updatedAt is timestamp &&
+                       request.resource.data.createdAt == request.time && request.resource.data.updatedAt == request.time &&
+                       (!('fcmToken' in request.resource.data) || request.resource.data.fcmToken is string || request.resource.data.fcmToken == null);
 
-      // Only specific fields can be updated, and `updatedAt` must change.
-      if (data.updatedAt == existingData.updatedAt || !(data.updatedAt is timestamp)) return false;
-      if (!coreAppointmentFieldsUnchanged(data, existingData)) return false;
-
-      // Validate status transitions
-      if (newStatus == 'customer-initiated-check-in') {
-        return oldStatus == 'upcoming' && userRole == 'customer' && userId == existingData.customerId &&
-               data.customerCheckedInAt is timestamp && data.customerCheckedInAt >= existingData.updatedAt && // Ensure new timestamp
-               data.barberCheckedInAt == existingData.barberCheckedInAt && // Other timestamps unchanged
-               data.serviceActuallyStartedAt == existingData.serviceActuallyStartedAt &&
-               data.customerMarkedDoneAt == existingData.customerMarkedDoneAt &&
-               data.barberMarkedDoneAt == existingData.barberMarkedDoneAt &&
-               data.serviceActuallyCompletedAt == existingData.serviceActuallyCompletedAt;
-      }
-      if (newStatus == 'barber-initiated-check-in') {
-        return oldStatus == 'upcoming' && userRole == 'barber' && userId == existingData.barberId &&
-               data.barberCheckedInAt is timestamp && data.barberCheckedInAt >= existingData.updatedAt &&
-               data.customerCheckedInAt == existingData.customerCheckedInAt && // Other timestamps unchanged
-               data.serviceActuallyStartedAt == existingData.serviceActuallyStartedAt &&
-               data.customerMarkedDoneAt == existingData.customerMarkedDoneAt &&
-               data.barberMarkedDoneAt == existingData.barberMarkedDoneAt &&
-               data.serviceActuallyCompletedAt == existingData.serviceActuallyCompletedAt;
-      }
-      if (newStatus == 'in-progress') {
-        return (
-          (oldStatus == 'customer-initiated-check-in' && userRole == 'barber' && userId == existingData.barberId && data.barberCheckedInAt is timestamp && data.barberCheckedInAt >= existingData.updatedAt && data.customerCheckedInAt == existingData.customerCheckedInAt) ||
-          (oldStatus == 'barber-initiated-check-in' && userRole == 'customer' && userId == existingData.customerId && data.customerCheckedInAt is timestamp && data.customerCheckedInAt >= existingData.updatedAt && data.barberCheckedInAt == existingData.barberCheckedInAt) ||
-          (oldStatus == 'barber-initiated-check-in' && userRole == 'barber' && userId == existingData.barberId && existingData.customerId == null) // Barber starting a walk-in directly
-        ) && data.serviceActuallyStartedAt is timestamp && data.serviceActuallyStartedAt >= (data.barberCheckedInAt > data.customerCheckedInAt ? data.barberCheckedInAt : data.customerCheckedInAt) && // service start must be after both checkins
-             data.customerMarkedDoneAt == existingData.customerMarkedDoneAt &&
-             data.barberMarkedDoneAt == existingData.barberMarkedDoneAt &&
-             data.serviceActuallyCompletedAt == existingData.serviceActuallyCompletedAt;
-      }
-      if (newStatus == 'customer-initiated-completion') {
-        return oldStatus == 'in-progress' && userRole == 'customer' && userId == existingData.customerId &&
-               data.customerMarkedDoneAt is timestamp && data.customerMarkedDoneAt >= existingData.updatedAt &&
-               // other timestamps unchanged or correctly set from 'in-progress'
-               data.customerCheckedInAt == existingData.customerCheckedInAt &&
-               data.barberCheckedInAt == existingData.barberCheckedInAt &&
-               data.serviceActuallyStartedAt == existingData.serviceActuallyStartedAt &&
-               data.barberMarkedDoneAt == existingData.barberMarkedDoneAt &&
-               data.serviceActuallyCompletedAt == existingData.serviceActuallyCompletedAt;
-      }
-      if (newStatus == 'barber-initiated-completion') {
-        return oldStatus == 'in-progress' && userRole == 'barber' && userId == existingData.barberId &&
-               data.barberMarkedDoneAt is timestamp && data.barberMarkedDoneAt >= existingData.updatedAt &&
-               // other timestamps unchanged or correctly set from 'in-progress'
-               data.customerCheckedInAt == existingData.customerCheckedInAt &&
-               data.barberCheckedInAt == existingData.barberCheckedInAt &&
-               data.serviceActuallyStartedAt == existingData.serviceActuallyStartedAt &&
-               data.customerMarkedDoneAt == existingData.customerMarkedDoneAt &&
-               data.serviceActuallyCompletedAt == existingData.serviceActuallyCompletedAt;
-      }
-      if (newStatus == 'completed') {
-        return (
-          (oldStatus == 'customer-initiated-completion' && userRole == 'barber' && userId == existingData.barberId && data.barberMarkedDoneAt is timestamp && data.barberMarkedDoneAt >= existingData.updatedAt && data.customerMarkedDoneAt == existingData.customerMarkedDoneAt) ||
-          (oldStatus == 'barber-initiated-completion' && userRole == 'customer' && userId == existingData.customerId && data.customerMarkedDoneAt is timestamp && data.customerMarkedDoneAt >= existingData.updatedAt && data.barberMarkedDoneAt == existingData.barberMarkedDoneAt) ||
-          (oldStatus == 'barber-initiated-completion' && userRole == 'barber' && userId == existingData.barberId && existingData.customerId == null) // Barber completing a walk-in
-        ) && data.serviceActuallyCompletedAt is timestamp && data.serviceActuallyCompletedAt >= (data.barberMarkedDoneAt > data.customerMarkedDoneAt ? data.barberMarkedDoneAt : data.customerMarkedDoneAt) && // service completion must be after both marks
-             // check-in timestamps must exist
-             data.customerCheckedInAt == existingData.customerCheckedInAt &&
-             data.barberCheckedInAt == existingData.barberCheckedInAt &&
-             data.serviceActuallyStartedAt == existingData.serviceActuallyStartedAt;
-      }
-      if (newStatus == 'cancelled') {
-        // Customer can cancel 'upcoming', 'customer-initiated-check-in', 'barber-initiated-check-in'
-        // Barber can cancel any non-completed/non-cancelled state
-        return (
-          (userRole == 'customer' && userId == existingData.customerId && (oldStatus == 'upcoming' || oldStatus == 'customer-initiated-check-in' || oldStatus == 'barber-initiated-check-in')) ||
-          (userRole == 'barber' && userId == existingData.barberId && oldStatus != 'completed' && oldStatus != 'cancelled')
-        ) &&
-        // Ensure only status and updatedAt are changed for cancellation
-        data.keys().hasOnly(['status', 'updatedAt'] + existingData.keys()); // Allows only status and updatedAt to change from existing fields
-      }
-      return false; // No other transitions allowed
+      allow update: if isAuthenticated() && request.auth.uid == userId &&
+                       !('role' in incomingData()) &&
+                       !('email' in incomingData()) &&
+                       !('createdAt' in incomingData()) &&
+                       incomingData().firstName is string && incomingData().firstName.size() > 0 &&
+                       incomingData().lastName is string && incomingData().lastName.size() > 0 &&
+                       (!('phoneNumber' in incomingData()) || incomingData().phoneNumber is string || incomingData().phoneNumber == null) &&
+                       (!('address' in incomingData()) || incomingData().address is string || incomingData().address == null) &&
+                       (getRole(userId) == 'barber' ?
+                         (!('isAcceptingBookings' in incomingData()) || incomingData().isAcceptingBookings is bool) :
+                         !('isAcceptingBookings' in incomingData())
+                       ) &&
+                       (!('fcmToken' in incomingData()) || incomingData().fcmToken is string || incomingData().fcmToken == null) &&
+                       incomingData().updatedAt == request.time &&
+                       incomingData().keys().hasAtLeast(['firstName', 'lastName', 'updatedAt']) && // Ensure at least these are part of update
+                       incomingData().keys().hasOnly(['firstName', 'lastName', 'phoneNumber', 'address', 'isAcceptingBookings', 'fcmToken', 'updatedAt',
+                                                     'uid', 'role', 'email', 'createdAt', 'displayName', 'emailVerified']); // All possible fields
     }
 
-
-    match /appointments/{appointmentId} {
-      allow read: if isAuthenticated() && isAppointmentOwner();
-
-      allow create: if isAuthenticated() &&
-                       (isCreatingOwnAppointmentAsCustomer() || isCreatingWalkInAsBarber()) &&
-                       isValidAppointmentBaseDataForCreate(incomingData()) &&
-                       areTimestampsValidForCreate(incomingData()) &&
-                       hasOnlyAllowedFieldsForCreate(incomingData()) &&
-                       // For customer booking, check if barber is accepting bookings.
-                       // Use .get(field, defaultValue) to handle missing field gracefully.
-                       (isCreatingWalkInAsBarber() || get(/databases/$(database)/documents/users/$(incomingData().barberId)).data.get('isAcceptingBookings', true) == true);
-                       // Daily/Weekly limits are primarily handled client-side.
-                       // Server-side checks for this were removed due to complexity/unreliability in rules alone.
-
-      allow update: if isAuthenticated() &&
-                       isAppointmentParticipantForWrite() && // Ensure user is part of appointment
-                       isValidAppointmentUpdate(incomingData(), existingData());
-
-      allow delete: if false; // No one can delete appointments directly, use 'cancelled' status.
-    }
-
-    // Barber Schedule Rules
-    match /barberSchedules/{barberId} {
-      allow read: if isAuthenticated(); // All authenticated users can read schedules (e.g., for booking)
-      allow create: if isBarber() && request.auth.uid == barberId && // Barber can create their own schedule
-                       incomingData().barberId == barberId &&
-                       incomingData().schedule is list &&
-                       incomingData().updatedAt == request.time;
-      allow update: if isBarber() && request.auth.uid == barberId && // Barber can update their own schedule
-                       incomingData().barberId == existingData().barberId &&
-                       incomingData().schedule is list &&
-                       incomingData().updatedAt == request.time;
-
-      match /unavailableDates/{dateId} {
-        allow read: if isAuthenticated(); // All authenticated users can read unavailable dates
-        allow create: if isBarber() && request.auth.uid == barberId && // Barber creating for themselves
-                         incomingData().barberId == barberId &&
-                         incomingData().date == dateId && // dateId is YYYY-MM-DD
-                         incomingData().date.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
-                         (!('reason' in incomingData()) || incomingData().reason is string) &&
-                         incomingData().createdAt == request.time;
-        allow delete: if isBarber() && request.auth.uid == barberId; // Barber can delete their own unavailable dates
-      }
-    }
-
-    // Barber Services Rules
+    // Services collection rules
     match /services/{serviceId} {
-      allow read: if true; // All users can read services
-      allow create: if isBarber() && // Only barbers can create services
-                       incomingData().barberId == request.auth.uid && // Barber ID matches authenticated user
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() &&
+                       getRole(request.auth.uid) == 'barber' &&
+                       incomingData().barberId == request.auth.uid &&
                        incomingData().name is string && incomingData().name.size() > 0 &&
                        incomingData().price is number && incomingData().price >= 0 &&
                        incomingData().duration is number && incomingData().duration > 0 &&
                        incomingData().createdAt == request.time &&
-                       incomingData().updatedAt == request.time;
-      allow update: if isBarber() && // Only barbers can update
-                       existingData().barberId == request.auth.uid && // Can only update their own service
-                       incomingData().barberId == existingData().barberId && // Barber ID cannot change
+                       incomingData().updatedAt == request.time &&
+                       incomingData().keys().hasOnly(['barberId', 'name', 'price', 'duration', 'createdAt', 'updatedAt']);
+      allow update: if isAuthenticated() &&
+                       getRole(request.auth.uid) == 'barber' &&
+                       resource.data.barberId == request.auth.uid &&
+                       !('barberId' in incomingData()) &&
+                       !('createdAt' in incomingData()) &&
                        incomingData().name is string && incomingData().name.size() > 0 &&
                        incomingData().price is number && incomingData().price >= 0 &&
                        incomingData().duration is number && incomingData().duration > 0 &&
-                       incomingData().createdAt == existingData().createdAt && // Cannot change creation date
-                       incomingData().updatedAt == request.time;
-      allow delete: if isBarber() && existingData().barberId == request.auth.uid; // Barber can delete their own service
+                       incomingData().updatedAt == request.time &&
+                       incomingData().keys().hasAtLeast(['name', 'price', 'duration', 'updatedAt']) &&
+                       incomingData().keys().hasOnly(['name', 'price', 'duration', 'updatedAt', 'barberId', 'createdAt']);
+      allow delete: if isAuthenticated() &&
+                       getRole(request.auth.uid) == 'barber' &&
+                       resource.data.barberId == request.auth.uid;
+    }
+
+    // Barber Schedules collection rules
+    match /barberSchedules/{barberId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() &&
+                               request.auth.uid == barberId &&
+                               getRole(request.auth.uid) == 'barber' &&
+                               incomingData().barberId == barberId &&
+                               incomingData().schedule is list &&
+                               incomingData().updatedAt == request.time;
+
+      match /unavailableDates/{dateId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated() &&
+                         request.auth.uid == barberId &&
+                         getRole(request.auth.uid) == 'barber' &&
+                         incomingData().barberId == barberId &&
+                         incomingData().date == dateId &&
+                         incomingData().date.matches('^\\d{4}-\\d{2}-\\d{2}$') &&
+                         (!('reason' in incomingData()) || incomingData().reason is string) &&
+                         incomingData().createdAt == request.time;
+        allow delete: if isAuthenticated() &&
+                         request.auth.uid == barberId &&
+                         getRole(request.auth.uid) == 'barber';
+      }
+    }
+
+    // Appointments collection rules
+    match /appointments/{appointmentId} {
+      allow read: if isAuthenticated() &&
+                     (isCustomerForAppointment(resource.data) || isBarberForAppointment(resource.data));
+
+      allow create: if isAuthenticated() &&
+                       (
+                         // Case 1: Customer creates their own appointment
+                         (isCreatingOwnAppointmentAsCustomer() &&
+                          isValidAppointmentBaseDataForCreate(incomingData()) &&
+                          areTimestampsValidForCreate(incomingData()) && // Ensures status='upcoming' and correct nulls
+                          hasOnlyAllowedFieldsForCreate(incomingData()) &&
+                          isBarberAcceptingBookings(incomingData().barberId)
+                         ) ||
+                         // Case 2: Barber creates a walk-in appointment
+                         (getRole(request.auth.uid) == 'barber' &&
+                          request.auth.uid == incomingData().barberId && // Barber creating for themselves
+                          incomingData().customerId == null && // Explicitly a walk-in
+                          isValidAppointmentBaseDataForCreate(incomingData()) && // Ensures status='in-progress'
+                          areTimestampsValidForCreate(incomingData()) && // Ensures correct timestamps for walk-in
+                          hasOnlyAllowedFieldsForCreate(incomingData()) &&
+                          isBarberAcceptingBookings(incomingData().barberId) // Barber must be accepting bookings (for their own walk-ins too)
+                         )
+                       );
+
+      allow update: if isAuthenticated() &&
+                       (isCustomerForAppointment(resource.data) || isBarberForAppointment(resource.data)) &&
+                       incomingData().updatedAt == request.time &&
+                       incomingData().barberId == resource.data.barberId &&
+                       incomingData().barberName == resource.data.barberName &&
+                       incomingData().customerId == resource.data.customerId &&
+                       incomingData().customerName == resource.data.customerName &&
+                       incomingData().serviceId == resource.data.serviceId &&
+                       incomingData().serviceName == resource.data.serviceName &&
+                       incomingData().price == resource.data.price &&
+                       incomingData().date == resource.data.date &&
+                       incomingData().startTime == resource.data.startTime &&
+                       incomingData().endTime == resource.data.endTime &&
+                       incomingData().createdAt == resource.data.createdAt &&
+                       (
+                         (resource.data.status == 'upcoming' && incomingData().status == 'customer-initiated-check-in' && isCustomerForAppointment(resource.data) &&
+                           incomingData().customerCheckedInAt == request.time &&
+                           (!('barberCheckedInAt' in incomingData()) || incomingData().barberCheckedInAt == resource.data.barberCheckedInAt) && // Ensure not changed if already set
+                           (!('serviceActuallyStartedAt' in incomingData()) || incomingData().serviceActuallyStartedAt == resource.data.serviceActuallyStartedAt) &&
+                           incomingData().keys().hasAny(['status', 'updatedAt', 'customerCheckedInAt'])) ||
+
+                         (resource.data.status == 'upcoming' && incomingData().status == 'barber-initiated-check-in' && isBarberForAppointment(resource.data) &&
+                           incomingData().barberCheckedInAt == request.time &&
+                           (!('customerCheckedInAt' in incomingData()) || incomingData().customerCheckedInAt == resource.data.customerCheckedInAt) &&
+                           (!('serviceActuallyStartedAt' in incomingData()) || incomingData().serviceActuallyStartedAt == resource.data.serviceActuallyStartedAt) &&
+                           incomingData().keys().hasAny(['status', 'updatedAt', 'barberCheckedInAt'])) ||
+
+                         (resource.data.status == 'customer-initiated-check-in' && incomingData().status == 'in-progress' && isBarberForAppointment(resource.data) &&
+                           resource.data.customerCheckedInAt != null &&
+                           incomingData().barberCheckedInAt == request.time &&
+                           incomingData().serviceActuallyStartedAt == request.time &&
+                           incomingData().keys().hasAny(['status', 'updatedAt', 'barberCheckedInAt', 'serviceActuallyStartedAt'])) ||
+
+                         (resource.data.status == 'barber-initiated-check-in' && resource.data.customerId != null && incomingData().status == 'in-progress' && isCustomerForAppointment(resource.data) &&
+                           resource.data.barberCheckedInAt != null &&
+                           incomingData().customerCheckedInAt == request.time &&
+                           incomingData().serviceActuallyStartedAt == request.time &&
+                           incomingData().keys().hasAny(['status', 'updatedAt', 'customerCheckedInAt', 'serviceActuallyStartedAt'])) ||
+
+                         // Barber starting a walk-in that was somehow created as barber-initiated-check-in (should ideally be in-progress from start)
+                         (resource.data.status == 'barber-initiated-check-in' && resource.data.customerId == null && incomingData().status == 'in-progress' && isBarberForAppointment(resource.data) &&
+                           incomingData().serviceActuallyStartedAt == request.time && // barberCheckedInAt and customerCheckedInAt already set for walk-in
+                           incomingData().keys().hasAny(['status', 'updatedAt', 'serviceActuallyStartedAt'])) ||
+
+
+                         (resource.data.status == 'in-progress' && incomingData().status == 'customer-initiated-completion' && isCustomerForAppointment(resource.data) &&
+                           incomingData().customerMarkedDoneAt == request.time &&
+                           incomingData().keys().hasAny(['status', 'updatedAt', 'customerMarkedDoneAt'])) ||
+
+                         (resource.data.status == 'in-progress' && incomingData().status == 'barber-initiated-completion' && isBarberForAppointment(resource.data) &&
+                           incomingData().barberMarkedDoneAt == request.time &&
+                           incomingData().keys().hasAny(['status', 'updatedAt', 'barberMarkedDoneAt'])) ||
+
+                         (resource.data.status == 'customer-initiated-completion' && incomingData().status == 'completed' && isBarberForAppointment(resource.data) &&
+                           resource.data.customerMarkedDoneAt != null &&
+                           incomingData().barberMarkedDoneAt == request.time &&
+                           incomingData().serviceActuallyCompletedAt == request.time &&
+                           incomingData().keys().hasAny(['status', 'updatedAt', 'barberMarkedDoneAt', 'serviceActuallyCompletedAt'])) ||
+
+                         (resource.data.status == 'barber-initiated-completion' && resource.data.customerId != null && incomingData().status == 'completed' && isCustomerForAppointment(resource.data) &&
+                           resource.data.barberMarkedDoneAt != null &&
+                           incomingData().customerMarkedDoneAt == request.time &&
+                           incomingData().serviceActuallyCompletedAt == request.time &&
+                           incomingData().keys().hasAny(['status', 'updatedAt', 'customerMarkedDoneAt', 'serviceActuallyCompletedAt'])) ||
+
+                         (resource.data.status == 'in-progress' && resource.data.customerId == null && incomingData().status == 'completed' && isBarberForAppointment(resource.data) &&
+                           incomingData().barberMarkedDoneAt == request.time &&
+                           incomingData().serviceActuallyCompletedAt == request.time &&
+                           incomingData().keys().hasAny(['status', 'updatedAt', 'barberMarkedDoneAt', 'serviceActuallyCompletedAt'])) ||
+
+                         (resource.data.status in ['upcoming', 'customer-initiated-check-in', 'barber-initiated-check-in'] && incomingData().status == 'cancelled' && isCustomerForAppointment(resource.data) &&
+                           incomingData().keys().hasAny(['status', 'updatedAt']))
+                       ) &&
+                       // Ensure only allowed fields are part of the request for any update.
+                       // This is a bit broad, but specific transitions narrow it down with hasAny.
+                       incomingData().keys().hasOnly([
+                         'status', 'updatedAt',
+                         'customerCheckedInAt', 'barberCheckedInAt', 'serviceActuallyStartedAt',
+                         'customerMarkedDoneAt', 'barberMarkedDoneAt', 'serviceActuallyCompletedAt',
+                         // Immutable fields that must be present in incomingData() to match resource.data
+                         'barberId', 'barberName', 'customerId', 'customerName',
+                         'serviceId', 'serviceName', 'price', 'date', 'startTime', 'endTime', 'createdAt'
+                       ]);
     }
   }
 }
