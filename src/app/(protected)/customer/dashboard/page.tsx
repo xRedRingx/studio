@@ -116,17 +116,17 @@ export default function CustomerDashboardPage() {
         const data = doc.data();
         const isAccepting = data.isAcceptingBookings !== undefined && data.isAcceptingBookings !== null ? data.isAcceptingBookings : true;
         
-        if (isAccepting) { 
-            fetchedBarbersData.push({
-            uid: doc.id,
-            id: doc.id, 
-            firstName: data.firstName,
-            lastName: data.lastName,
-            role: data.role,
-            phoneNumber: data.phoneNumber,
-            isAcceptingBookings: isAccepting, 
-            } as AppUser);
-        }
+        // We still list barbers even if they are not accepting bookings,
+        // their profile page will indicate this status.
+        fetchedBarbersData.push({
+        uid: doc.id,
+        id: doc.id, 
+        firstName: data.firstName,
+        lastName: data.lastName,
+        role: data.role,
+        phoneNumber: data.phoneNumber,
+        isAcceptingBookings: isAccepting, 
+        } as AppUser);
       });
       setAvailableBarbers(fetchedBarbersData);
       setSimpleItem(LS_AVAILABLE_BARBERS_KEY_CUSTOMER_DASHBOARD, fetchedBarbersData);
@@ -261,7 +261,7 @@ export default function CustomerDashboardPage() {
                 <p className="ml-3 text-base">Loading available barbers...</p>
               </div>
             ) : availableBarbers.length === 0 ? (
-              <p className="text-base text-gray-500">No barbers are currently accepting online bookings.</p>
+              <p className="text-base text-gray-500">No barbers are currently listed or accepting online bookings.</p>
             ) : (
               <div className="space-y-4">
                 {availableBarbers.map(barber => (

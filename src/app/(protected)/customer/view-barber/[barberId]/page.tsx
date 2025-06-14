@@ -38,6 +38,7 @@ export default function ViewBarberPage() {
 
       if (barberDocSnap.exists() && barberDocSnap.data().role === 'barber') {
         const barberData = barberDocSnap.data() as AppUser;
+        // Default isAcceptingBookings to true if undefined or null for backward compatibility
         const isAccepting = barberData.isAcceptingBookings !== undefined && barberData.isAcceptingBookings !== null
                             ? barberData.isAcceptingBookings
                             : true;
@@ -94,6 +95,7 @@ export default function ViewBarberPage() {
     );
   }
 
+  // Ensure isAcceptingBookings defaults to true if undefined for display logic
   const barberIsAcceptingBookings = barber.isAcceptingBookings !== undefined ? barber.isAcceptingBookings : true;
 
   return (
@@ -156,15 +158,16 @@ export default function ViewBarberPage() {
 
           <CardFooter className="p-4 md:p-6 border-t mt-auto">
             <Button
-                asChild={barberIsAcceptingBookings}
+                asChild={barberIsAcceptingBookings} // Only allow Link behavior if accepting bookings
                 className="w-full sm:w-auto h-14 rounded-full text-lg"
-                disabled={!barberIsAcceptingBookings}
+                disabled={!barberIsAcceptingBookings} // Visually disable if not accepting
             >
               {barberIsAcceptingBookings ? (
                 <Link href={`/customer/book/${barberId}`}>
                   <CalendarPlus className="mr-2 h-5 w-5" /> Book with {barber.firstName}
                 </Link>
               ) : (
+                // Fallback content for disabled button or non-Link scenario
                 <><CalendarPlus className="mr-2 h-5 w-5" /> Not Accepting Bookings</>
               )}
             </Button>
