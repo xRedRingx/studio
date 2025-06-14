@@ -38,7 +38,7 @@ export default function BarberAvailabilityPage() {
       const cachedUnavailableDates = getItemWithTimestampRevival<UnavailableDate[]>(LS_UNAVAILABLE_DATES_KEY);
       if (cachedUnavailableDates) {
         setUnavailableDates(cachedUnavailableDates);
-        setIsLoadingUnavailableDates(false); // Loaded from cache, reduce initial loading perception
+        setIsLoadingUnavailableDates(false); 
       }
     }
   }, [initialLoadComplete]);
@@ -134,7 +134,7 @@ export default function BarberAvailabilityPage() {
   return (
     <ProtectedPage expectedRole="barber">
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold font-headline">Manage Your Availability</h1>
+        {/* Title moved to ManageUnavailableDatesSection */}
          {(isLoadingUnavailableDates && !unavailableDates.length) ? (
           <div className="flex justify-center items-center py-10">
             <LoadingSpinner className="h-8 w-8 text-primary" />
@@ -152,4 +152,3 @@ export default function BarberAvailabilityPage() {
     </ProtectedPage>
   );
 }
-

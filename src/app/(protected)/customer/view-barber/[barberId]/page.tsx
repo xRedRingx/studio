@@ -41,10 +41,11 @@ export default function ViewBarberPage() {
                             ? barberData.isAcceptingBookings
                             : true;
         setBarber({ 
-            uid: barberDocSnap.id, // Ensure uid is set
+            uid: barberDocSnap.id, 
             id: barberDocSnap.id, 
             ...barberData, 
             isAcceptingBookings: isAccepting,
+            email: barberData.email, 
         });
       } else {
         toast({ title: "Error", description: "Barber not found.", variant: "destructive" });
@@ -109,17 +110,17 @@ export default function ViewBarberPage() {
         </Button>
 
         <Card className="border-none shadow-lg rounded-xl overflow-hidden">
-          <CardHeader className="p-4 md:p-6 bg-muted/30">
+          <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-card via-muted/10 to-card">
             <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-3 sm:space-y-0 sm:space-x-4">
                 <UserCircle className="h-20 w-20 sm:h-24 sm:w-24 text-muted-foreground flex-shrink-0" />
                 <div className="pt-1">
                     <CardTitle className="text-2xl sm:text-3xl font-bold">
                     {barber.firstName} {barber.lastName}
                     </CardTitle>
-                    <CardDescription className="text-sm sm:text-base text-gray-500 mt-1">View services and book an appointment.</CardDescription>
+                    <CardDescription className="text-sm sm:text-base text-gray-500 dark:text-gray-400 mt-1">View services and book an appointment.</CardDescription>
                     {barber.address && (
-                      <p className="text-sm text-gray-500 flex items-center mt-1.5">
-                        <MapPin className="mr-1.5 h-4 w-4 text-gray-400 flex-shrink-0" /> {barber.address}
+                      <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center mt-1.5">
+                        <MapPin className="mr-1.5 h-4 w-4 text-gray-400 dark:text-gray-500 flex-shrink-0" /> {barber.address}
                       </p>
                     )}
                 </div>
@@ -145,16 +146,16 @@ export default function ViewBarberPage() {
             {services.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {services.map(service => (
-                  <Card key={service.id} className="shadow-md rounded-lg border flex flex-col">
+                  <Card key={service.id} className="shadow-md rounded-lg border flex flex-col hover:shadow-lg transition-shadow duration-200">
                     <CardHeader className="pb-2 pt-4 px-4">
                       <CardTitle className="text-base font-semibold flex items-center">
                         <Scissors className="mr-2 h-5 w-5 text-primary flex-shrink-0" />
                         <span className="truncate" title={service.name}>{service.name}</span>
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="text-sm text-gray-600 space-y-1 px-4 pb-3 flex-grow">
-                      <p className="flex items-center"><DollarSign className="mr-1.5 h-4 w-4 text-gray-400 flex-shrink-0" />Price: <span className="font-medium text-foreground ml-1">${service.price.toFixed(2)}</span></p>
-                      <p className="flex items-center"><Clock className="mr-1.5 h-4 w-4 text-gray-400 flex-shrink-0" />Duration: <span className="font-medium text-[#0088E0] ml-1">{service.duration} minutes</span></p>
+                    <CardContent className="text-sm text-gray-600 dark:text-gray-400 space-y-1 px-4 pb-3 flex-grow">
+                      <p className="flex items-center"><DollarSign className="mr-1.5 h-4 w-4 text-gray-400 dark:text-gray-500 flex-shrink-0" />Price: <span className="font-medium text-foreground ml-1">${service.price.toFixed(2)}</span></p>
+                      <p className="flex items-center"><Clock className="mr-1.5 h-4 w-4 text-gray-400 dark:text-gray-500 flex-shrink-0" />Duration: <span className="font-medium text-primary ml-1">{service.duration} minutes</span></p>
                     </CardContent>
                   </Card>
                 ))}
@@ -162,7 +163,7 @@ export default function ViewBarberPage() {
             ) : (
               <div className="text-center py-6">
                 <Info className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
-                <p className="text-base text-gray-500">This barber has not listed any services yet.</p>
+                <p className="text-base text-gray-500 dark:text-gray-400">This barber has not listed any services yet.</p>
               </div>
             )}
           </CardContent>

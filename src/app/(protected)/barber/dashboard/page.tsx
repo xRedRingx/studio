@@ -16,12 +16,12 @@ import {
   doc,
   updateDoc,
   Timestamp,
-  orderBy, // Added orderBy here
+  orderBy,
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Settings2, AlertTriangle, UserCircle } from 'lucide-react';
+import { PlusCircle, Settings2, AlertTriangle } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -403,7 +403,7 @@ export default function BarberDashboardPage() {
 
 
           <Card className="border-none shadow-lg rounded-xl overflow-hidden">
-            <CardHeader className="p-4 md:p-6 bg-muted/30">
+            <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-card via-muted/10 to-card">
               <CardTitle className="text-xl font-bold flex items-center">
                 <Settings2 className="mr-2 h-5 w-5 text-primary" />
                 Online Booking Status
@@ -430,7 +430,7 @@ export default function BarberDashboardPage() {
                    <p>Loading booking status...</p>
                 </div>
               )}
-               <p className="text-sm text-gray-500 mt-2">
+               <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
                 Turn this off to temporarily prevent new customers from booking online. Existing appointments will not be affected.
               </p>
             </CardContent>
@@ -462,5 +462,3 @@ export default function BarberDashboardPage() {
     </ProtectedPage>
   );
 }
-
-    

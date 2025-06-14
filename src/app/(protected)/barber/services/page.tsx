@@ -137,7 +137,7 @@ export default function BarberServicesPage() {
   return (
     <ProtectedPage expectedRole="barber">
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold font-headline">Manage Your Services</h1>
+        {/* Title moved into ManageServicesSection for better encapsulation */}
         {(isLoadingServices && !services.length) ? (
           <div className="flex justify-center items-center py-10">
             <LoadingSpinner className="h-8 w-8 text-primary" />
@@ -155,4 +155,3 @@ export default function BarberServicesPage() {
     </ProtectedPage>
   );
 }
-

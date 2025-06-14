@@ -13,7 +13,7 @@ import { firestore } from '@/firebase/config';
 import { collection, doc, getDoc, getDocs, query, where, addDoc, Timestamp, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { AlertCircle, CalendarDays, CheckCircle, ChevronLeft, Clock, DollarSign, Scissors, Users, Info, Ban, AlertTriangle, Forward, CircleUser, Check, LayoutDashboard, X } from 'lucide-react';
+import { AlertCircle, CalendarDays, CheckCircle, ChevronLeft, Clock, DollarSign, Scissors, Users, Info, Ban, AlertTriangle, Forward, Check, LayoutDashboard, X, UserCircle as UserCircleIcon } from 'lucide-react';
 import { APP_NAME } from '@/lib/constants';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -554,30 +554,30 @@ export default function BookingPage() {
       case 'selectService':
         return (
           <Card className="border-none shadow-lg rounded-xl overflow-hidden">
-            <CardHeader className="p-4 md:p-6 bg-muted/30">
+            <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-card via-muted/10 to-card">
               <CardTitle className="text-xl font-bold">Select a Service</CardTitle>
-              <CardDescription className="text-sm text-gray-500 mt-1">Choose from the services offered by {barber.firstName || 'this barber'}.</CardDescription>
+              <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">Choose from the services offered by {barber.firstName || 'this barber'}.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 p-4 md:p-6">
               {services.length === 0 ? (
                 <div className="text-center py-6">
                   <Info className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
-                  <p className="text-base text-gray-500">This barber has not listed any services yet.</p>
+                  <p className="text-base text-gray-500 dark:text-gray-400">This barber has not listed any services yet.</p>
                 </div>
               ) : (
                 services.map(service => (
                   <Button
                     key={service.id}
                     variant="outline"
-                    className="w-full justify-start text-left h-auto py-4 px-4 rounded-lg border shadow-sm hover:bg-accent/50"
+                    className="w-full justify-start text-left h-auto py-4 px-4 rounded-lg border shadow-sm hover:bg-accent/50 hover:shadow-md transition-all duration-150"
                     onClick={() => handleServiceSelect(service.id)}
                   >
                     <div className="flex flex-col flex-grow">
                       <span className="font-semibold text-base">{service.name}</span>
-                      <span className="text-sm text-gray-500 mt-1">
+                      <span className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                         <DollarSign className="inline h-4 w-4 mr-1" />{service.price.toFixed(2)}
                         <Clock className="inline h-4 w-4 ml-3 mr-1" />
-                        <span className="text-[#0088E0]">{service.duration} min</span>
+                        <span className="text-primary">{service.duration} min</span>
                       </span>
                     </div>
                     <ChevronLeft className="h-5 w-5 ml-auto text-gray-400 transform rotate-180 flex-shrink-0" />
@@ -592,9 +592,9 @@ export default function BookingPage() {
         const isDateUnavailable = barberUnavailableDates.some(ud => ud.date === formatDateToYYYYMMDD(selectedDate));
         return (
           <Card className="border-none shadow-lg rounded-xl overflow-hidden">
-            <CardHeader className="p-4 md:p-6 bg-muted/30">
+            <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-card via-muted/10 to-card">
               <CardTitle className="text-xl font-bold">Pick Date & Time</CardTitle>
-              <CardDescription className="text-sm text-gray-500 mt-1">
+              <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 Selected service: <span className="font-semibold text-foreground">{selectedService?.name}</span>
               </CardDescription>
             </CardHeader>
@@ -613,9 +613,9 @@ export default function BookingPage() {
                         <div key={dayInfo.day} className="flex justify-between items-center text-sm">
                           <span className="text-gray-600 dark:text-gray-400">{dayInfo.day}</span>
                           {dayInfo.isOpen ? (
-                            <span className="font-medium text-[#0088E0]">{dayInfo.startTime} &ndash; {dayInfo.endTime}</span>
+                            <span className="font-medium text-primary">{dayInfo.startTime} &ndash; {dayInfo.endTime}</span>
                           ) : (
-                            <span className="text-gray-500">Closed</span>
+                            <span className="text-gray-500 dark:text-gray-400">Closed</span>
                           )}
                         </div>
                       );
@@ -673,7 +673,7 @@ export default function BookingPage() {
                         onClick={() => handleTimeSlotSelect(slot)}
                         className="h-12 rounded-md text-base"
                       >
-                        <span className={selectedTimeSlot === slot ? "" : "text-[#0088E0]"}>{slot}</span>
+                        <span className={selectedTimeSlot === slot ? "" : "text-primary"}>{slot}</span>
                       </Button>
                     ))}
                   </div>
@@ -696,18 +696,18 @@ export default function BookingPage() {
       case 'confirm':
         return (
           <Card className="border-none shadow-lg rounded-xl overflow-hidden">
-            <CardHeader className="p-4 md:p-6 bg-muted/30">
+            <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-card via-muted/10 to-card">
               <CardTitle className="text-xl font-bold">Confirm Booking</CardTitle>
-              <CardDescription className="text-sm text-gray-500 mt-1">Please review your appointment details.</CardDescription>
+              <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">Please review your appointment details.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4 p-4 md:p-6">
               <div className="space-y-2 text-base border rounded-lg p-4 shadow-sm bg-card">
                  <p className="font-semibold text-lg text-primary mb-3">Review Details:</p>
-                <p><Scissors className="inline mr-2 h-5 w-5 text-gray-500" /> Service: <span className="font-medium">{selectedService?.name}</span></p>
-                <p><CircleUser className="inline mr-2 h-5 w-5 text-gray-500" /> With: <span className="font-medium">{barber.firstName} {barber.lastName}</span></p>
-                <p><CalendarDays className="inline mr-2 h-5 w-5 text-gray-500" /> Date: <span className="font-medium">{selectedDate ? formatSelectedDateForDisplay(selectedDate) : ''}</span></p>
-                <p><Clock className="inline mr-2 h-5 w-5 text-gray-500" /> Time: <span className="font-medium text-[#0088E0]">{selectedTimeSlot}</span></p>
-                <p><DollarSign className="inline mr-2 h-5 w-5 text-gray-500" /> Price: <span className="font-medium">${selectedService?.price.toFixed(2)}</span></p>
+                <p><Scissors className="inline mr-2 h-5 w-5 text-gray-500 dark:text-gray-400" /> Service: <span className="font-medium">{selectedService?.name}</span></p>
+                <p><UserCircleIcon className="inline mr-2 h-5 w-5 text-gray-500 dark:text-gray-400" /> With: <span className="font-medium">{barber.firstName} {barber.lastName}</span></p>
+                <p><CalendarDays className="inline mr-2 h-5 w-5 text-gray-500 dark:text-gray-400" /> Date: <span className="font-medium">{selectedDate ? formatSelectedDateForDisplay(selectedDate) : ''}</span></p>
+                <p><Clock className="inline mr-2 h-5 w-5 text-gray-500 dark:text-gray-400" /> Time: <span className="font-medium text-primary">{selectedTimeSlot}</span></p>
+                <p><DollarSign className="inline mr-2 h-5 w-5 text-gray-500 dark:text-gray-400" /> Price: <span className="font-medium">${selectedService?.price.toFixed(2)}</span></p>
               </div>
               <div className="flex flex-col sm:flex-row justify-between items-center pt-6 space-y-3 sm:space-y-0 sm:space-x-3 border-t mt-4">
                 <Button variant="outline" onClick={() => setBookingStep('selectDateTime')} className="w-full sm:w-auto h-12 rounded-full text-base">
@@ -732,7 +732,7 @@ export default function BookingPage() {
                 <CardContent className="space-y-2 text-base pt-2">
                   <p>Your appointment for <span className="font-semibold">{newlyBookedAppointment?.serviceName}</span></p>
                   <p>with <span className="font-semibold">{barber.firstName} {barber.lastName}</span></p>
-                  <p>on <span className="font-semibold">{formatYYYYMMDDToDisplay(newlyBookedAppointment?.date || '')} at <span className="text-[#0088E0]">{newlyBookedAppointment?.startTime}</span></span></p>
+                  <p>on <span className="font-semibold">{formatYYYYMMDDToDisplay(newlyBookedAppointment?.date || '')} at <span className="text-primary">{newlyBookedAppointment?.startTime}</span></span></p>
                   <p>has been successfully booked.</p>
                   <Button onClick={() => router.push('/customer/dashboard')} className="mt-8 w-full max-w-xs mx-auto h-14 rounded-full text-lg">
                     <LayoutDashboard className="mr-2 h-5 w-5" /> Back to Dashboard
@@ -756,7 +756,7 @@ export default function BookingPage() {
                     <div className="pb-3 mb-4 border-b border-border">
                         <p className="text-lg font-semibold text-foreground">Your Appointment:</p>
                         <p><span className="font-medium">{newlyBookedAppointment.serviceName}</span> with <span className="font-medium">{barber.firstName} {barber.lastName}</span></p>
-                        <p>Today at <span className="font-medium text-[#0088E0]">{newlyBookedAppointment.startTime}</span>.</p>
+                        <p>Today at <span className="font-medium text-primary">{newlyBookedAppointment.startTime}</span>.</p>
                     </div>
                     )}
 

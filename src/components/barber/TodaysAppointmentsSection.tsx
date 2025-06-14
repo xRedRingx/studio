@@ -28,7 +28,7 @@ export default function TodaysAppointmentsSection({ appointments, onUpdateAppoin
       return [];
     }
     return appointments
-      .filter(app => app.date === todayDate && app.status !== 'cancelled') // Filter out cancelled appointments
+      .filter(app => app.date === todayDate && app.status !== 'cancelled') 
       .sort((a, b) => {
         const dateForComparison = todayDate || '1970-01-01';
         let timeAHours = parseInt(a.startTime.split(':')[0]);
@@ -69,11 +69,11 @@ export default function TodaysAppointmentsSection({ appointments, onUpdateAppoin
   if (!todayDate) { 
     return (
       <Card className="border-none shadow-lg rounded-xl overflow-hidden">
-        <CardHeader className="p-6">
+        <CardHeader className="p-6 bg-gradient-to-tr from-card via-muted/10 to-card">
           <CardTitle className="text-2xl font-bold flex items-center">
             <CalendarDays className="mr-2 h-6 w-6 text-primary" /> Today's Appointments
           </CardTitle>
-          <CardDescription className="text-sm text-gray-500 mt-1">Loading appointments for today...</CardDescription>
+          <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">Loading appointments for today...</CardDescription>
         </CardHeader>
         <CardContent className="flex justify-center items-center py-8 p-6">
           <LoadingSpinner className="h-8 w-8 text-primary" />
@@ -88,15 +88,15 @@ export default function TodaysAppointmentsSection({ appointments, onUpdateAppoin
 
   return (
     <Card className="border-none shadow-lg rounded-xl overflow-hidden">
-      <CardHeader className="p-6">
+      <CardHeader className="p-6 bg-gradient-to-tr from-card via-muted/10 to-card">
         <CardTitle className="text-2xl font-bold flex items-center">
           <CalendarDays className="mr-2 h-6 w-6 text-primary" /> Today's Appointments
         </CardTitle>
-        <CardDescription className="text-sm text-gray-500 mt-1">View and manage your appointments for <span className="text-[#0088E0]">{formattedTodayDate}</span>.</CardDescription>
+        <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">View and manage your appointments for <span className="text-primary font-medium">{formattedTodayDate}</span>.</CardDescription>
       </CardHeader>
       <CardContent className="p-6">
         {todaysAppointments.length === 0 ? (
-          <p className="text-base text-gray-500">No active appointments scheduled for today.</p>
+          <p className="text-base text-gray-500 dark:text-gray-400">No active appointments scheduled for today.</p>
         ) : (
           <div className="space-y-4">
             {todaysAppointments.map((appointment) => (

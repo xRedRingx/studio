@@ -10,7 +10,7 @@ import { firestore } from '@/firebase/config';
 import { collection, query, where, getDocs, orderBy, Timestamp, doc, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { CalendarDays, Clock, Scissors, UserCircle, Eye, XCircle, Ban, Search } from 'lucide-react';
+import { CalendarDays, Clock, Scissors, Eye, XCircle, Search, UserCircle } from 'lucide-react'; // Removed Ban
 import Link from 'next/link';
 import {
   AlertDialog,
@@ -125,6 +125,7 @@ export default function CustomerDashboardPage() {
         phoneNumber: data.phoneNumber,
         address: data.address,
         isAcceptingBookings: isAccepting, 
+        email: data.email, // Ensure email is included
         } as AppUser);
       });
       setAvailableBarbers(fetchedBarbersData);
@@ -184,9 +185,9 @@ export default function CustomerDashboardPage() {
         </h1>
         
         <Card className="border-none shadow-lg rounded-xl overflow-hidden">
-          <CardHeader className="p-4 md:p-6 bg-muted/30">
+          <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-card via-muted/10 to-card">
             <CardTitle className="text-xl font-bold">Your Upcoming Appointments</CardTitle>
-            <CardDescription className="text-sm text-gray-500 mt-1">View and manage your upcoming appointments.</CardDescription>
+            <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">View and manage your upcoming appointments.</CardDescription>
           </CardHeader>
           <CardContent className="p-4 md:p-6">
             {(isLoadingAppointments && !myAppointments.length) ? (
@@ -197,7 +198,7 @@ export default function CustomerDashboardPage() {
             ) : myAppointments.length === 0 ? (
               <div className="text-center py-6">
                 <CalendarDays className="mx-auto h-12 w-12 text-muted-foreground mb-3" />
-                <p className="text-base text-gray-500 mb-4">You have no upcoming appointments.</p>
+                <p className="text-base text-gray-500 dark:text-gray-400 mb-4">You have no upcoming appointments.</p>
                  <Button asChild className="rounded-full h-12 px-6 text-base">
                     <Link href="#find-barber">Find a Barber</Link>
                 </Button>
@@ -205,13 +206,13 @@ export default function CustomerDashboardPage() {
             ) : (
               <div className="space-y-4">
                 {myAppointments.map(app => (
-                  <Card key={app.id} className="shadow-md rounded-lg border overflow-hidden">
+                  <Card key={app.id} className="shadow-md rounded-lg border overflow-hidden hover:shadow-lg transition-shadow duration-200">
                     <CardContent className="p-4 grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 items-start">
                       <div className="md:col-span-2 space-y-1.5">
                         <h3 className="text-base font-semibold text-primary flex items-center">
                           <Scissors className="mr-2 h-5 w-5 flex-shrink-0" /> {app.serviceName}
                         </h3>
-                        <p className="text-sm text-gray-500 flex items-center">
+                        <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center">
                           <UserCircle className="mr-2 h-4 w-4 flex-shrink-0" /> With: {app.barberName}
                         </p>
                       </div>
@@ -219,7 +220,7 @@ export default function CustomerDashboardPage() {
                         <p className="font-medium flex items-center md:justify-end text-base">
                           <CalendarDays className="mr-2 h-4 w-4 flex-shrink-0" /> {formatDate(app.date)}
                         </p>
-                        <p className="text-[#0088E0] flex items-center md:justify-end">
+                        <p className="text-primary flex items-center md:justify-end">
                           <Clock className="mr-2 h-4 w-4 flex-shrink-0" /> {app.startTime}
                         </p>
                       </div>
@@ -250,9 +251,9 @@ export default function CustomerDashboardPage() {
         </Card>
 
         <Card id="find-barber" className="border-none shadow-lg rounded-xl overflow-hidden">
-          <CardHeader className="p-4 md:p-6 bg-muted/30">
+          <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-card via-muted/10 to-card">
             <CardTitle className="text-xl font-bold">Explore Barbers</CardTitle>
-            <CardDescription className="text-sm text-gray-500 mt-1">Discover services offered by our talented barbers.</CardDescription>
+            <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">Discover services offered by our talented barbers.</CardDescription>
           </CardHeader>
           <CardContent className="p-4 md:p-6">
             {(isLoadingBarbers && !availableBarbers.length) ? (
@@ -263,12 +264,12 @@ export default function CustomerDashboardPage() {
             ) : availableBarbers.length === 0 ? (
               <div className="text-center py-6">
                 <Search className="mx-auto h-12 w-12 text-muted-foreground mb-3" />
-                <p className="text-base text-gray-500">No barbers are currently listed or accepting online bookings.</p>
+                <p className="text-base text-gray-500 dark:text-gray-400">No barbers are currently listed or accepting online bookings.</p>
               </div>
             ) : (
               <div className="space-y-4">
                 {availableBarbers.map(barber => (
-                  <Card key={barber.uid} className="shadow-md rounded-lg border">
+                  <Card key={barber.uid} className="shadow-md rounded-lg border hover:shadow-lg transition-shadow duration-200">
                     <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                       <div className="flex items-center gap-4 flex-grow">
                         <UserCircle className="h-12 w-12 text-muted-foreground flex-shrink-0" />
@@ -277,7 +278,7 @@ export default function CustomerDashboardPage() {
                             {barber.firstName} {barber.lastName}
                           </h3>
                            {barber.address && (
-                            <p className="text-xs text-gray-500 truncate max-w-[150px] sm:max-w-full">
+                            <p className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[150px] sm:max-w-full">
                                 {barber.address}
                             </p>
                             )}
@@ -301,7 +302,7 @@ export default function CustomerDashboardPage() {
           <AlertDialogContent className="rounded-xl">
             <AlertDialogHeader>
               <AlertDialogTitle className="text-xl font-bold">Confirm Cancellation</AlertDialogTitle>
-              <AlertDialogDescription className="text-base text-gray-500 pt-1">
+              <AlertDialogDescription className="text-base text-gray-500 dark:text-gray-400 pt-1">
                 Are you sure you want to cancel your appointment for <span className="font-semibold">{appointmentToCancel.serviceName}</span>
                 {' '}with <span className="font-semibold">{appointmentToCancel.barberName}</span> on <span className="font-semibold">{formatDate(appointmentToCancel.date)} at {appointmentToCancel.startTime}</span>?
                 This action cannot be undone.
@@ -311,10 +312,11 @@ export default function CustomerDashboardPage() {
               <AlertDialogCancel onClick={() => setAppointmentToCancel(null)} className="rounded-full h-10 px-4" disabled={isCancelling}>Keep Appointment</AlertDialogCancel>
               <AlertDialogAction
                 onClick={handleCancelAppointment}
-                className="rounded-full h-10 px-4 bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                className="rounded-full h-10 px-4"
+                variant="destructive"
                 disabled={isCancelling}
               >
-                {isCancelling ? <LoadingSpinner className="mr-2 h-4 w-4" /> : <Ban className="mr-2 h-4 w-4" />}
+                {isCancelling ? <LoadingSpinner className="mr-2 h-4 w-4" /> : <XCircle className="mr-2 h-4 w-4" />}
                 {isCancelling ? 'Cancelling...' : 'Yes, Cancel'}
               </AlertDialogAction>
             </AlertDialogFooter>

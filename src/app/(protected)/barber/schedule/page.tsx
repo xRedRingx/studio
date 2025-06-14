@@ -107,7 +107,7 @@ export default function BarberSchedulePage() {
   return (
     <ProtectedPage expectedRole="barber">
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold font-headline">Set Your Work Schedule</h1>
+        {/* Title moved to SetWorkScheduleSection */}
         {(isLoadingSchedule && schedule.every(s => s.startTime === INITIAL_SCHEDULE[0].startTime)) ? ( 
            <div className="flex justify-center items-center py-10">
             <LoadingSpinner className="h-8 w-8 text-primary" />
@@ -125,4 +125,3 @@ export default function BarberSchedulePage() {
     </ProtectedPage>
   );
 }
-

@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
-import { CalendarDays, PlusCircle, Trash2, X, Ban } from 'lucide-react'; // Added Ban
+import { CalendarDays, PlusCircle, Trash2, Ban } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import {
   AlertDialog,
@@ -37,7 +37,7 @@ const formatDateToYYYYMMDD = (date: Date): string => {
 };
 
 const formatYYYYMMDDToDisplay = (dateStr: string): string => {
-  const date = new Date(dateStr + 'T00:00:00'); // Ensure parsing as local date
+  const date = new Date(dateStr + 'T00:00:00');
   return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 };
 
@@ -47,7 +47,7 @@ export default function ManageUnavailableDatesSection({
   onRemoveUnavailableDate,
   isProcessing,
 }: ManageUnavailableDatesSectionProps) {
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined); // Initialize to undefined
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const [reason, setReason] = useState('');
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [dateToRemove, setDateToRemove] = useState<UnavailableDate | null>(null);
@@ -58,23 +58,22 @@ export default function ManageUnavailableDatesSection({
 
   const alreadyMarkedUnavailableDateObjects = unavailableDates.map(ud => {
     const [year, month, day] = ud.date.split('-').map(Number);
-    return new Date(year, month - 1, day, 0,0,0,0); // Explicitly set time to start of day
+    return new Date(year, month - 1, day, 0,0,0,0);
   });
 
 
   const modifiers = {
     alreadyUnavailable: alreadyMarkedUnavailableDateObjects,
-    disabled: [{ before: today }, ...alreadyMarkedUnavailableDateObjects], // Dates to disable for selection
+    disabled: [{ before: today }, ...alreadyMarkedUnavailableDateObjects],
   };
 
   const modifiersStyles = {
-    alreadyUnavailable: { // Style for dates that are marked, but not necessarily unclickable if not in 'disabled'
+    alreadyUnavailable: { 
       backgroundColor: 'hsl(var(--muted))',
       color: 'hsl(var(--muted-foreground)/0.6)',
       border: '1px dashed hsl(var(--border))',
       borderRadius: 'var(--radius-sm, 0.375rem)',
     },
-    // Disabled style is handled by react-day-picker's default
   };
   
   useEffect(() => {
@@ -91,19 +90,18 @@ export default function ManageUnavailableDatesSection({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!selectedDate || isSelectedDateAlreadyMarked) { // Prevent submission if already marked
-      // alert("Please select a valid date that is not already unavailable."); // Or use toast
+    if (!selectedDate || isSelectedDateAlreadyMarked) {
       return;
     }
     const dateString = formatDateToYYYYMMDD(selectedDate);
     await onAddUnavailableDate(dateString, reason || undefined);
-    setSelectedDate(undefined); // Reset selected date after successful add
+    setSelectedDate(undefined);
     setReason('');
   };
 
   const handleDateSelect = (date: Date | undefined) => {
     if (date) {
-      setSelectedDate(date); // Allow selecting any date for feedback, disabled check is in modifier
+      setSelectedDate(date);
       const isMarked = alreadyMarkedUnavailableDateObjects.some(d => d.getTime() === date.getTime());
       setIsSelectedDateAlreadyMarked(isMarked);
     } else {
@@ -117,7 +115,6 @@ export default function ManageUnavailableDatesSection({
   const handleConfirmRemove = async () => {
     if (dateToRemove) {
       await onRemoveUnavailableDate(dateToRemove.id);
-      // If the removed date was the currently selected one, reset selectedDate
       if (selectedDate && formatDateToYYYYMMDD(selectedDate) === dateToRemove.date) {
         setSelectedDate(undefined);
         setIsSelectedDateAlreadyMarked(false);
@@ -130,14 +127,14 @@ export default function ManageUnavailableDatesSection({
 
   return (
     <Card className="border-none shadow-lg rounded-xl overflow-hidden">
-      <CardHeader className="p-4 md:p-6">
-        <CardTitle className="text-2xl font-bold">Manage Unavailable Dates</CardTitle>
-        <CardDescription className="text-sm text-gray-500 mt-1">Block out specific dates. Dates already marked are styled in the calendar. To re-enable a date, remove it from the list below.</CardDescription>
+      <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-card via-muted/10 to-card">
+        <CardTitle className="text-2xl font-bold font-headline">Manage Unavailable Dates</CardTitle>
+        <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">Block out specific dates. Dates already marked are styled in the calendar. To re-enable a date, remove it from the list below.</CardDescription>
       </CardHeader>
       <CardContent className="p-4 md:p-6 space-y-6">
         <form onSubmit={handleSubmit} className="space-y-4 p-4 border rounded-lg bg-card shadow-sm">
           <h3 className="text-lg font-semibold">Add New Unavailable Date</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start"> {/* Changed items-end to items-start */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
             <div>
               <Label htmlFor="unavailable-date-picker" className="text-base font-medium mb-2 block">Select Date</Label>
               <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
@@ -159,8 +156,8 @@ export default function ManageUnavailableDatesSection({
                     mode="single"
                     selected={selectedDate}
                     onSelect={handleDateSelect}
-                    disabled={modifiers.disabled} // Use the 'disabled' modifier which includes past dates and already marked dates
-                    modifiers={modifiers} // 'alreadyUnavailable' still used for styling
+                    disabled={modifiers.disabled}
+                    modifiers={modifiers}
                     modifiersStyles={modifiersStyles}
                     initialFocus
                   />
@@ -181,7 +178,7 @@ export default function ManageUnavailableDatesSection({
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 className="h-12 text-base"
-                disabled={isAddButtonDisabled || !selectedDate} // Ensure selectedDate exists before enabling
+                disabled={isAddButtonDisabled || !selectedDate}
               />
             </div>
           </div>
@@ -198,14 +195,14 @@ export default function ManageUnavailableDatesSection({
         <div>
           <h3 className="text-lg font-semibold mb-3">Current Unavailable Dates</h3>
           {unavailableDates.length === 0 ? (
-            <p className="text-sm text-gray-500">You have no specific dates marked as unavailable.</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">You have no specific dates marked as unavailable.</p>
           ) : (
             <ul className="space-y-2">
               {unavailableDates.sort((a,b) => a.date.localeCompare(b.date)).map((ud) => (
-                <li key={ud.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-md shadow-sm">
+                <li key={ud.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-md shadow-sm hover:bg-muted/75 transition-colors duration-150">
                   <div>
                     <p className="font-medium">{formatYYYYMMDDToDisplay(ud.date)}</p>
-                    {ud.reason && <p className="text-xs text-gray-500">{ud.reason}</p>}
+                    {ud.reason && <p className="text-xs text-gray-500 dark:text-gray-400">{ud.reason}</p>}
                   </div>
                    <AlertDialog>
                       <AlertDialogTrigger asChild>
@@ -214,17 +211,17 @@ export default function ManageUnavailableDatesSection({
                           <span className="sr-only">Remove {ud.date}</span>
                         </Button>
                       </AlertDialogTrigger>
-                      <AlertDialogContent>
+                      <AlertDialogContent className="rounded-xl">
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Confirm Removal</AlertDialogTitle>
-                          <AlertDialogDescription>
+                          <AlertDialogTitle className="text-xl font-bold">Confirm Removal</AlertDialogTitle>
+                          <AlertDialogDescription className="text-base text-gray-500 dark:text-gray-400 pt-1">
                             Are you sure you want to remove {formatYYYYMMDDToDisplay(dateToRemove?.date || '')} from your unavailable dates?
                             Customers will be able to book on this day again.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter className="mt-4">
                           <AlertDialogCancel onClick={() => setDateToRemove(null)} disabled={isProcessing} className="rounded-full h-10 px-4">Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={handleConfirmRemove} disabled={isProcessing} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded-full h-10 px-4">
+                          <AlertDialogAction onClick={handleConfirmRemove} disabled={isProcessing} variant="destructive" className="rounded-full h-10 px-4">
                             {isProcessing ? <LoadingSpinner className="mr-2 h-4 w-4" /> : null}
                             Remove
                           </AlertDialogAction>
@@ -240,4 +237,3 @@ export default function ManageUnavailableDatesSection({
     </Card>
   );
 }
-

@@ -16,7 +16,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger, // Added AlertDialogTrigger here
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import LoadingSpinner from '@/components/ui/loading-spinner';
 
@@ -76,10 +76,10 @@ export default function ManageServicesSection({
 
   return (
     <Card className="border-none shadow-lg rounded-xl overflow-hidden">
-      <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 md:p-6 gap-3 bg-muted/30">
+      <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 md:p-6 gap-3 bg-gradient-to-tr from-card via-muted/10 to-card">
         <div>
-          <CardTitle className="text-xl font-bold">Manage Services</CardTitle>
-          <CardDescription className="text-sm text-gray-500 mt-1">Add, edit, or remove the services you offer.</CardDescription>
+          <CardTitle className="text-2xl font-bold font-headline">Manage Your Services</CardTitle>
+          <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">Add, edit, or remove the services you offer.</CardDescription>
         </div>
         <Button onClick={() => handleOpenDialog()} className="rounded-full h-11 px-6 text-base w-full sm:w-auto" disabled={isSubmitting}>
           <PlusCircle className="mr-2 h-4 w-4" /> Add New Service
@@ -89,18 +89,18 @@ export default function ManageServicesSection({
         {services.length === 0 ? (
           <div className="text-center py-6">
             <Info className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
-            <p className="text-base text-gray-500">You have not added any services yet. Click "Add New Service" to begin.</p>
+            <p className="text-base text-gray-500 dark:text-gray-400">You have not added any services yet. Click "Add New Service" to begin.</p>
           </div>
         ) : (
           <div className="space-y-4">
             {services.map((service) => (
-              <Card key={service.id} className="shadow-md rounded-lg border">
+              <Card key={service.id} className="shadow-md rounded-lg border hover:shadow-lg transition-shadow duration-200">
                 <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                   <div className="flex-grow">
                     <h3 className="font-semibold text-base">{service.name}</h3>
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 text-sm text-gray-500 mt-1">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 text-sm text-gray-500 dark:text-gray-400 mt-1">
                       <span className="flex items-center"><DollarSign className="mr-1 h-4 w-4" /> Price: ${service.price.toFixed(2)}</span>
-                      <span className="flex items-center mt-1 sm:mt-0"><Clock className="mr-1 h-4 w-4" /> Duration: <span className="text-[#0088E0] ml-1">{service.duration} min</span></span>
+                      <span className="flex items-center mt-1 sm:mt-0"><Clock className="mr-1 h-4 w-4" /> Duration: <span className="text-primary ml-1">{service.duration} min</span></span>
                     </div>
                   </div>
                   <div className="space-x-2 flex-shrink-0 self-start sm:self-center mt-2 sm:mt-0">
@@ -118,13 +118,13 @@ export default function ManageServicesSection({
                       <AlertDialogContent className="rounded-xl">
                         <AlertDialogHeader>
                           <AlertDialogTitle className="text-xl font-bold">Are you sure?</AlertDialogTitle>
-                          <AlertDialogDescription className="text-base text-gray-500 pt-1">
+                          <AlertDialogDescription className="text-base text-gray-500 dark:text-gray-400 pt-1">
                             This action cannot be undone. This will permanently delete the service "{serviceToDelete?.name}".
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter className="mt-4">
                           <AlertDialogCancel onClick={() => setServiceToDelete(null)} className="rounded-full h-10 px-4" disabled={isSubmitting}>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={handleDeleteConfirm} className="rounded-full h-10 px-4 bg-destructive hover:bg-destructive/90 text-destructive-foreground" disabled={isSubmitting}>
+                          <AlertDialogAction onClick={handleDeleteConfirm} className="rounded-full h-10 px-4" variant="destructive" disabled={isSubmitting}>
                             {isSubmitting ? <LoadingSpinner className="mr-2 h-4 w-4" /> : null}
                             {isSubmitting ? 'Deleting...' : 'Delete Service'}
                           </AlertDialogAction>

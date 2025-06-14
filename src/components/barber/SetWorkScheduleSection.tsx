@@ -24,11 +24,11 @@ export default function SetWorkScheduleSection({ schedule, onUpdateSchedule, onS
 
   return (
     <Card className="border-none shadow-lg rounded-xl overflow-hidden">
-      <CardHeader className="p-6">
-        <CardTitle className="text-2xl font-bold">Set Work Schedule</CardTitle>
-        <CardDescription className="text-sm text-gray-500 mt-1">Manage your weekly availability and operating hours.</CardDescription>
+      <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-card via-muted/10 to-card">
+        <CardTitle className="text-2xl font-bold font-headline">Set Your Work Schedule</CardTitle>
+        <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage your weekly availability and operating hours.</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4 p-6">
+      <CardContent className="space-y-4 p-4 md:p-6">
         {daysOfWeekOrder.map((day) => (
           <DayScheduleInput
             key={day}

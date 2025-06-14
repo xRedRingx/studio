@@ -17,14 +17,14 @@ export default function AuthFormWrapper({ title, description, role, children, fo
   const roleText = role ? role.charAt(0).toUpperCase() + role.slice(1) : '';
   
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4 sm:p-6">
-      <Card className="w-full max-w-md shadow-xl border-none rounded-xl">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-background via-muted/10 to-background p-4 sm:p-6">
+      <Card className="w-full max-w-md shadow-xl border-none rounded-xl bg-card/90 backdrop-blur-sm">
         <CardHeader className="text-center p-6 md:p-8">
           <Link href="/" aria-label="Go to homepage" className="mx-auto mb-6 flex justify-center">
             <BarberFlowLogo className="h-10 w-auto" />
           </Link>
           <CardTitle className="font-headline text-xl sm:text-2xl font-bold">{title} {roleText}</CardTitle>
-          <CardDescription className="text-sm sm:text-base text-gray-500 pt-2">
+          <CardDescription className="text-sm sm:text-base text-gray-500 dark:text-gray-400 pt-2">
             {description}
           </CardDescription>
         </CardHeader>
@@ -33,7 +33,7 @@ export default function AuthFormWrapper({ title, description, role, children, fo
         </CardContent>
       </Card>
       {footerLink && (
-         <p className="mt-6 text-center text-sm text-gray-500 px-4">
+         <p className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400 px-4">
           {footerLink.label}{' '}
           <Link href={footerLink.href} className="font-medium text-primary hover:underline">
             {footerLink.text}
