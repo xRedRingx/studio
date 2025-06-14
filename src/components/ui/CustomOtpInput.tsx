@@ -114,8 +114,6 @@ export function CustomOtpInput({
   return (
     <div
       className="flex items-center justify-center gap-2"
-      role="group"
-      aria-label="One-time password input"
       // Attach the paste handler to the container
       onPaste={(e) => {
         // Find the currently focused input index, or default to 0
@@ -149,7 +147,6 @@ export function CustomOtpInput({
             onKeyDown={(e) => handleKeyDown(e, index)}
             onFocus={handleFocus}
             disabled={disabled}
-            aria-label={`Enter digit ${index + 1} of ${valueLength}`}
             className={cn(
               "relative flex h-14 w-14 items-center justify-center rounded-md border border-input text-lg transition-all text-center",
               "focus:z-10 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
