@@ -27,7 +27,7 @@ const sourceCodePro = Source_Code_Pro({
 export const metadata: Metadata = {
   title: APP_NAME,
   description: 'Seamlessly connect barbers and customers.',
-  manifest: '/manifest.json',
+  // manifest: '/manifest.json', // Removed this line
 };
 
 export default function RootLayout({
@@ -41,7 +41,7 @@ export default function RootLayout({
         {/* Removed direct Google Font links, next/font handles this now */}
         <meta name="theme-color" content="#5DADE2" media="(prefers-color-scheme: light)" />
         <meta name="theme-color" content="#27272A" media="(prefers-color-scheme: dark)" />
-        <link rel="manifest" href="/manifest.json" />
+        {/* <link rel="manifest" href="/manifest.json" /> Removed this line */}
       </head>
       <body className={`${ptSans.variable} ${sourceCodePro.variable} font-body antialiased`} suppressHydrationWarning>
         <ThemeProvider
