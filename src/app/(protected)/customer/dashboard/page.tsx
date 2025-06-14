@@ -333,10 +333,11 @@ export default function CustomerDashboardPage() {
                 <p className="ml-3 text-base">Loading your appointments...</p>
               </div>
             ) : myAppointments.length === 0 ? (
-              <div className="text-center py-6">
-                <CalendarDays className="mx-auto h-12 w-12 text-muted-foreground mb-3" />
-                <p className="text-base text-gray-500 dark:text-gray-400 mb-4">You have no active appointments.</p>
-                 <Button asChild className="rounded-full h-12 px-6 text-base">
+              <div className="text-center py-6 space-y-3">
+                <CalendarDays className="mx-auto h-12 w-12 text-muted-foreground" />
+                <p className="text-base text-gray-500 dark:text-gray-400">You have no active appointments.</p>
+                <p className="text-base text-gray-500 dark:text-gray-400">Ready to book your next one?</p>
+                 <Button asChild className="rounded-full h-12 px-6 text-base !mt-5">
                     <Link href="#find-barber">Find a Barber</Link>
                 </Button>
               </div>

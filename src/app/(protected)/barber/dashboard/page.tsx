@@ -444,12 +444,16 @@ export default function BarberDashboardPage() {
   }, [user?.uid, fetchServices, fetchAppointments, fetchBarberSelfDataForWalkIn, initialLoadComplete]);
 
   const isAddWalkInDisabled = isProcessingWalkIn || isLoadingServices || services.length === 0 || isLoadingBarberSelfData;
-  const addWalkInTooltipContent = () => {
-    if (isLoadingServices || isLoadingBarberSelfData) return "Loading necessary data...";
-    if (services.length === 0) return "Please add services first to enable walk-ins.";
-    if (isProcessingWalkIn) return "Processing previous walk-in...";
-    return null;
-  };
+  
+  let walkInTooltipMessage = null;
+  if (isLoadingServices || isLoadingBarberSelfData) {
+    walkInTooltipMessage = "Loading necessary data...";
+  } else if (services.length === 0) {
+    walkInTooltipMessage = "Please add services first to enable walk-ins.";
+  } else if (isProcessingWalkIn) {
+    walkInTooltipMessage = "Processing previous walk-in...";
+  }
+
 
   return (
     <ProtectedPage expectedRole="barber">
@@ -473,9 +477,9 @@ export default function BarberDashboardPage() {
                     </Button>
                   </span>
                 </TooltipTrigger>
-                {isAddWalkInDisabled && addWalkInTooltipContent() && (
+                {walkInTooltipMessage && (
                   <TooltipContent id="add-walkin-tooltip">
-                    <p>{addWalkInTooltipContent()}</p>
+                    <p>{walkInTooltipMessage}</p>
                   </TooltipContent>
                 )}
               </Tooltip>
