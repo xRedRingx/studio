@@ -23,7 +23,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { getItemWithTimestampRevival, setItemWithTimestampConversion, LS_MY_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD, getSimpleItem, setSimpleItem, LS_AVAILABLE_BARBERS_KEY_CUSTOMER_DASHBOARD } from '@/lib/localStorageUtils';
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 
 const getTodayDateString = () => {
@@ -39,19 +38,6 @@ const timeToMinutes = (timeStr: string): number => {
     hours += 12;
   }
   return hours * 60 + minutes;
-};
-
-const getInitials = (firstName?: string | null, lastName?: string | null, email?: string | null) => {
-    if (firstName && lastName) {
-      return `${firstName[0]}${lastName[0]}`.toUpperCase();
-    }
-    if (firstName) {
-      return firstName.substring(0, 2).toUpperCase();
-    }
-    if (email) {
-      return email.substring(0, 2).toUpperCase();
-    }
-    return "BR"; // Barber initials
 };
 
 
@@ -137,8 +123,8 @@ export default function CustomerDashboardPage() {
         lastName: data.lastName,
         role: data.role,
         phoneNumber: data.phoneNumber,
-        photoURL: data.photoURL || null, // Ensure photoURL is included
         isAcceptingBookings: isAccepting, 
+        // photoURL removed
         } as AppUser);
       });
       setAvailableBarbers(fetchedBarbersData);
@@ -281,14 +267,7 @@ export default function CustomerDashboardPage() {
                   <Card key={barber.uid} className="shadow-md rounded-lg border">
                     <CardContent className="p-4 flex items-center justify-between gap-4">
                       <div className="flex items-center gap-3 flex-grow">
-                        <Avatar className="h-12 w-12 border">
-                          <AvatarImage 
-                            src={barber.photoURL || `https://placehold.co/80x80.png`} 
-                            alt={`${barber.firstName} ${barber.lastName}`}
-                            data-ai-hint={!barber.photoURL ? "person portrait" : undefined}
-                          />
-                          <AvatarFallback>{getInitials(barber.firstName, barber.lastName, barber.email)}</AvatarFallback>
-                        </Avatar>
+                        <UserCircle className="h-12 w-12 text-muted-foreground" /> {/* Placeholder for Avatar */}
                         <div>
                           <h3 className="text-base font-semibold">
                             {barber.firstName} {barber.lastName}
@@ -341,4 +320,3 @@ export default function CustomerDashboardPage() {
     </ProtectedPage>
   );
 }
-

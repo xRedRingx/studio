@@ -8,7 +8,7 @@ export type UserRole = 'customer' | 'barber';
 export interface FirebaseUser extends FirebaseUserAuth {}
 
 // AppUser will now represent the user data stored in Firestore.
-// Firebase Auth will manage the core user identity (uid, email, emailVerified, photoURL, displayName from Firebase profile).
+// Firebase Auth will manage the core user identity (uid, email, emailVerified, displayName from Firebase profile).
 export interface AppUser {
   uid: string; // Firebase Auth UID
   role?: UserRole;
@@ -23,7 +23,7 @@ export interface AppUser {
   updatedAt?: Timestamp; // Firestore timestamp
   // Fields from Firebase Auth user object that we might merge for convenience
   displayName?: string | null; // Firebase Auth display name
-  photoURL?: string | null; // Firebase Auth photo URL
+  // photoURL is removed
   emailVerified?: boolean; // Firebase Auth email verification status
 }
 
@@ -77,4 +77,3 @@ export interface UnavailableDate {
   reason?: string; // Optional reason
   createdAt?: Timestamp;
 }
-

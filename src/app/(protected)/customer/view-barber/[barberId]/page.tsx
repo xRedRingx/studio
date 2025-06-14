@@ -14,20 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { ArrowLeft, CalendarPlus, Scissors, DollarSign, Clock, UserCircle, AlertTriangle, MapPin } from 'lucide-react';
 import Link from 'next/link';
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-const getInitials = (firstName?: string | null, lastName?: string | null, email?: string | null) => {
-    if (firstName && lastName) {
-      return `${firstName[0]}${lastName[0]}`.toUpperCase();
-    }
-    if (firstName) {
-      return firstName.substring(0, 2).toUpperCase();
-    }
-    if (email) {
-      return email.substring(0, 2).toUpperCase();
-    }
-    return "BR"; 
-};
 
 export default function ViewBarberPage() {
   const { user } = useAuth();
@@ -59,7 +46,7 @@ export default function ViewBarberPage() {
             id: barberDocSnap.id, 
             ...barberData, 
             isAcceptingBookings: isAccepting,
-            photoURL: barberData.photoURL || null // Ensure photoURL is part of the barber object
+            // photoURL removed
         });
       } else {
         toast({ title: "Error", description: "Barber not found.", variant: "destructive" });
@@ -125,15 +112,7 @@ export default function ViewBarberPage() {
         <Card className="border-none shadow-lg rounded-xl overflow-hidden">
           <CardHeader className="p-4 md:p-6">
             <div className="flex items-start space-x-4">
-                <Avatar className="h-20 w-20 sm:h-24 sm:w-24 border-2 border-primary/30 flex-shrink-0">
-                    <AvatarImage 
-                        src={barber.photoURL || `https://placehold.co/120x120.png`} 
-                        alt={`${barber.firstName} ${barber.lastName}`}
-                        data-ai-hint={!barber.photoURL ? "barber professional" : undefined}
-                        className="object-cover"
-                    />
-                    <AvatarFallback className="text-2xl">{getInitials(barber.firstName, barber.lastName, barber.email)}</AvatarFallback>
-                </Avatar>
+                <UserCircle className="h-20 w-20 sm:h-24 sm:w-24 text-muted-foreground flex-shrink-0" /> {/* Placeholder for Avatar */}
                 <div className="pt-1">
                     <CardTitle className="text-2xl sm:text-3xl font-bold">
                     {barber.firstName} {barber.lastName}
@@ -206,4 +185,3 @@ export default function ViewBarberPage() {
     </ProtectedPage>
   );
 }
-

@@ -12,13 +12,11 @@ import {
   signOut as firebaseSignOut, 
   onAuthStateChanged,
   sendPasswordResetEmail as firebaseSendPasswordResetEmail,
-  updateProfile as updateFirebaseUserProfile, 
+  // updateProfile as updateFirebaseUserProfile, // No longer directly updating Firebase Auth profile photoURL from here
   type User as FirebaseUser
 } from 'firebase/auth';
 import { collection, doc, getDoc, setDoc, updateDoc, Timestamp, serverTimestamp } from 'firebase/firestore'; 
 
-// uploadProfileImage is no longer directly used by updateUserProfile here
-// import { uploadProfileImage } from '@/firebase/storageUtils'; 
 import { useToast } from '@/hooks/use-toast';
 
 
@@ -32,11 +30,11 @@ interface AuthContextType {
   setUser: React.Dispatch<React.SetStateAction<AppUser | null>>; 
   setRole: (role: UserRole) => void;
   registerWithEmailAndPassword: (
-    userDetails: Omit<AppUser, 'uid' | 'createdAt' | 'updatedAt' | 'displayName' | 'photoURL' | 'emailVerified' | 'fcmToken'> & { password_original_do_not_use: string }
+    userDetails: Omit<AppUser, 'uid' | 'createdAt' | 'updatedAt' | 'displayName' | 'emailVerified' | 'fcmToken'> & { password_original_do_not_use: string }
   ) => Promise<void>;
   signInWithEmailAndPassword: (email: string, password_original_do_not_use: string) => Promise<void>;
   sendPasswordResetLink: (email: string) => Promise<void>;
-  updateUserProfile: ( // newPhotoFile parameter removed
+  updateUserProfile: (
     userId: string, 
     updates: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber' | 'address'>>
   ) => Promise<void>;
@@ -54,14 +52,14 @@ const createUserDocument = async (firebaseUser: FirebaseUser, additionalData: Pa
   const snapshot = await getDoc(userRef);
 
   if (!snapshot.exists()) {
-    const { email, displayName, photoURL, emailVerified } = firebaseUser;
+    const { email, displayName, emailVerified } = firebaseUser;
     const createdAt = serverTimestamp();
     try {
       await setDoc(userRef, {
         uid: firebaseUser.uid,
         email,
         displayName: displayName || `${additionalData.firstName} ${additionalData.lastName}` || email,
-        photoURL: additionalData.photoURL || photoURL || null, 
+        // photoURL is removed from direct management here
         emailVerified,
         createdAt,
         updatedAt: createdAt,
@@ -109,7 +107,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             uid: firebaseUser.uid,
             email: firebaseUser.email || firestoreUser.email,
             displayName: firebaseUser.displayName || firestoreUser.displayName,
-            photoURL: firebaseUser.photoURL || firestoreUser.photoURL || null, 
+            // photoURL is removed
             emailVerified: firebaseUser.emailVerified,
             role: firestoreUser.role,
             firstName: firestoreUser.firstName,
@@ -130,22 +128,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
 
         } else {
-          // If user exists in Auth but not Firestore, create their Firestore doc
-          // This can happen if registration was interrupted or for first-time Google/other provider sign-in
-          // where we haven't created a local profile yet.
            const roleFromStorage = localStorage.getItem(LOCAL_STORAGE_ROLE_KEY) as UserRole | null;
            const basicProfileData: Partial<AppUser> = {
-              role: roleFromStorage, // Use role from localStorage if available
-              photoURL: firebaseUser.photoURL,
+              role: roleFromStorage,
            };
           await createUserDocument(firebaseUser, basicProfileData);
-          // Attempt to refetch the user document
           const newUserDocSnap = await getDoc(userDocRef);
           if (newUserDocSnap.exists()) {
             const firestoreUser = newUserDocSnap.data() as AppUser;
             const appUser: AppUser = {
-                uid: firebaseUser.uid, email: firebaseUser.email!, displayName: firebaseUser.displayName, photoURL: firebaseUser.photoURL, emailVerified: firebaseUser.emailVerified,
-                ...firestoreUser // Spread the rest from Firestore
+                uid: firebaseUser.uid, email: firebaseUser.email!, displayName: firebaseUser.displayName, emailVerified: firebaseUser.emailVerified,
+                ...firestoreUser 
             };
             setUser(appUser);
             persistUserSession(appUser);
@@ -165,7 +158,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
 
     return () => unsubscribe();
-  }, [role]); // role dependency is important here
+  }, [role]); 
 
 
   const setRoleContextAndStorage = (newRole: UserRole) => {
@@ -184,11 +177,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const clearUserSession = () => {
     localStorage.removeItem(LOCAL_STORAGE_USER_KEY);
-    // Note: We are NOT clearing LOCAL_STORAGE_ROLE_KEY here anymore
   };
 
   const registerWithEmailAndPassword = async (
-     userDetails: Omit<AppUser, 'uid' | 'createdAt' | 'updatedAt' | 'displayName' | 'photoURL' | 'emailVerified' | 'fcmToken'> & { password_original_do_not_use: string }
+     userDetails: Omit<AppUser, 'uid' | 'createdAt' | 'updatedAt' | 'displayName' | 'emailVerified' | 'fcmToken'> & { password_original_do_not_use: string }
   ) => {
     setIsProcessingAuth(true);
     const { email, password_original_do_not_use, firstName, lastName, role: userRole, phoneNumber, address, isAcceptingBookings } = userDetails;
@@ -204,7 +196,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         phoneNumber: phoneNumber || null,
         address: address || null, 
         email,
-        photoURL: firebaseUser.photoURL || null, // Use photoURL from Firebase Auth if available, else null
         isAcceptingBookings: userRole === 'barber' ? (isAcceptingBookings !== undefined ? isAcceptingBookings : true) : undefined,
         fcmToken: null, 
       };
@@ -239,7 +230,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsProcessingAuth(true);
     try {
       await signInWithEmailAndPassword(auth, email, password_original_do_not_use);
-      // User state and role will be set by onAuthStateChanged listener
       toast({ title: "Login Successful!", description: "Welcome back!" });
     } catch (error: any) {
       console.error("AuthContext: Error signing in:", error);
@@ -258,7 +248,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsProcessingAuth(true);
     try {
       await firebaseSendPasswordResetEmail(auth, email);
-      // No toast here if user not found, as per Firebase recommendation
     } catch (error: any) {
       console.error("AuthContext: Error sending password reset email:", error);
       if (error.code !== 'auth/user-not-found') { 
@@ -273,7 +262,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const updateUserProfile = async (
     userId: string, 
     updates: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber' | 'address'>>
-    // newPhotoFile parameter removed
   ) => {
     if (!auth.currentUser || auth.currentUser.uid !== userId) {
         toast({ title: "Error", description: "Authentication error. Please re-login.", variant: "destructive" });
@@ -290,9 +278,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         dataToUpdate.address = null;
       }
       
-      // photoURL is not updated via this function anymore. It's managed by Firebase Auth directly.
-      // We rely on onAuthStateChanged to pick up photoURL changes from Firebase Auth.
-      
       await updateDoc(userRef, dataToUpdate);
 
       setUser(prevUser => {
@@ -300,7 +285,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const updatedUser = { 
             ...prevUser, 
             ...dataToUpdate, 
-            // photoURL will be updated by onAuthStateChanged if Firebase Auth profile changes
             updatedAt: dataToUpdate.updatedAt 
         }; 
         persistUserSession(updatedUser);
@@ -359,8 +343,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsProcessingAuth(true);
     try {
       await firebaseSignOut(auth);
-      // User and role will be cleared by onAuthStateChanged
-      // We no longer clear the role from localStorage here, so the app remembers it for the next login.
       toast({ title: "Signed Out", description: "You have been successfully signed out." });
     } catch (error: any) {
         console.error("AuthContext: Error signing out:", error);
@@ -400,5 +382,3 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
-
-    

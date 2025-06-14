@@ -5,7 +5,8 @@ import { getAuth } from 'firebase/auth';
 // Import initializeFirestore for settings, and also getFirestore if it's needed elsewhere without re-init
 import { initializeFirestore, CACHE_SIZE_UNLIMITED, memoryLocalCache, persistentLocalCache } from 'firebase/firestore';
 import { getMessaging } from 'firebase/messaging'; // Added
-import { getStorage } from 'firebase/storage'; // Added for Firebase Storage
+// Firebase Storage is no longer used for profile pictures in-app
+// import { getStorage } from 'firebase/storage'; 
 
 
 const firebaseConfig = {
@@ -23,11 +24,8 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 
 // Initialize Firestore with local cache settings
-// Using initializeFirestore to apply settings correctly.
 const firestore = initializeFirestore(app, {
   localCache: persistentLocalCache({ cacheSizeBytes: CACHE_SIZE_UNLIMITED }),
-  // Or for in-memory only:
-  // localCache: memoryLocalCache({ cacheSizeBytes: CACHE_SIZE_UNLIMITED })
 });
 
 // Initialize Firebase Messaging
@@ -35,9 +33,8 @@ const messaging = (typeof window !== 'undefined' && typeof navigator !== 'undefi
   ? getMessaging(app)
   : null;
 
-// Initialize Firebase Storage
-const storage = getStorage(app);
+// Firebase Storage is no longer initialized here as it's not used by the app for photos.
+// const storage = getStorage(app);
 
 
-export { app, auth, firestore, messaging, storage }; // Export storage
-
+export { app, auth, firestore, messaging }; // storage removed from exports

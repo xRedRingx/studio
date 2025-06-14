@@ -1,7 +1,6 @@
 
 'use client';
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -41,7 +40,6 @@ export default function UserNav() {
     if (user?.fcmToken) {
       setNotificationStatus('granted');
     } else {
-      // If no token, rely on the initial permission set or if it changed via our prompt
       if (typeof window !== 'undefined' && 'Notification' in window && messaging) {
           if (Notification.permission === 'denied') setNotificationStatus('denied');
           else if (Notification.permission === 'default') setNotificationStatus('prompt');
@@ -104,19 +102,6 @@ export default function UserNav() {
 
 
   if (!user) return null;
-
-  const getInitials = (firstName?: string | null, lastName?: string | null, email?: string | null) => {
-    if (firstName && lastName) {
-      return `${firstName[0]}${lastName[0]}`.toUpperCase();
-    }
-    if (firstName) {
-      return firstName.substring(0, 2).toUpperCase();
-    }
-    if (email) {
-      return email.substring(0, 2).toUpperCase();
-    }
-    return "?";
-  };
   
   const displayName = user.firstName && user.lastName 
     ? `${user.firstName} ${user.lastName}` 
@@ -128,17 +113,13 @@ export default function UserNav() {
   const isNotificationFeatureAvailable = notificationStatus !== 'unavailable' && !!messaging;
   const isCurrentlyEnabledWithToken = notificationStatus === 'granted' && !!user.fcmToken;
   const isPermissionHardDenied = notificationStatus === 'denied';
-  const isPromptingForPermission = notificationStatus === 'prompt' || (notificationStatus === 'granted' && !user.fcmToken);
 
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-10 w-10 rounded-full">
-          <Avatar className="h-10 w-10 border-2 border-primary/50">
-            <AvatarImage src={user.photoURL || undefined} alt={displayName || "User avatar"} />
-            <AvatarFallback className="text-base">{getInitials(user.firstName, user.lastName, user.email)}</AvatarFallback>
-          </Avatar>
+          <UserIcon className="h-6 w-6 text-foreground" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="w-64 rounded-lg shadow-xl mt-2" align="end" forceMount>
@@ -237,4 +218,3 @@ export default function UserNav() {
     </DropdownMenu>
   );
 }
-
