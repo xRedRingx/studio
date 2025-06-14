@@ -19,7 +19,7 @@ import { APP_NAME } from '@/lib/constants';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
-import { Progress } from '@/components/ui/progress'; // For visual stepper (optional)
+import { Progress } from '@/components/ui/progress'; // For visual stepper
 
 type BookingStep = 'selectService' | 'selectDateTime' | 'confirm' | 'confirmed' | 'queued';
 
@@ -496,10 +496,14 @@ export default function BookingPage() {
     
     const currentStepNumber = bookingStepNumbers[bookingStep];
     const currentStepTitle = bookingStepTitles[bookingStep];
+    const progressValue = (currentStepNumber / totalBookingSteps) * 100;
 
     return (
-      <div className="mb-4 text-sm text-gray-600">
-        Step {currentStepNumber} of {totalBookingSteps}: <span className="font-semibold text-primary">{currentStepTitle}</span>
+      <div className="mb-6 space-y-2">
+        <p className="text-sm text-muted-foreground">
+          Step {currentStepNumber} of {totalBookingSteps}: <span className="font-semibold text-foreground">{currentStepTitle}</span>
+        </p>
+        <Progress value={progressValue} className="w-full h-2" />
       </div>
     );
   };
@@ -808,3 +812,6 @@ export default function BookingPage() {
     </ProtectedPage>
   );
 }
+
+
+    
