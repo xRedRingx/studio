@@ -65,3 +65,4 @@ export default function AppointmentCard({ appointment, onCheckIn, onMarkDone, is
     </Card>
   );
 }
+
