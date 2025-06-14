@@ -16,18 +16,21 @@ import {
   doc,
   updateDoc,
   Timestamp,
+  orderBy, // Added orderBy here
 } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Settings2 } from 'lucide-react'; 
+import { PlusCircle, Settings2, AlertTriangle, UserCircle } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'; 
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'; 
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { getItemWithTimestampRevival, setItemWithTimestampConversion, LS_SERVICES_KEY_DASHBOARD, LS_APPOINTMENTS_KEY_DASHBOARD } from '@/lib/localStorageUtils';
 import type { DayAvailability as ScheduleDayAvailability } from '@/types';
 import { getDoc as getFirestoreDoc } from 'firebase/firestore';
+import Link from 'next/link';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 const WalkInDialog = dynamic(() => import('@/components/barber/WalkInDialog'), {
   loading: () => <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-[100]"><LoadingSpinner className="h-8 w-8 text-primary" /></div>,
@@ -80,7 +83,7 @@ export default function BarberDashboardPage() {
   const [isWalkInDialogOpen, setIsWalkInDialogOpen] = useState(false);
   const [isProcessingWalkIn, setIsProcessingWalkIn] = useState(false);
   const [isLoadingBarberSelfData, setIsLoadingBarberSelfData] = useState(true);
-  
+
   const [localIsAcceptingBookings, setLocalIsAcceptingBookings] = useState(true);
   const [isUpdatingAcceptingBookings, setIsUpdatingAcceptingBookings] = useState(false);
 
@@ -91,10 +94,10 @@ export default function BarberDashboardPage() {
   }, []);
 
  useEffect(() => {
-    if (user) { 
+    if (user) {
       setLocalIsAcceptingBookings(user.isAcceptingBookings !== undefined ? user.isAcceptingBookings : true);
     }
-  }, [user]); 
+  }, [user]);
 
 
   useEffect(() => {
@@ -234,7 +237,7 @@ export default function BarberDashboardPage() {
       setIsProcessingWalkIn(false);
       return;
     }
-    
+
     if (barberUnavailableDatesForWalkin.some(ud => ud.date === todayDateStr)) {
         toast({ title: "Barber Unavailable", description: "Cannot add walk-in. Barber is marked as unavailable today.", variant: "destructive" });
         setIsProcessingWalkIn(false);
@@ -247,7 +250,7 @@ export default function BarberDashboardPage() {
 
     const now = new Date();
     const currentTimeMinutes = now.getHours() * 60 + now.getMinutes();
-    const earliestPossibleStartMinutes = Math.max(scheduleStartTimeMinutes, currentTimeMinutes + 5); 
+    const earliestPossibleStartMinutes = Math.max(scheduleStartTimeMinutes, currentTimeMinutes + 5);
 
     const todaysAppointments = appointments
       .filter(app => app.date === todayDateStr)
@@ -269,7 +272,7 @@ export default function BarberDashboardPage() {
             break;
         }
     }
-    
+
     if (foundSlotStartMinutes === null) {
       const lastAppointmentEnd = todaysAppointments.length > 0 ? todaysAppointments[todaysAppointments.length - 1].end : scheduleStartTimeMinutes;
       const potentialStartAfterLast = Math.max(earliestPossibleStartMinutes, lastAppointmentEnd);
@@ -297,7 +300,7 @@ export default function BarberDashboardPage() {
       const newAppointmentData = {
         barberId: user.uid,
         barberName: `${user.firstName} ${user.lastName}`,
-        customerId: null, 
+        customerId: null,
         customerName: customerName,
         serviceId: selectedService.id,
         serviceName: selectedService.name,
@@ -312,7 +315,7 @@ export default function BarberDashboardPage() {
 
       const docRef = await addDoc(collection(firestore, 'appointments'), newAppointmentData);
       const finalAppointment: Appointment = { id: docRef.id, ...newAppointmentData };
-      
+
       setAppointments(prev => {
         const updated = [...prev, finalAppointment].sort((a,b) => {
             if (a.date === b.date) return timeToMinutes(a.startTime) - timeToMinutes(b.startTime);
@@ -335,7 +338,7 @@ export default function BarberDashboardPage() {
   const handleToggleAcceptingBookings = async (newCheckedState: boolean) => {
     if (!user || !updateUserAcceptingBookings) return;
 
-    setLocalIsAcceptingBookings(newCheckedState); 
+    setLocalIsAcceptingBookings(newCheckedState);
     setIsUpdatingAcceptingBookings(true);
     try {
       await updateUserAcceptingBookings(user.uid, newCheckedState);
@@ -346,7 +349,6 @@ export default function BarberDashboardPage() {
     } catch (error) {
       console.error("Error updating accepting bookings status:", error);
       toast({ title: "Error", description: "Could not update your booking status.", variant: "destructive" });
-      // Revert local state on failure
       setLocalIsAcceptingBookings(!newCheckedState);
     } finally {
       setIsUpdatingAcceptingBookings(false);
@@ -354,7 +356,7 @@ export default function BarberDashboardPage() {
   };
 
   useEffect(() => {
-    if (user?.uid && initialLoadComplete) { 
+    if (user?.uid && initialLoadComplete) {
       fetchServices();
       fetchAppointments();
       fetchBarberSelfDataForWalkIn();
@@ -379,10 +381,10 @@ export default function BarberDashboardPage() {
               </h1>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span tabIndex={isAddWalkInDisabled ? 0 : -1}> 
-                    <Button 
-                      onClick={() => setIsWalkInDialogOpen(true)} 
-                      className="w-full sm:w-auto h-11 rounded-full px-6 text-base" 
+                  <span tabIndex={isAddWalkInDisabled ? 0 : -1}>
+                    <Button
+                      onClick={() => setIsWalkInDialogOpen(true)}
+                      className="w-full sm:w-auto h-11 rounded-full px-6 text-base"
                       disabled={isAddWalkInDisabled}
                       aria-describedby={isAddWalkInDisabled ? "add-walkin-tooltip" : undefined}
                     >
@@ -398,6 +400,7 @@ export default function BarberDashboardPage() {
                 )}
               </Tooltip>
           </div>
+
 
           <Card className="border-none shadow-lg rounded-xl overflow-hidden">
             <CardHeader className="p-4 md:p-6 bg-muted/30">
@@ -459,3 +462,5 @@ export default function BarberDashboardPage() {
     </ProtectedPage>
   );
 }
+
+    
