@@ -12,7 +12,6 @@ import {
   signOut as firebaseSignOut, 
   onAuthStateChanged,
   sendPasswordResetEmail as firebaseSendPasswordResetEmail,
-  // updateProfile as updateFirebaseUserProfile, // No longer directly updating Firebase Auth profile photoURL from here
   type User as FirebaseUser
 } from 'firebase/auth';
 import { collection, doc, getDoc, setDoc, updateDoc, Timestamp, serverTimestamp } from 'firebase/firestore'; 
@@ -52,14 +51,46 @@ const createUserDocument = async (firebaseUser: FirebaseUser, additionalData: Pa
   const snapshot = await getDoc(userRef);
 
   if (!snapshot.exists()) {
-    const { email, displayName, emailVerified } = firebaseUser;
-    const createdAt = serverTimestamp();
+    const { email, emailVerified } = firebaseUser;
+    const authDisplayName = firebaseUser.displayName; // displayName from Firebase Auth user object
+
+    const createdAt = Timestamp.now(); // Use Timestamp.now() for consistency as serverTimestamp might behave differently with relaxed rules
+
+    // Construct a reliable displayName from additionalData first
+    let calculatedDisplayName = email || ''; // Default to email if available
+    const fName = additionalData.firstName;
+    const lName = additionalData.lastName;
+
+    if (fName && fName.trim() !== "" && lName && lName.trim() !== "") {
+      calculatedDisplayName = `${fName.trim()} ${lName.trim()}`;
+    } else if (fName && fName.trim() !== "") {
+      calculatedDisplayName = fName.trim();
+    } else if (lName && lName.trim() !== "") {
+      calculatedDisplayName = lName.trim();
+    }
+    
+    // Determine final displayName:
+    // Prefer calculated one unless authDisplayName is valid and better than just the email.
+    let finalDisplayName = calculatedDisplayName;
+    if (authDisplayName && 
+        authDisplayName.trim() !== "" && 
+        authDisplayName.toLowerCase() !== "undefined undefined" &&
+        (calculatedDisplayName === email || calculatedDisplayName === '')) {
+      finalDisplayName = authDisplayName;
+    }
+    // If after all, finalDisplayName is empty or just spaces, fall back to a generic user or email
+    if (!finalDisplayName || finalDisplayName.trim() === "") {
+        finalDisplayName = email ? email.split('@')[0] : `User_${firebaseUser.uid.substring(0,5)}`;
+    }
+
+
     try {
-      await setDoc(userRef, {
+      const userDataToSet = {
+        // Start with additionalData, but ensure critical fields are correctly set/overridden
+        ...additionalData,
         uid: firebaseUser.uid,
         email,
-        displayName: displayName || `${additionalData.firstName} ${additionalData.lastName}` || email,
-        // photoURL is removed from direct management here
+        displayName: finalDisplayName.trim(),
         emailVerified,
         createdAt,
         updatedAt: createdAt,
@@ -67,11 +98,14 @@ const createUserDocument = async (firebaseUser: FirebaseUser, additionalData: Pa
         firstName: additionalData.firstName || '',
         lastName: additionalData.lastName || '',
         phoneNumber: additionalData.phoneNumber || null,
-        address: additionalData.address || null, 
+        address: additionalData.address || null,
         isAcceptingBookings: additionalData.role === 'barber' ? (additionalData.isAcceptingBookings !== undefined ? additionalData.isAcceptingBookings : true) : undefined,
-        fcmToken: null, 
-        ...additionalData,
-      });
+        fcmToken: null,
+      };
+      // Remove password_original_do_not_use if it exists in additionalData before setting to Firestore
+      delete (userDataToSet as any).password_original_do_not_use;
+
+      await setDoc(userRef, userDataToSet);
     } catch (error) {
       console.error("Error creating user document: ", error);
       throw error;
@@ -106,8 +140,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           const appUser: AppUser = {
             uid: firebaseUser.uid,
             email: firebaseUser.email || firestoreUser.email,
-            displayName: firebaseUser.displayName || firestoreUser.displayName,
-            // photoURL is removed
+            displayName: firestoreUser.displayName || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || `User_${firebaseUser.uid.substring(0,5)}`,
             emailVerified: firebaseUser.emailVerified,
             role: firestoreUser.role,
             firstName: firestoreUser.firstName,
@@ -132,12 +165,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
            const basicProfileData: Partial<AppUser> = {
               role: roleFromStorage,
            };
-          await createUserDocument(firebaseUser, basicProfileData);
+          await createUserDocument(firebaseUser, basicProfileData); // This will use the improved displayName logic
           const newUserDocSnap = await getDoc(userDocRef);
           if (newUserDocSnap.exists()) {
             const firestoreUser = newUserDocSnap.data() as AppUser;
-            const appUser: AppUser = {
-                uid: firebaseUser.uid, email: firebaseUser.email!, displayName: firebaseUser.displayName, emailVerified: firebaseUser.emailVerified,
+             const appUser: AppUser = {
+                uid: firebaseUser.uid, 
+                email: firebaseUser.email!, 
+                displayName: firestoreUser.displayName || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || `User_${firebaseUser.uid.substring(0,5)}`, 
+                emailVerified: firebaseUser.emailVerified,
                 ...firestoreUser 
             };
             setUser(appUser);
@@ -158,7 +194,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
 
     return () => unsubscribe();
-  }, [role]); 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Removed 'role' from dependency array to avoid re-runs that might clear a just-set role.
 
 
   const setRoleContextAndStorage = (newRole: UserRole) => {
@@ -177,6 +214,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const clearUserSession = () => {
     localStorage.removeItem(LOCAL_STORAGE_USER_KEY);
+    // Optionally, clear role from local storage on full sign out if desired
+    // localStorage.removeItem(LOCAL_STORAGE_ROLE_KEY);
+    // setRoleState(null); 
   };
 
   const registerWithEmailAndPassword = async (
@@ -199,7 +239,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         isAcceptingBookings: userRole === 'barber' ? (isAcceptingBookings !== undefined ? isAcceptingBookings : true) : undefined,
         fcmToken: null, 
       };
-      await createUserDocument(firebaseUser, firestoreData);
+      await createUserDocument(firebaseUser, firestoreData); // Will use improved displayName logic
 
       const userDocRef = doc(firestore, 'users', firebaseUser.uid);
       const userDocSnap = await getDoc(userDocRef);
@@ -230,6 +270,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsProcessingAuth(true);
     try {
       await signInWithEmailAndPassword(auth, email, password_original_do_not_use);
+      // onAuthStateChanged will handle setting user and role state
       toast({ title: "Login Successful!", description: "Welcome back!" });
     } catch (error: any) {
       console.error("AuthContext: Error signing in:", error);
@@ -248,12 +289,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsProcessingAuth(true);
     try {
       await firebaseSendPasswordResetEmail(auth, email);
+      // Toast is shown regardless of whether email exists for security reasons
+       toast({
+        title: "Check Your Email",
+        description: "If an account exists for this email, a password reset link has been sent.",
+      });
     } catch (error: any) {
       console.error("AuthContext: Error sending password reset email:", error);
-      if (error.code !== 'auth/user-not-found') { 
-         toast({ title: "Password Reset Error", description: error.message || "Could not send reset link. Please try again.", variant: "destructive" });
-      } 
-      throw error; 
+      // Avoid specific error messages like "user-not-found" to prevent email enumeration
+      toast({ title: "Password Reset", description: "If your email is registered, you'll receive a reset link shortly.", variant: "default" });
+      // No re-throw needed here, as we've informed the user.
     } finally {
       setIsProcessingAuth(false);
     }
@@ -267,6 +312,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         toast({ title: "Error", description: "Authentication error. Please re-login.", variant: "destructive" });
         throw new Error("User not authenticated or mismatched ID.");
     }
+    setIsProcessingAuth(true); // Added this
     try {
       const userRef = doc(firestore, 'users', userId);
       const dataToUpdate: any = { ...updates, updatedAt: Timestamp.now() };
@@ -276,6 +322,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       if (updates.address === '' || updates.address === undefined) {
         dataToUpdate.address = null;
+      }
+       // If firstName or lastName are updated, also update displayName
+      if (updates.firstName || updates.lastName) {
+        const currentData = user || (await getDoc(userRef)).data() as AppUser; // Fetch if user state not fresh
+        const newFirstName = updates.firstName !== undefined ? updates.firstName : currentData?.firstName;
+        const newLastName = updates.lastName !== undefined ? updates.lastName : currentData?.lastName;
+
+        if (newFirstName && newFirstName.trim() !== "" && newLastName && newLastName.trim() !== "") {
+            dataToUpdate.displayName = `${newFirstName.trim()} ${newLastName.trim()}`;
+        } else if (newFirstName && newFirstName.trim() !== "") {
+            dataToUpdate.displayName = newFirstName.trim();
+        } else if (newLastName && newLastName.trim() !== "") {
+            dataToUpdate.displayName = newLastName.trim();
+        } else {
+            dataToUpdate.displayName = currentData?.email?.split('@')[0] || `User_${userId.substring(0,5)}`;
+        }
       }
       
       await updateDoc(userRef, dataToUpdate);
@@ -293,10 +355,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (error: any) {
       console.error("AuthContext: Error updating user profile:", error);
       throw error;
-    } 
+    } finally {
+      setIsProcessingAuth(false); // Added this
+    }
   };
 
   const updateUserAcceptingBookings = async (userId: string, isAccepting: boolean) => {
+    setIsProcessingAuth(true);
     try {
       const userRef = doc(firestore, 'users', userId);
       await updateDoc(userRef, {
@@ -314,10 +379,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.error("AuthContext: Error updating isAcceptingBookings status:", error);
       toast({ title: "Update Error", description: error.message || "Could not update booking status.", variant: "destructive" });
       throw error;
+    } finally {
+      setIsProcessingAuth(false);
     }
   };
 
   const updateUserFCMToken = async (userId: string, token: string | null) => {
+    setIsProcessingAuth(true);
     try {
       const userRef = doc(firestore, 'users', userId);
       await updateDoc(userRef, {
@@ -335,6 +403,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.error("AuthContext: Error updating FCM token:", error);
       toast({ title: "Notification Error", description: "Could not update notification preference.", variant: "destructive" });
       throw error;
+    } finally {
+      setIsProcessingAuth(false);
     }
   };
 
@@ -343,6 +413,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsProcessingAuth(true);
     try {
       await firebaseSignOut(auth);
+      // User state will be set to null by onAuthStateChanged
+      // Role might persist in localStorage, which is fine for remembering preference
       toast({ title: "Signed Out", description: "You have been successfully signed out." });
     } catch (error: any) {
         console.error("AuthContext: Error signing out:", error);
@@ -382,3 +454,4 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
+
