@@ -4,39 +4,53 @@ import * as admin from "firebase-admin";
 
 // Initialize the Firebase Admin SDK.
 admin.initializeApp();
-
 const db = admin.firestore();
 
 // --- Configuration ---
-// MODIFIED FOR FASTER TESTING:
-const REMINDER_MINUTES_BEFORE = 2; // Send reminder 2 minutes before
-const REMINDER_WINDOW_MINUTES = 2; // Check a 2-minute window
+// TEMPORARY FASTER SETTINGS FOR TESTING:
+const REMINDER_MINUTES_BEFORE = 2; // Send reminder 2 mins before
+const REMINDER_WINDOW_MINUTES = 2; // Query for appointments in a 2-min window around the target
 
+/**
+ * A scheduled Cloud Function that sends push notification reminders for
+ * upcoming appointments.
+ */
 export const sendAppointmentReminders = onSchedule(
   {
-    // MODIFIED FOR FASTER TESTING:
-    schedule: "every 1 minutes", // Runs every minute
-    timeZone: "UTC",
+    schedule: "every 1 minutes", // Runs every minute FOR TESTING
+    timeZone: "Africa/Algiers", // User's preferred timezone for scheduling
   },
   async (event) => {
-    console.log(`Scheduled function triggered. Trigger time: ${event.scheduleTime}`);
+    console.log(`Function triggered by scheduler. Event scheduleTime (UTC): ${event.scheduleTime}, Event timeZone: ${event.timeZone}`);
 
     try {
-      const now = new Date(); // UTC by default on server
+      const now = new Date();
+      console.log(`Function's current Date() object: ${now.toString()} (This reflects the function server's perceived time and timezone)`);
 
-      const windowStart = new Date(now.getTime() + REMINDER_MINUTES_BEFORE * 60 * 1000);
-      const windowEnd = new Date(windowStart.getTime() + REMINDER_WINDOW_MINUTES * 60 * 1000);
+      const windowStart = new Date(now.getTime() +
+        REMINDER_MINUTES_BEFORE * 60 * 1000);
+      const windowEnd = new Date(windowStart.getTime() +
+        REMINDER_WINDOW_MINUTES * 60 * 1000);
 
-      const reminderWindowStartTimestamp = admin.firestore.Timestamp.fromDate(windowStart);
-      const reminderWindowEndTimestamp = admin.firestore.Timestamp.fromDate(windowEnd);
+      const reminderWindowStartTimestamp = admin.firestore.Timestamp
+        .fromDate(windowStart);
+      const reminderWindowEndTimestamp = admin.firestore.Timestamp
+        .fromDate(windowEnd);
 
-      console.log(`Current UTC time: ${now.toISOString()}`);
-      console.log(`Querying for appointments with 'appointmentTimestamp' (UTC) between:`);
-      console.log(`  Window Start ISO: ${windowStart.toISOString()}`);
-      console.log(`  Window End ISO: ${windowEnd.toISOString()}`);
-      console.log(`  Query Start Timestamp (seconds.nanos): ${reminderWindowStartTimestamp.seconds}.${reminderWindowStartTimestamp.nanoseconds}`);
-      console.log(`  Query End Timestamp (seconds.nanos): ${reminderWindowEndTimestamp.seconds}.${reminderWindowEndTimestamp.nanoseconds}`);
+      console.log(`Current time (UTC from now.toISOString()): ${now.toISOString()}`);
+      console.log("Calculated Query Window (UTC from Timestamps):");
+      console.log(`  Start: ${reminderWindowStartTimestamp.toDate().toISOString()} (Timestamp sec: ${reminderWindowStartTimestamp.seconds})`);
+      console.log(`  End:   ${reminderWindowEndTimestamp.toDate().toISOString()} (Timestamp sec: ${reminderWindowEndTimestamp.seconds})`);
+      console.log("Checking for appointments with 'appointmentTimestamp' (UTC) between these values.");
 
+
+      // --- Important: Firestore Index Required! ---
+      // Collection ID: 'appointments'
+      // Fields to index:
+      // 1. status (Ascending)
+      // 2. reminderSent (Ascending)
+      // 3. appointmentTimestamp (Ascending)
+      // Query scope: Collection
       const appointmentsSnapshot = await db.collection("appointments")
         .where("status", "==", "upcoming")
         .where("reminderSent", "==", false)
@@ -50,21 +64,17 @@ export const sendAppointmentReminders = onSchedule(
       }
 
       console.log(`Found ${appointmentsSnapshot.docs.length} appointments to remind.`);
+      appointmentsSnapshot.forEach(doc => {
+        const appt = doc.data();
+        const apptTimestamp = (appt.appointmentTimestamp as admin.firestore.Timestamp);
+        console.log(`  - Found Appt ID: ${doc.id}, Timestamp: ${apptTimestamp.toDate().toISOString()} (sec: ${apptTimestamp.seconds}), Cust: ${appt.customerName}`);
+      });
+
 
       const reminderPromises: Promise<void>[] = [];
       for (const doc of appointmentsSnapshot.docs) {
         const appointment = doc.data();
         const appointmentId = doc.id;
-
-        // Log the timestamp of the found appointment for comparison
-        const appTimestamp = appointment.appointmentTimestamp as admin.firestore.Timestamp | undefined;
-        if (appTimestamp) {
-            console.log(`  Processing Appointment ID: ${appointmentId}, Timestamp (seconds.nanos): ${appTimestamp.seconds}.${appTimestamp.nanoseconds}, Status: ${appointment.status}, ReminderSent: ${appointment.reminderSent === true}`);
-        } else {
-            console.log(`  Processing Appointment ID: ${appointmentId} - (Timestamp missing or null), Status: ${appointment.status}, ReminderSent: ${appointment.reminderSent === true}`);
-        }
-
-
         const { customerId, serviceName, barberName, startTime } = appointment;
 
         if (!customerId) {
@@ -94,7 +104,7 @@ async function processAndSendReminder(
   appointmentDetails: {
     serviceName: string;
     barberName: string;
-    startTime: string;
+    startTime: string; // This is the local time string, e.g., "10:00 AM"
   }
 ): Promise<void> {
   const userDocRef = db.collection("users").doc(customerId);
@@ -104,22 +114,26 @@ async function processAndSendReminder(
     const userDocSnap = await userDocRef.get();
     if (!userDocSnap.exists) {
       console.warn(`User document not found for customerId: ${customerId} (Appointment ID: ${appointmentId})`);
-      await appointmentDocRef.update({ reminderSent: true, reminderSentAt: admin.firestore.FieldValue.serverTimestamp(), reminderNote: "User not found" });
+      await appointmentDocRef.update({reminderSent: true, reminderSkippedReason: "User document not found"});
       return;
     }
 
-    const userData = userDocSnap.data() as { fcmToken?: string | null; firstName?: string; };
+    const userData = userDocSnap.data() as {
+      fcmToken?: string | null;
+      firstName?: string;
+    };
     const fcmToken = userData.fcmToken;
 
     if (!fcmToken) {
       console.log(`No FCM token for customer ${customerId} (Appt ID: ${appointmentId}). Marking reminderSent=true.`);
-      await appointmentDocRef.update({ reminderSent: true, reminderSentAt: admin.firestore.FieldValue.serverTimestamp(), reminderNote: "No FCM token" });
+      await appointmentDocRef.update({reminderSent: true, reminderSkippedReason: "No FCM token"});
       return;
     }
 
     const customerFirstName = userData.firstName || "Customer";
     const {serviceName, barberName, startTime} = appointmentDetails;
 
+    // The reminder message uses the local startTime string from the appointment
     const messagePayload = {
       notification: {
         title: "Appointment Reminder!",
@@ -132,17 +146,19 @@ async function processAndSendReminder(
     await admin.messaging().send(messagePayload);
     console.log(`Successfully sent message for appointment ${appointmentId}.`);
 
-    await appointmentDocRef.update({ reminderSent: true, reminderSentAt: admin.firestore.FieldValue.serverTimestamp(), reminderNote: "Reminder sent successfully" });
+    await appointmentDocRef.update({reminderSent: true});
     console.log(`Updated 'reminderSent' flag for appointment ${appointmentId}.`);
 
   } catch (error: unknown) {
     console.error(`Error processing reminder for appointment ${appointmentId}:`, error);
     const errorCode = (error as {code?: string}).code;
-    if (errorCode === "messaging/registration-token-not-registered" || errorCode === "messaging/invalid-registration-token") {
-      console.log(`FCM token for user ${customerId} is invalid. Removing it and marking reminder as sent (to avoid retries on bad token).`);
-      await userDocRef.update({ fcmToken: admin.firestore.FieldValue.delete() });
-      await appointmentDocRef.update({ reminderSent: true, reminderSentAt: admin.firestore.FieldValue.serverTimestamp(), reminderNote: "FCM token invalid, removed token" });
+    if (errorCode === "messaging/registration-token-not-registered" ||
+        errorCode === "messaging/invalid-registration-token") {
+      console.log(`FCM token for user ${customerId} is invalid. Removing it.`);
+      await userDocRef.update({fcmToken: admin.firestore.FieldValue.delete()});
+      // Mark as sent even if token was invalid, to avoid retrying with a known bad token
+      await appointmentDocRef.update({reminderSent: true, reminderSkippedReason: "Invalid FCM token"});
     }
-    // For other errors, don't set reminderSent, allowing retry.
+    // For other errors, don't mark reminderSent, allow retry.
   }
 }
