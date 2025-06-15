@@ -490,6 +490,14 @@ export default function BookingPage() {
       const finalJsDate = new Date(selectedDate); // selectedDate is Date obj for the day at 00:00
       finalJsDate.setHours(hours, minutes, 0, 0);
       const appointmentTimestampValue = Timestamp.fromDate(finalJsDate);
+      
+      // Diagnostic Log
+      console.log('[BookingPage] Confirming Booking - Details:');
+      console.log(`  Selected Date (JS Object): ${selectedDate.toString()}`);
+      console.log(`  Selected Time Slot (Local): ${appointmentStartTimeStr}`);
+      console.log(`  Final JS Date for Timestamp (Local interpretation by JS): ${finalJsDate.toString()}`);
+      console.log(`  Final JS Date (ISO UTC for Timestamp.fromDate): ${finalJsDate.toISOString()}`);
+      console.log(`  Generated appointmentTimestampValue (UTC from Firestore): ${appointmentTimestampValue.toDate().toISOString()}`);
 
 
       const newAppointmentData: Omit<Appointment, 'id'> = {
