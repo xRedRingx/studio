@@ -52,7 +52,7 @@ const createUserDocument = async (firebaseUser: FirebaseUser, additionalData: Pa
 
   if (!snapshot.exists()) {
     const { email, emailVerified } = firebaseUser;
-    const authDisplayName = firebaseUser.displayName;
+    const authDisplayName = firebaseUser.displayName; // displayName from Firebase Auth User
     const createdAt = Timestamp.now();
 
     let calculatedDisplayName = '';
@@ -69,17 +69,22 @@ const createUserDocument = async (firebaseUser: FirebaseUser, additionalData: Pa
 
     let finalDisplayName = calculatedDisplayName;
 
+    // Fallback to authDisplayName if it's sensible and our calculated one isn't better than just email
     if ((!finalDisplayName || finalDisplayName.trim() === "") && authDisplayName && authDisplayName.trim() !== "" && authDisplayName.toLowerCase() !== "undefined undefined") {
-      finalDisplayName = authDisplayName;
+        if (!(calculatedDisplayName && calculatedDisplayName.trim() !== "" && calculatedDisplayName.includes('@'))) { // Don't override if calculated is an email
+             finalDisplayName = authDisplayName;
+        }
     }
     
+    // Final fallback if still no good display name
     if (!finalDisplayName || finalDisplayName.trim() === "" || finalDisplayName.toLowerCase() === "undefined undefined") {
         finalDisplayName = email ? email.split('@')[0] : `User_${firebaseUser.uid.substring(0,5)}`;
     }
 
 
     try {
-      const userDataToSet: Partial<AppUser> = {
+      // Use a temporary object with a flexible type for construction
+      const userDataToSetTemp: { [key: string]: any } = {
         uid: firebaseUser.uid,
         email,
         displayName: finalDisplayName.trim(),
@@ -87,20 +92,29 @@ const createUserDocument = async (firebaseUser: FirebaseUser, additionalData: Pa
         createdAt,
         updatedAt: createdAt,
         role: additionalData.role || null,
-        firstName: additionalData.firstName || '',
-        lastName: additionalData.lastName || '',
+        firstName: additionalData.firstName, // Use directly
+        lastName: additionalData.lastName,   // Use directly
         phoneNumber: additionalData.phoneNumber || null,
         address: additionalData.address || null,
-        fcmToken: null,
+        fcmToken: null, // Initialize fcmToken
       };
 
       if (additionalData.role === 'barber') {
-        userDataToSet.isAcceptingBookings = additionalData.isAcceptingBookings !== undefined ? additionalData.isAcceptingBookings : true;
+        userDataToSetTemp.isAcceptingBookings = additionalData.isAcceptingBookings !== undefined ? additionalData.isAcceptingBookings : true;
       }
       
-      delete (userDataToSet as any).password_original_do_not_use;
+      // Remove any top-level properties that are explicitly undefined
+      // to prevent Firestore "Unsupported field value: undefined" error.
+      Object.keys(userDataToSetTemp).forEach(key => {
+        if (userDataToSetTemp[key] === undefined) {
+          delete userDataToSetTemp[key];
+        }
+      });
+      
+      delete (userDataToSetTemp as any).password_original_do_not_use;
 
-      await setDoc(userRef, userDataToSet);
+
+      await setDoc(userRef, userDataToSetTemp as Partial<AppUser>); // Cast back to Partial<AppUser>
     } catch (error) {
       console.error("Error creating user document: ", error);
       throw error;
@@ -228,7 +242,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         phoneNumber: phoneNumber || null,
         address: address || null,
         email,
-        fcmToken: null,
+        // fcmToken will be initialized in createUserDocument
       };
       if (userRole === 'barber') {
         firestoreData.isAcceptingBookings = isAcceptingBookings !== undefined ? isAcceptingBookings : true;
@@ -314,32 +328,44 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (updates.address === '' || updates.address === undefined) {
         dataToUpdate.address = null;
       }
-      if (updates.firstName || updates.lastName) {
-        const currentData = user || (await getDoc(userRef)).data() as AppUser;
-        const newFirstName = updates.firstName !== undefined ? updates.firstName : currentData?.firstName;
-        const newLastName = updates.lastName !== undefined ? updates.lastName : currentData?.lastName;
-        let newDisplayName = '';
 
-        if (newFirstName && newFirstName.trim() !== "" && newLastName && newLastName.trim() !== "") {
-            newDisplayName = `${newFirstName.trim()} ${newLastName.trim()}`;
-        } else if (newFirstName && newFirstName.trim() !== "") {
-            newDisplayName = newFirstName.trim();
-        } else if (newLastName && newLastName.trim() !== "") {
-            newDisplayName = newLastName.trim();
+      // Update displayName if firstName or lastName are being changed
+      if (updates.firstName !== undefined || updates.lastName !== undefined) {
+        const currentDataSnap = await getDoc(userRef); // Get current data for robust displayName update
+        const currentData = currentDataSnap.data() as AppUser | undefined;
+
+        const newFirstName = updates.firstName !== undefined ? updates.firstName.trim() : currentData?.firstName?.trim();
+        const newLastName = updates.lastName !== undefined ? updates.lastName.trim() : currentData?.lastName?.trim();
+        
+        let newDisplayName = '';
+        if (newFirstName && newLastName) {
+            newDisplayName = `${newFirstName} ${newLastName}`;
+        } else if (newFirstName) {
+            newDisplayName = newFirstName;
+        } else if (newLastName) {
+            newDisplayName = newLastName;
         } else {
             newDisplayName = currentData?.email?.split('@')[0] || `User_${userId.substring(0,5)}`;
         }
         dataToUpdate.displayName = newDisplayName.trim();
       }
 
+
       await updateDoc(userRef, dataToUpdate);
 
       setUser(prevUser => {
         if (!prevUser) return null;
+        const updatedUserFields = { ...prevUser, ...dataToUpdate };
+        // Ensure Timestamp objects are correctly handled for local state if they come from dataToUpdate
+        if (dataToUpdate.updatedAt instanceof Timestamp) {
+            updatedUserFields.updatedAt = dataToUpdate.updatedAt;
+        }
+
         const updatedUser = {
-            ...prevUser,
-            ...dataToUpdate,
-            updatedAt: dataToUpdate.updatedAt
+            ...prevUser, // Spread existing user
+            ...updates, // Spread specific updates passed to function
+            displayName: dataToUpdate.displayName || prevUser.displayName, // Use newly constructed or existing
+            updatedAt: dataToUpdate.updatedAt, // Always use the new server timestamp
         };
         persistUserSession(updatedUser);
         return updatedUser;
@@ -444,6 +470,3 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
-
-
-  
