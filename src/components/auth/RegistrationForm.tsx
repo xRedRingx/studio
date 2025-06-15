@@ -56,16 +56,17 @@ export default function RegistrationForm({ role }: RegistrationFormProps) {
   }, [user, role, router]);
 
   async function onSubmit(values: UserDetailsFormValues) {
+    console.log("RegistrationForm onSubmit values:", JSON.stringify(values, null, 2)); // Added for debugging
     try {
-      const userDetailsForApi: Omit<AppUser, 'uid' | 'createdAt' | 'updatedAt' | 'displayName' | 'emailVerified' | 'fcmToken' | 'photoURL'> & { password_original_do_not_use: string } = {
+      const userDetailsForApi: Omit<AppUser, 'uid' | 'createdAt' | 'updatedAt' | 'displayName' | 'emailVerified' | 'fcmToken'> & { password_original_do_not_use: string } = {
         firstName: values.firstName,
         lastName: values.lastName,
         email: values.email,
         phoneNumber: values.phoneNumber || null,
         address: values.address || null,
-        password_original_do_not_use: values.password, 
+        password_original_do_not_use: values.password,
         role: role,
-        isAcceptingBookings: role === 'barber' ? true : undefined, 
+        isAcceptingBookings: role === 'barber' ? true : undefined,
       };
       await registerWithEmailAndPassword(userDetailsForApi);
     } catch (error) {

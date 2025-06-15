@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { ReactNode } from 'react';
@@ -59,20 +58,27 @@ const createUserDocument = async (firebaseUser: FirebaseUser, additionalData: Pa
         role: additionalRole,
         firstName: additionalFirstName,
         lastName: additionalLastName,
-        phoneNumber: additionalPhoneNumber, // This will be string or null from earlier processing
-        address: additionalAddress,         // This will be string or null from earlier processing
+        phoneNumber: additionalPhoneNumber,
+        address: additionalAddress,
         isAcceptingBookings: additionalIsAcceptingBookings
     } = additionalData;
 
+    // Process firstName and lastName to ensure they're not empty strings
+    const processedFirstName = additionalFirstName && additionalFirstName.trim() !== "" ? additionalFirstName.trim() : null;
+    const processedLastName = additionalLastName && additionalLastName.trim() !== "" ? additionalLastName.trim() : null;
+    
+    // Process phoneNumber and address to ensure empty strings become null
+    const processedPhoneNumber = additionalPhoneNumber && additionalPhoneNumber.trim() !== "" ? additionalPhoneNumber.trim() : null;
+    const processedAddress = additionalAddress && additionalAddress.trim() !== "" ? additionalAddress.trim() : null;
 
     let calculatedDisplayName = '';
-    // Use additionalFirstName and additionalLastName directly for display name calculation
-    if (additionalFirstName && additionalFirstName.trim() !== "" && additionalLastName && additionalLastName.trim() !== "") {
-      calculatedDisplayName = `${additionalFirstName.trim()} ${additionalLastName.trim()}`;
-    } else if (additionalFirstName && additionalFirstName.trim() !== "") {
-      calculatedDisplayName = additionalFirstName.trim();
-    } else if (additionalLastName && additionalLastName.trim() !== "") {
-      calculatedDisplayName = additionalLastName.trim();
+    // Use processed names for display name calculation
+    if (processedFirstName && processedLastName) {
+      calculatedDisplayName = `${processedFirstName} ${processedLastName}`;
+    } else if (processedFirstName) {
+      calculatedDisplayName = processedFirstName;
+    } else if (processedLastName) {
+      calculatedDisplayName = processedLastName;
     }
 
     let finalDisplayName = calculatedDisplayName;
@@ -87,36 +93,35 @@ const createUserDocument = async (firebaseUser: FirebaseUser, additionalData: Pa
         finalDisplayName = email ? email.split('@')[0] : `User_${firebaseUser.uid.substring(0,5)}`;
     }
 
-
     try {
-      const userDataToSetTemp: { [key: string]: any } = {
+      const userDataToSet: { [key: string]: any } = {
         uid: firebaseUser.uid,
         email,
         displayName: finalDisplayName.trim(),
         emailVerified,
         createdAt,
         updatedAt: createdAt,
-        role: additionalRole || null,
-        firstName: additionalFirstName && additionalFirstName.trim() !== "" ? additionalFirstName.trim() : null,
-        lastName: additionalLastName && additionalLastName.trim() !== "" ? additionalLastName.trim() : null,
-        phoneNumber: additionalPhoneNumber, // Already string or null
-        address: additionalAddress,         // Already string or null
         fcmToken: null,
       };
 
-      if (additionalRole === 'barber') {
-        userDataToSetTemp.isAcceptingBookings = additionalIsAcceptingBookings !== undefined ? additionalIsAcceptingBookings : true;
+      // Add role only if it exists (convert null to undefined for Firestore)
+      if (additionalRole !== null && additionalRole !== undefined) {
+        userDataToSet.role = additionalRole;
       }
-      
-      Object.keys(userDataToSetTemp).forEach(key => {
-        if (userDataToSetTemp[key] === undefined) {
-          delete userDataToSetTemp[key];
-        }
-      });
-      
-      delete (userDataToSetTemp as any).password_original_do_not_use;
 
-      await setDoc(userRef, userDataToSetTemp as Partial<AppUser>);
+      // Add optional fields only if they have values
+      if (processedFirstName) userDataToSet.firstName = processedFirstName;
+      if (processedLastName) userDataToSet.lastName = processedLastName;
+      if (processedPhoneNumber) userDataToSet.phoneNumber = processedPhoneNumber;
+      if (processedAddress) userDataToSet.address = processedAddress;
+
+      if (additionalRole === 'barber') {
+        userDataToSet.isAcceptingBookings = additionalIsAcceptingBookings !== undefined ? additionalIsAcceptingBookings : true;
+      }
+
+      console.log('Creating user document with data:', userDataToSet); // Debug log
+
+      await setDoc(userRef, userDataToSet as Partial<AppUser>);
     } catch (error) {
       console.error("Error creating user document: ", error);
       throw error;
@@ -173,19 +178,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         } else {
            const roleFromStorage = localStorage.getItem(LOCAL_STORAGE_ROLE_KEY) as UserRole | null;
-           const basicProfileData: Partial<AppUser> = {
-              role: roleFromStorage,
-           };
+           const basicProfileData: Partial<AppUser> = {};
+           
+           // Only add role if it exists (avoid null assignment)
+           if (roleFromStorage) {
+             basicProfileData.role = roleFromStorage;
+           }
+
           await createUserDocument(firebaseUser, basicProfileData);
           const newUserDocSnap = await getDoc(userDocRef);
           if (newUserDocSnap.exists()) {
             const firestoreUser = newUserDocSnap.data() as AppUser;
              const appUser: AppUser = {
-                uid: firebaseUser.uid,
-                email: firebaseUser.email!,
+                ...firestoreUser, // Spread firestoreUser first
+                uid: firebaseUser.uid, // Then override specific fields
+                email: firebaseUser.email!, // Override email
                 displayName: firestoreUser.displayName || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || `User_${firebaseUser.uid.substring(0,5)}`,
                 emailVerified: firebaseUser.emailVerified,
-                ...firestoreUser
             };
             setUser(appUser);
             persistUserSession(appUser);
@@ -233,30 +242,41 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsProcessingAuth(true);
     const { email, password_original_do_not_use, firstName, lastName, role: userRole, phoneNumber, address, isAcceptingBookings } = userDetails;
 
+    console.log('Registration data received:', { email, firstName, lastName, userRole, phoneNumber, address, isAcceptingBookings }); // Debug log
+
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password_original_do_not_use);
       const firebaseUser = userCredential.user;
 
+      // Process the data before passing to createUserDocument
       const firestoreData: Partial<AppUser> = {
-        firstName,
-        lastName,
-        role: userRole,
-        phoneNumber: phoneNumber, // Will be string or null from form processing
-        address: address,         // Will be string or null from form processing
         email,
       };
+
+      // Only add fields that have values
+      if (firstName && firstName.trim() !== "") firestoreData.firstName = firstName.trim();
+      if (lastName && lastName.trim() !== "") firestoreData.lastName = lastName.trim();
+      if (userRole) firestoreData.role = userRole;
+      if (phoneNumber && phoneNumber.trim() !== "") firestoreData.phoneNumber = phoneNumber.trim();
+      if (address && address.trim() !== "") firestoreData.address = address.trim();
+
       if (userRole === 'barber') {
         firestoreData.isAcceptingBookings = isAcceptingBookings !== undefined ? isAcceptingBookings : true;
       }
 
+      console.log('Processed firestore data:', firestoreData); // Debug log
+
       await createUserDocument(firebaseUser, firestoreData);
 
+      // Fetch the created user document
       const userDocRef = doc(firestore, 'users', firebaseUser.uid);
       const userDocSnap = await getDoc(userDocRef);
       if (!userDocSnap.exists()) {
         throw new Error("Failed to retrieve newly created user document from Firestore.");
       }
       const createdUser = userDocSnap.data() as AppUser;
+
+      console.log('Created user from Firestore:', createdUser); // Debug log
 
       setUser(createdUser);
       if (createdUser.role) setRoleContextAndStorage(createdUser.role);
@@ -475,4 +495,3 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
-
