@@ -370,6 +370,11 @@ export default function BarberDashboardPage() {
     const appointmentStartTime = minutesToTime(foundSlotStartMinutes);
     const appointmentEndTime = minutesToTime(foundSlotStartMinutes + serviceDuration);
 
+    // Construct appointmentTimestamp for walk-in
+    const finalJsDateForWalkin = new Date(todayDateStr + "T00:00:00"); // Start with today's date
+    finalJsDateForWalkin.setHours(Math.floor(foundSlotStartMinutes / 60), foundSlotStartMinutes % 60, 0, 0);
+    const appointmentTimestampValue = Timestamp.fromDate(finalJsDateForWalkin);
+
     try {
       const newAppointmentData: Omit<Appointment, 'id'> = {
         barberId: user.uid,
@@ -382,6 +387,7 @@ export default function BarberDashboardPage() {
         date: todayDateStr,
         startTime: appointmentStartTime,
         endTime: appointmentEndTime, // Original estimated end time
+        appointmentTimestamp: appointmentTimestampValue, // Save the new timestamp
         status: 'in-progress', // Walk-ins start as in-progress
         createdAt: nowTimestamp,
         updatedAt: nowTimestamp,
@@ -546,3 +552,4 @@ export default function BarberDashboardPage() {
     </ProtectedPage>
   );
 }
+

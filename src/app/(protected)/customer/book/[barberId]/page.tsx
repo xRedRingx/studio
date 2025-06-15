@@ -473,11 +473,24 @@ export default function BookingPage() {
     }
 
     try {
-      const appointmentDate = formatDateToYYYYMMDD(selectedDate);
-      const appointmentStartTime = selectedTimeSlot;
+      const appointmentDateStr = formatDateToYYYYMMDD(selectedDate);
+      const appointmentStartTimeStr = selectedTimeSlot;
       const serviceDuration = selectedService.duration;
-      const appointmentEndTime = minutesToTime(timeToMinutes(appointmentStartTime) + serviceDuration);
+      const appointmentEndTimeStr = minutesToTime(timeToMinutes(appointmentStartTimeStr) + serviceDuration);
       const now = Timestamp.now();
+
+      // Construct appointmentTimestamp
+      const [timePart, modifier] = appointmentStartTimeStr.split(' ');
+      let [hours, minutes] = timePart.split(':').map(Number);
+      if (modifier.toUpperCase() === 'PM' && hours !== 12) {
+        hours += 12;
+      } else if (modifier.toUpperCase() === 'AM' && hours === 12) { // Midnight case
+        hours = 0;
+      }
+      const finalJsDate = new Date(selectedDate); // selectedDate is Date obj for the day at 00:00
+      finalJsDate.setHours(hours, minutes, 0, 0);
+      const appointmentTimestampValue = Timestamp.fromDate(finalJsDate);
+
 
       const newAppointmentData: Omit<Appointment, 'id'> = {
         barberId: barber.uid, 
@@ -487,9 +500,10 @@ export default function BookingPage() {
         serviceId: selectedService.id,
         serviceName: selectedService.name,
         price: selectedService.price,
-        date: appointmentDate,
-        startTime: appointmentStartTime,
-        endTime: appointmentEndTime,
+        date: appointmentDateStr,
+        startTime: appointmentStartTimeStr,
+        endTime: appointmentEndTimeStr,
+        appointmentTimestamp: appointmentTimestampValue, // Save the new timestamp
         status: 'upcoming', // Initial status
         createdAt: now,
         updatedAt: now,
@@ -855,3 +869,4 @@ export default function BookingPage() {
     </ProtectedPage>
   );
 }
+

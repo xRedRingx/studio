@@ -69,6 +69,7 @@ export interface Appointment {
   date: string; // YYYY-MM-DD
   startTime: string; // e.g., "10:00 AM"
   endTime: string; // Original estimated end time, e.g., "10:30 AM"
+  appointmentTimestamp: Timestamp | null; // New field for combined date/time
   status: AppointmentStatus;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
@@ -89,3 +90,4 @@ export interface UnavailableDate {
   reason?: string;
   createdAt?: Timestamp;
 }
+
