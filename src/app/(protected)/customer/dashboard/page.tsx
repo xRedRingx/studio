@@ -10,7 +10,7 @@ import { firestore } from '@/firebase/config';
 import { collection, query, where, getDocs, orderBy, Timestamp, doc, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { CalendarDays, Clock, Scissors, Eye, XCircle, Search, UserCircle, Play, CheckSquare, LogIn } from 'lucide-react';
+import { CalendarDays, Clock, Scissors, Eye, XCircle, Search, UserCircle, Play, CheckSquare, LogIn, History } from 'lucide-react';
 import Link from 'next/link';
 import {
   AlertDialog,
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { getItemWithTimestampRevival, setItemWithTimestampConversion, LS_MY_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD, getSimpleItem, setSimpleItem, LS_AVAILABLE_BARBERS_KEY_CUSTOMER_DASHBOARD } from '@/lib/localStorageUtils';
 
+const LS_PAST_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD = 'customer_dashboard_past_appointments';
 
 const getTodayDateString = () => {
   return new Date().toISOString().split('T')[0];
@@ -44,7 +45,8 @@ const timeToMinutes = (timeStr: string): number => {
 export default function CustomerDashboardPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [myAppointments, setMyAppointments] = useState<Appointment[]>([]);
+  const [activeAppointments, setActiveAppointments] = useState<Appointment[]>([]);
+  const [pastAppointments, setPastAppointments] = useState<Appointment[]>([]);
   const [isLoadingAppointments, setIsLoadingAppointments] = useState(true);
   const [availableBarbers, setAvailableBarbers] = useState<AppUser[]>([]);
   const [isLoadingBarbers, setIsLoadingBarbers] = useState(true);
@@ -58,11 +60,18 @@ export default function CustomerDashboardPage() {
   useEffect(() => {
     setToday(getTodayDateString());
     if (typeof window !== 'undefined') { 
-        const cachedMyAppointments = getItemWithTimestampRevival<Appointment[]>(LS_MY_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD);
-        if (cachedMyAppointments) {
-            setMyAppointments(cachedMyAppointments);
-            setIsLoadingAppointments(false);
+        const cachedActiveAppointments = getItemWithTimestampRevival<Appointment[]>(LS_MY_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD);
+        if (cachedActiveAppointments) {
+            setActiveAppointments(cachedActiveAppointments);
         }
+        const cachedPastAppointments = getItemWithTimestampRevival<Appointment[]>(LS_PAST_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD);
+        if (cachedPastAppointments) {
+            setPastAppointments(cachedPastAppointments);
+        }
+        if (cachedActiveAppointments || cachedPastAppointments) {
+             setIsLoadingAppointments(false);
+        }
+
         const cachedAvailableBarbers = getSimpleItem<AppUser[]>(LS_AVAILABLE_BARBERS_KEY_CUSTOMER_DASHBOARD);
         if (cachedAvailableBarbers) {
             setAvailableBarbers(cachedAvailableBarbers);
@@ -80,7 +89,8 @@ export default function CustomerDashboardPage() {
       const q = query(
         appointmentsCollection,
         where('customerId', '==', user.uid),
-        orderBy('date', 'asc'),
+        orderBy('date', 'desc'), // Order by date descending for easier separation
+        orderBy('startTime', 'desc') // Then by time
       );
       const querySnapshot = await getDocs(q);
       const fetchedAppointments: Appointment[] = [];
@@ -88,17 +98,30 @@ export default function CustomerDashboardPage() {
         fetchedAppointments.push({ id: doc.id, ...doc.data() } as Appointment);
       });
 
-      const activeAppointments = fetchedAppointments
+      const active = fetchedAppointments
         .filter(app => app.status !== 'completed' && app.status !== 'cancelled') 
-        .sort((a, b) => {
+        .sort((a, b) => { // Sort active ascending
           if (a.date === b.date) {
             return timeToMinutes(a.startTime) - timeToMinutes(b.startTime);
           }
           return a.date.localeCompare(b.date);
         });
+      
+      const past = fetchedAppointments
+        .filter(app => app.status === 'completed' || app.status === 'cancelled')
+        .sort((a,b) => { // Keep past descending (most recent first)
+            if (a.date === b.date) {
+                return timeToMinutes(b.startTime) - timeToMinutes(a.startTime);
+            }
+            return b.date.localeCompare(a.date);
+        });
 
-      setMyAppointments(activeAppointments);
-      setItemWithTimestampConversion(LS_MY_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD, activeAppointments);
+
+      setActiveAppointments(active);
+      setPastAppointments(past);
+      setItemWithTimestampConversion(LS_MY_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD, active);
+      setItemWithTimestampConversion(LS_PAST_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD, past);
+
     } catch (error) {
       console.error("Error fetching appointments:", error);
       toast({ title: "Error", description: "Could not fetch your appointments.", variant: "destructive" });
@@ -120,7 +143,7 @@ export default function CustomerDashboardPage() {
     let successMessage = "";
 
     try {
-      const currentAppointment = myAppointments.find(app => app.id === appointmentId);
+      const currentAppointment = activeAppointments.find(app => app.id === appointmentId);
       if (!currentAppointment) {
         toast({ title: "Error", description: "Appointment not found.", variant: "destructive" });
         setIsUpdatingAppointment(null);
@@ -173,14 +196,9 @@ export default function CustomerDashboardPage() {
       }
 
       await updateDoc(appointmentRef, updateData);
-
-      setMyAppointments(prev => {
-        const updatedList = prev.map(app =>
-          app.id === appointmentId ? { ...app, ...updateData, status: newStatus || app.status } : app
-        ).filter(app => app.status !== 'completed' && app.status !== 'cancelled'); // Remove completed/cancelled from active list
-        setItemWithTimestampConversion(LS_MY_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD, updatedList);
-        return updatedList;
-      });
+      
+      // Refetch all appointments to update both lists correctly
+      fetchMyAppointments(); 
       toast({ title: "Success", description: successMessage || "Appointment updated." });
 
     } catch (error) {
@@ -249,11 +267,8 @@ export default function CustomerDashboardPage() {
         updatedAt: Timestamp.now(),
       });
       
-      setMyAppointments(prev => {
-        const updated = prev.filter(app => app.id !== appointmentToCancel.id);
-        setItemWithTimestampConversion(LS_MY_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD, updated);
-        return updated;
-      });
+      // Refetch all appointments to update both lists
+      fetchMyAppointments(); 
       toast({ title: "Appointment Cancelled", description: "Your appointment has been successfully cancelled." });
     } catch (error) {
       console.error("Error cancelling appointment:", error);
@@ -327,12 +342,12 @@ export default function CustomerDashboardPage() {
             <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage your check-ins and service completions.</CardDescription>
           </CardHeader>
           <CardContent className="p-4 md:p-6">
-            {(isLoadingAppointments && !myAppointments.length) ? (
+            {(isLoadingAppointments && !activeAppointments.length && !pastAppointments.length) ? (
               <div className="flex items-center justify-center py-6">
                 <LoadingSpinner className="h-8 w-8 text-primary" />
                 <p className="ml-3 text-base">Loading your appointments...</p>
               </div>
-            ) : myAppointments.length === 0 ? (
+            ) : activeAppointments.length === 0 ? (
               <div className="text-center py-6 space-y-3">
                 <CalendarDays className="mx-auto h-12 w-12 text-muted-foreground" />
                 <p className="text-base text-gray-500 dark:text-gray-400">You have no active appointments.</p>
@@ -343,7 +358,7 @@ export default function CustomerDashboardPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {myAppointments.map(app => (
+                {activeAppointments.map(app => (
                   <Card key={app.id} className="shadow-md rounded-lg border overflow-hidden hover:shadow-lg transition-shadow duration-200">
                     <CardContent className="p-4 grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 items-start">
                       <div className="md:col-span-2 space-y-1.5">
@@ -389,6 +404,62 @@ export default function CustomerDashboardPage() {
             )}
           </CardContent>
         </Card>
+
+        <Card className="border-none shadow-lg rounded-xl overflow-hidden">
+          <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-card via-muted/10 to-card">
+            <CardTitle className="text-xl font-bold flex items-center"><History className="mr-2 h-5 w-5 text-primary"/> Appointment History</CardTitle>
+            <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">View your past completed or cancelled appointments.</CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 md:p-6">
+            {(isLoadingAppointments && !pastAppointments.length && !activeAppointments.length) ? ( // Show loading only if both are empty and loading
+              <div className="flex items-center justify-center py-6">
+                <LoadingSpinner className="h-8 w-8 text-primary" />
+                <p className="ml-3 text-base">Loading history...</p>
+              </div>
+            ) : pastAppointments.length === 0 ? (
+              <p className="text-base text-gray-500 dark:text-gray-400">You have no past appointments.</p>
+            ) : (
+              <div className="space-y-4">
+                {pastAppointments.map(app => (
+                  <Card key={app.id} className="shadow-md rounded-lg border overflow-hidden opacity-80 hover:opacity-100 transition-opacity duration-200">
+                    <CardContent className="p-4 grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 items-start">
+                      <div className="md:col-span-2 space-y-1.5">
+                        <h3 className="text-base font-semibold text-muted-foreground flex items-center">
+                           <Scissors className="mr-2 h-5 w-5 flex-shrink-0" /> {app.serviceName}
+                        </h3>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center">
+                          <UserCircle className="mr-2 h-4 w-4 flex-shrink-0" /> With: {app.barberName}
+                        </p>
+                         <p className={cn("text-xs font-medium capitalize", app.status === 'completed' ? 'text-green-600' : 'text-destructive')}>
+                           Status: {getStatusLabelForCustomer(app.status)}
+                         </p>
+                      </div>
+                      <div className="space-y-1 text-sm text-left md:text-right">
+                        <p className="font-medium flex items-center md:justify-end text-base text-muted-foreground">
+                          <CalendarDays className="mr-2 h-4 w-4 flex-shrink-0" /> {formatDate(app.date)}
+                        </p>
+                        <p className="text-muted-foreground flex items-center md:justify-end">
+                          <Clock className="mr-2 h-4 w-4 flex-shrink-0" /> {app.startTime}
+                        </p>
+                      </div>
+                       {/* Rebook button can be added here in a future iteration */}
+                       {app.status === 'completed' && (
+                         <div className="md:col-span-3 flex justify-end items-center pt-3 mt-3 border-t">
+                            <Button asChild variant="outline" size="sm" className="rounded-full h-9 px-4">
+                                <Link href={`/customer/book/${app.barberId}?serviceId=${app.serviceId}`}>
+                                    Rebook This Service
+                                </Link>
+                            </Button>
+                         </div>
+                       )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
 
         <Card id="find-barber" className="border-none shadow-lg rounded-xl overflow-hidden">
           <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-card via-muted/10 to-card">
@@ -466,3 +537,4 @@ export default function CustomerDashboardPage() {
     </ProtectedPage>
   );
 }
+
