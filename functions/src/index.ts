@@ -1,41 +1,35 @@
+
 import {onSchedule} from "firebase-functions/v2/scheduler";
 import * as admin from "firebase-admin";
 
-// Initialize the Firebase Admin SDK.
 admin.initializeApp();
 const db = admin.firestore();
 
 // --- Configuration for Faster Testing ---
-const REMINDER_MINUTES_BEFORE = 2; // Send reminder 2 mins before
-const REMINDER_WINDOW_MINUTES = 2; // Query for appointments in a 2-min window
+const REMINDER_MINUTES_BEFORE = 2;
+const REMINDER_WINDOW_MINUTES = 2;
 
-/**
- * A scheduled Cloud Function that sends push notification reminders for
- * upcoming appointments.
- */
 export const sendAppointmentReminders = onSchedule(
   {
-    schedule: "every 1 minutes", // Runs every minute FOR TESTING
-    timeZone: "Africa/Algiers", // User's preferred timezone for scheduling
+    schedule: "every 1 minutes",
+    timeZone: "Africa/Algiers",
   },
   async (event) => {
     console.log(`Function triggered by scheduler. Event scheduleTime (UTC): ${
       event.scheduleTime}`);
-    // Log the event's timezone if available (it might be on the event object)
     if ((event as any).timeZone) {
         console.log(`Event's target timezone: ${(event as any).timeZone}`);
     }
 
     try {
-      const now = new Date(); // This is the actual execution time, typically UTC on servers
+      const now = new Date();
       console.log(`Function's current Date() object: ${now.toString()} ` +
         "(This reflects the function server's perceived time and timezone)");
 
-      // Adjust windowStart to be slightly earlier to catch appointments more reliably
-      // when dealing with second-level precision.
-      const windowStartOffsetMillis = (REMINDER_MINUTES_BEFORE * 60 * 1000) - (30 * 1000); // Start 30 seconds earlier
-      const windowStart = new Date(now.getTime() + windowStartOffsetMillis);
-      const windowEnd = new Date(windowStart.getTime() + REMINDER_WINDOW_MINUTES * 60 * 1000);
+      const windowStart = new Date(now.getTime() +
+        REMINDER_MINUTES_BEFORE * 60 * 1000);
+      const windowEnd = new Date(windowStart.getTime() +
+        REMINDER_WINDOW_MINUTES * 60 * 1000);
 
       const reminderWindowStartTimestamp = admin.firestore.Timestamp
         .fromDate(windowStart);
@@ -54,35 +48,29 @@ export const sendAppointmentReminders = onSchedule(
       console.log("Checking for appointments with 'appointmentTimestamp' " +
         "(UTC) between these values.");
 
-      // --- Important: Firestore Index Required! ---
-      // Collection ID: 'appointments'
-      // Fields to index:
-      // 1. status (Ascending)
-      // 2. reminderSent (Ascending)
-      // 3. appointmentTimestamp (Ascending)
-      // Query scope: Collection
+      // Temporarily removed .where("reminderSent", "==", false) for diagnostics
       const appointmentsSnapshot = await db.collection("appointments")
         .where("status", "==", "upcoming")
-        .where("reminderSent", "==", false)
+        // .where("reminderSent", "==", false) 
         .where("appointmentTimestamp", ">=", reminderWindowStartTimestamp)
         .where("appointmentTimestamp", "<=", reminderWindowEndTimestamp)
         .get();
 
       if (appointmentsSnapshot.empty) {
         console.log("No appointments found in the current window " +
-          "requiring a reminder.");
+          "requiring a reminder (with reminderSent filter temporarily removed).");
         return;
       }
 
       console.log(`Found ${appointmentsSnapshot.docs.length} appointments ` +
-        "to remind.");
+        "to remind (with reminderSent filter temporarily removed).");
       appointmentsSnapshot.forEach((doc) => {
         const appt = doc.data();
         const apptTimestamp = (appt.appointmentTimestamp as
           admin.firestore.Timestamp);
         console.log(`  - Found Appt ID: ${doc.id}, Timestamp: ${
           apptTimestamp.toDate().toISOString()} (sec: ${
-          apptTimestamp.seconds}), Cust: ${appt.customerName}`);
+          apptTimestamp.seconds}), Cust: ${appt.customerName}, ReminderSent: ${appt.reminderSent}`);
       });
 
       const reminderPromises: Promise<void>[] = [];
@@ -114,22 +102,25 @@ export const sendAppointmentReminders = onSchedule(
   }
 );
 
-/**
- * Processes and sends a reminder notification for a specific appointment.
- */
 async function processAndSendReminder(
   customerId: string,
   appointmentId: string,
   appointmentDetails: {
     serviceName: string;
     barberName: string;
-    startTime: string; // This is the local time string, e.g., "10:00 AM"
+    startTime: string;
   }
 ): Promise<void> {
   const userDocRef = db.collection("users").doc(customerId);
   const appointmentDocRef = db.collection("appointments").doc(appointmentId);
 
   try {
+    const apptSnap = await appointmentDocRef.get();
+    if (apptSnap.exists() && apptSnap.data()?.reminderSent === true) {
+        console.log(`ProcessAndSendReminder: Skipping Appt ID: ${appointmentId}, reminderSent is already true.`);
+        return;
+    }
+
     const userDocSnap = await userDocRef.get();
     if (!userDocSnap.exists) {
       console.warn(`User document not found for customerId: ${customerId} ` +
