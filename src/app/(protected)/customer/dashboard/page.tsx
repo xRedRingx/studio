@@ -312,34 +312,28 @@ export default function CustomerDashboardPage() {
         await runTransaction(firestore, async (transaction) => {
             const appointmentRef = doc(firestore, 'appointments', appointmentId);
             const barberRef = doc(firestore, 'users', appointmentToRate.barberId);
-            const newRatingRef = doc(collection(firestore, 'ratings')); // Auto-generate ID
+            const newRatingRef = doc(collection(firestore, 'ratings')); 
 
-            // 1. Get current barber data
             const barberSnap = await transaction.get(barberRef);
             if (!barberSnap.exists()) {
                 throw new Error("Barber profile not found.");
             }
             const barberData = barberSnap.data() as AppUser;
 
-            // 2. Get appointment data (to ensure it's not already rated by this user if necessary, though UI should prevent)
             const appointmentSnap = await transaction.get(appointmentRef);
             if (!appointmentSnap.exists()) {
                 throw new Error("Appointment not found.");
             }
             const currentAppointmentData = appointmentSnap.data() as Appointment;
             if (currentAppointmentData.customerRating) {
-                 // This case should ideally be prevented by the UI, but good to double check
                 console.warn(`Appointment ${appointmentId} already has a rating. Overwriting.`);
             }
 
+            // const oldRatingTotal = (barberData.averageRating || 0) * (barberData.ratingCount || 0);
+            // const newRatingCount = (barberData.ratingCount || 0) + 1;
+            // const newAverageRating = (oldRatingTotal + ratingScore) / newRatingCount;
 
-            // 3. Calculate new average rating and count for the barber
-            const oldRatingTotal = (barberData.averageRating || 0) * (barberData.ratingCount || 0);
-            const newRatingCount = (barberData.ratingCount || 0) + 1;
-            const newAverageRating = (oldRatingTotal + ratingScore) / newRatingCount;
-
-            // 4. Create new rating document
-            const ratingData: Omit<Rating, 'id'> = { // Omit id as it's auto-generated
+            const ratingData: Omit<Rating, 'id'> = { 
                 barberId: appointmentToRate.barberId,
                 customerId: user.uid,
                 appointmentId: appointmentId,
@@ -349,25 +343,26 @@ export default function CustomerDashboardPage() {
             };
             transaction.set(newRatingRef, ratingData);
 
-            // 5. Update appointment with rating details
             transaction.update(appointmentRef, {
                 customerRating: ratingScore,
                 ratingComment: comment || null,
                 updatedAt: now,
             });
 
-            // 6. Update barber's profile with new average rating and count
+            // Temporarily removing direct update to barber's profile from client
+            // This logic should be moved to a Cloud Function.
+            /*
             transaction.update(barberRef, {
-                averageRating: parseFloat(newAverageRating.toFixed(2)), // Store with 2 decimal places
+                averageRating: parseFloat(newAverageRating.toFixed(2)),
                 ratingCount: newRatingCount,
                 updatedAt: now,
             });
+            */
         });
 
-        toast({ title: "Rating Submitted!", description: "Thank you for your feedback." });
-        fetchMyAppointments(); // Refresh user's appointments
-        fetchAvailableBarbers(); // Refresh barber list to show updated average rating
-
+        toast({ title: "Rating Submitted!", description: "Thank you for your feedback. Barber's average will update after server processing." });
+        fetchMyAppointments(); 
+        // fetchAvailableBarbers(); // Average rating won't be immediately reflected here from client-side change.
     } catch (error) {
         console.error("Error saving rating with transaction:", error);
         toast({ title: "Rating Error", description: (error as Error).message || "Could not save your rating.", variant: "destructive" });
@@ -696,3 +691,4 @@ export default function CustomerDashboardPage() {
     </ProtectedPage>
   );
 }
+
