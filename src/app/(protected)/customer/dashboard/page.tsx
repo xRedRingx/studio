@@ -7,12 +7,11 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import type { Appointment, AppUser, AppointmentStatus } from '@/types';
 import { firestore } from '@/firebase/config';
-import { collection, query, where, getDocs, orderBy, Timestamp, doc, updateDoc } from 'firebase/firestore'; // Removed runTransaction and addDoc
+import { collection, query, where, getDocs, orderBy, Timestamp, doc, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { CalendarDays, Clock, Scissors, Eye, XCircle, Search, UserCircle, Play, CheckSquare, LogIn, History, CheckCircle, CircleSlash } from 'lucide-react'; // Removed Star
+import { CalendarDays, Clock, Scissors, Eye, XCircle, Search, UserCircle, Play, CheckSquare, LogIn, History, CheckCircle, CircleSlash } from 'lucide-react';
 import Link from 'next/link';
-// RatingDialog import removed
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,10 +25,10 @@ import {
 import { getItemWithTimestampRevival, setItemWithTimestampConversion, LS_MY_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD, getSimpleItem, setSimpleItem, LS_AVAILABLE_BARBERS_KEY_CUSTOMER_DASHBOARD } from '@/lib/localStorageUtils';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
-
-// RatingDialog dynamic import removed
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 const LS_PAST_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD = 'customer_dashboard_past_appointments';
+const MIN_CANCELLATION_LEAD_TIME_HOURS = 2;
 
 const getTodayDateString = () => {
   return new Date().toISOString().split('T')[0];
@@ -60,8 +59,6 @@ export default function CustomerDashboardPage() {
   const [appointmentToCancel, setAppointmentToCancel] = useState<Appointment | null>(null);
   const [isCancelling, setIsCancelling] = useState(false);
   const [isUpdatingAppointment, setIsUpdatingAppointment] = useState<string | null>(null);
-
-  // RatingDialog related states removed: isRatingDialogOpen, appointmentToRate, isSubmittingRating
 
 
   useEffect(() => {
@@ -206,7 +203,6 @@ export default function CustomerDashboardPage() {
       
       toast({ title: "Success", description: successMessage || "Appointment updated." });
       
-      // Rating dialog trigger removed
       fetchMyAppointments();
 
     } catch (error) {
@@ -231,7 +227,6 @@ export default function CustomerDashboardPage() {
         
         fetchedBarbersData.push({
         uid: doc.id,
-        // id: doc.id, // id is not part of AppUser, uid is the id
         firstName: data.firstName,
         lastName: data.lastName,
         role: data.role,
@@ -239,7 +234,6 @@ export default function CustomerDashboardPage() {
         address: data.address,
         isAcceptingBookings: isAccepting,
         email: data.email,
-        // averageRating and ratingCount removed
         } as AppUser);
       });
       setAvailableBarbers(fetchedBarbersData);
@@ -286,8 +280,6 @@ export default function CustomerDashboardPage() {
       setAppointmentToCancel(null);
     }
   };
-
-  // handleSaveRating function removed
 
   const renderAppointmentActions = (appointment: Appointment) => {
     const isProcessingThis = isUpdatingAppointment === appointment.id;
@@ -339,10 +331,9 @@ export default function CustomerDashboardPage() {
     }
   };
 
-  // renderStars function removed
-
   return (
     <ProtectedPage expectedRole="customer">
+    <TooltipProvider>
       <div className="space-y-8">
         <h1 className="text-2xl font-bold font-headline">
           Welcome, {user?.firstName || user?.displayName || 'Customer'}!
@@ -370,7 +361,18 @@ export default function CustomerDashboardPage() {
               </div>
             ) : (
               <div className="space-y-4">
-                {activeAppointments.map(app => (
+                {activeAppointments.map(app => {
+                  let isTooLateToCancel = false;
+                  if (app.appointmentTimestamp && (app.status === 'upcoming' || app.status === 'customer-initiated-check-in' || app.status === 'barber-initiated-check-in')) {
+                    const appointmentDateTime = app.appointmentTimestamp.toDate();
+                    const now = new Date();
+                    const diffInMilliseconds = appointmentDateTime.getTime() - now.getTime();
+                    const diffInHours = diffInMilliseconds / (1000 * 60 * 60);
+                    if (diffInHours < MIN_CANCELLATION_LEAD_TIME_HOURS) {
+                      isTooLateToCancel = true;
+                    }
+                  }
+                  return (
                   <Card key={app.id} className="shadow-md rounded-lg border overflow-hidden hover:shadow-lg transition-shadow duration-200">
                     <CardContent className="p-4 grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 items-start">
                       <div className="md:col-span-2 space-y-1.5">
@@ -393,25 +395,47 @@ export default function CustomerDashboardPage() {
                       <div className="md:col-span-3 flex flex-col sm:flex-row justify-end items-center pt-3 mt-3 border-t gap-2">
                           {app.status !== 'cancelled' && app.status !== 'completed' && renderAppointmentActions(app)}
                           {(app.status === 'upcoming' || app.status === 'customer-initiated-check-in' || app.status === 'barber-initiated-check-in') && (
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              className="rounded-full h-9 px-4 text-sm"
-                              onClick={() => setAppointmentToCancel(app)}
-                              disabled={isCancelling || isUpdatingAppointment === app.id}
-                            >
-                              {isCancelling && appointmentToCancel?.id === app.id ? (
-                                <LoadingSpinner className="mr-1.5 h-4 w-4" />
-                              ) : (
-                                <XCircle className="mr-1.5 h-4 w-4" />
-                              )}
-                              Cancel
-                            </Button>
+                            isTooLateToCancel ? (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span tabIndex={0}> {/* Required for Tooltip to work on disabled button */}
+                                      <Button
+                                        variant="destructive"
+                                        size="sm"
+                                        className="rounded-full h-9 px-4 text-sm"
+                                        disabled
+                                      >
+                                        <XCircle className="mr-1.5 h-4 w-4" />
+                                        Cancel
+                                      </Button>
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Cannot cancel: Appt. is within {MIN_CANCELLATION_LEAD_TIME_HOURS} hours.</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                            ) : (
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                className="rounded-full h-9 px-4 text-sm"
+                                onClick={() => setAppointmentToCancel(app)}
+                                disabled={isCancelling || isUpdatingAppointment === app.id}
+                              >
+                                {isCancelling && appointmentToCancel?.id === app.id ? (
+                                  <LoadingSpinner className="mr-1.5 h-4 w-4" />
+                                ) : (
+                                  <XCircle className="mr-1.5 h-4 w-4" />
+                                )}
+                                Cancel
+                              </Button>
+                            )
                           )}
                         </div>
                     </CardContent>
                   </Card>
-                ))}
+                  );
+                })}
               </div>
             )}
           </CardContent>
@@ -445,7 +469,6 @@ export default function CustomerDashboardPage() {
                          <p className={cn("text-xs font-medium capitalize", app.status === 'completed' ? 'text-green-600' : 'text-destructive')}>
                            Status: {getStatusLabelForCustomer(app.status)}
                          </p>
-                         {/* Rating display removed */}
                       </div>
                       <div className="space-y-1 text-sm text-left md:text-right">
                         <p className="font-medium flex items-center md:justify-end text-base text-muted-foreground">
@@ -456,7 +479,6 @@ export default function CustomerDashboardPage() {
                         </p>
                       </div>
                        <div className="md:col-span-3 flex flex-col sm:flex-row justify-end items-center pt-3 mt-3 border-t gap-2">
-                           {/* "Rate Service" button removed */}
                            <Button asChild variant="outline" size="sm" className="rounded-full h-9 px-4">
                                 <Link href={`/customer/book/${app.barberId}?serviceId=${app.serviceId}`}>
                                     Rebook This Service
@@ -510,7 +532,6 @@ export default function CustomerDashboardPage() {
                               </Badge>
                             )}
                           </div>
-                           {/* Rating display removed */}
                            <span className="text-xs text-muted-foreground ml-1">(Ratings feature disabled)</span>
                            {barber.address && (
                             <p className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[150px] sm:max-w-full mt-0.5">
@@ -559,8 +580,8 @@ export default function CustomerDashboardPage() {
           </AlertDialogContent>
         </AlertDialog>
       )}
-
-      {/* RatingDialog usage removed */}
+    </TooltipProvider>
     </ProtectedPage>
   );
 }
+
