@@ -35,6 +35,8 @@ const bookingStepNumbers: Record<Exclude<BookingStep, 'confirmed' | 'queued'>, n
 };
 const totalBookingSteps = 3;
 
+const MIN_BOOKING_LEAD_TIME_MINUTES = 15;
+
 
 const timeToMinutes = (timeStr: string): number => {
   const [time, modifier] = timeStr.split(' ');
@@ -293,8 +295,7 @@ export default function BookingPage() {
       if (targetDateStr === formatDateToYYYYMMDD(new Date())) { 
         const now = new Date();
         const nowMinutes = now.getHours() * 60 + now.getMinutes();
-        const bufferMinutes = 15; 
-        if (currentTimeMinutes < nowMinutes + bufferMinutes) {
+        if (currentTimeMinutes < nowMinutes + MIN_BOOKING_LEAD_TIME_MINUTES) {
           isSlotInFuture = false;
         }
       }
@@ -749,7 +750,7 @@ export default function BookingPage() {
                     ))}
                   </div>
                 ) : ( 
-                  <p className="text-sm text-gray-500 dark:text-gray-400">No available time slots for the selected service and date. This could be because all slots are booked, the barber is closed, or it's too late to book for today. Check the barber's weekly availability or try a different date/service.</p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">No available time slots for the selected service and date. This could be because all slots are booked, the barber is closed, or it's too late to book for today (bookings must be at least {MIN_BOOKING_LEAD_TIME_MINUTES} minutes in advance). Check the barber's weekly availability or try a different date/service.</p>
                 )}
               </div>
               <div className="flex flex-col sm:flex-row justify-between items-center pt-6 space-y-3 sm:space-y-0 sm:space-x-3 border-t mt-4">
