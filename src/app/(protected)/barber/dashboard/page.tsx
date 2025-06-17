@@ -22,7 +22,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Settings2, AlertTriangle } from 'lucide-react';
+import { PlusCircle, Settings2, AlertTriangle, Info } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -30,8 +30,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { getItemWithTimestampRevival, setItemWithTimestampConversion, LS_SERVICES_KEY_DASHBOARD, LS_APPOINTMENTS_KEY_DASHBOARD } from '@/lib/localStorageUtils';
 import type { DayAvailability as ScheduleDayAvailability } from '@/types';
 import { getDoc as getFirestoreDoc } from 'firebase/firestore';
-// import Link from 'next/link'; // No longer used
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import Link from 'next/link';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 
 const WalkInDialog = dynamic(() => import('@/components/barber/WalkInDialog'), {
@@ -525,6 +525,19 @@ export default function BarberDashboardPage() {
               </p>
             </CardContent>
           </Card>
+
+          {(!isLoadingServices && services.length === 0) && (
+            <Alert variant="default" className="border-primary/50 shadow-md rounded-lg">
+              <Info className="h-5 w-5 text-primary" />
+              <AlertTitle className="font-semibold text-lg">Add Services to Get Started</AlertTitle>
+              <AlertDescription className="text-base">
+                You haven't added any services yet. Customers can't book with you, and walk-in appointments can't be created until you list your offerings.
+                <Button asChild variant="link" className="p-0 h-auto ml-1 text-base text-primary hover:underline">
+                  <Link href="/barber/services">Go to Manage Services</Link>
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
 
           {(isLoadingAppointments && !appointments.length) ? (
             <div className="flex justify-center items-center py-10">
