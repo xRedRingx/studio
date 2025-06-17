@@ -159,7 +159,7 @@ export default function BarberDashboardPage() {
     }
   }, [user?.uid, toast]);
 
-  const handleAppointmentAction = async (appointmentId: string, action: 'BARBER_CHECK_IN' | 'BARBER_CONFIRM_START' | 'BARBER_MARK_DONE' | 'BARBER_CONFIRM_COMPLETION') => {
+  const handleAppointmentAction = async (appointmentId: string, action: 'BARBER_CHECK_IN' | 'BARBER_CONFIRM_START' | 'BARBER_MARK_DONE' | 'BARBER_CONFIRM_COMPLETION' | 'BARBER_MARK_NO_SHOW') => {
     if (!user?.uid) {
       toast({ title: "Error", description: "You must be logged in.", variant: "destructive" });
       return;
@@ -224,6 +224,12 @@ export default function BarberDashboardPage() {
             newStatus = 'completed';
             successMessage = "Service mutually completed.";
           }
+          break;
+        
+        case 'BARBER_MARK_NO_SHOW':
+          newStatus = 'no-show';
+          updateData.noShowMarkedAt = now;
+          successMessage = "Appointment marked as No-Show.";
           break;
       }
 
@@ -324,7 +330,7 @@ export default function BarberDashboardPage() {
     const earliestPossibleStartMinutes = Math.max(scheduleStartTimeMinutes, currentTimeMinutes + 5); // 5 min buffer
 
     const todaysAppointmentsForSlotFinding = appointments
-      .filter(app => app.date === todayDateStr && app.status !== 'cancelled' && app.status !== 'completed')
+      .filter(app => app.date === todayDateStr && app.status !== 'cancelled' && app.status !== 'completed' && app.status !== 'no-show')
       .map(app => ({
         start: timeToMinutes(app.startTime),
         end: app.serviceActuallyStartedAt && app.status === 'in-progress'
@@ -397,6 +403,7 @@ export default function BarberDashboardPage() {
         customerMarkedDoneAt: null,
         barberMarkedDoneAt: null,
         serviceActuallyCompletedAt: null,
+        noShowMarkedAt: null,
       };
 
       const docRef = await addDoc(collection(firestore, 'appointments'), newAppointmentData);

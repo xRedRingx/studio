@@ -10,7 +10,7 @@ import { firestore } from '@/firebase/config';
 import { collection, query, where, getDocs, orderBy, Timestamp, doc, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { CalendarDays, Clock, Scissors, Eye, XCircle, Search, UserCircle, Play, CheckSquare, LogIn, History, CheckCircle, CircleSlash } from 'lucide-react';
+import { CalendarDays, Clock, Scissors, Eye, XCircle, Search, UserCircle, Play, CheckSquare, LogIn, History, CheckCircle, CircleSlash, UserX } from 'lucide-react';
 import Link from 'next/link';
 import {
   AlertDialog,
@@ -103,7 +103,7 @@ export default function CustomerDashboardPage() {
       });
 
       const active = fetchedAppointments
-        .filter(app => app.status !== 'completed' && app.status !== 'cancelled')
+        .filter(app => app.status !== 'completed' && app.status !== 'cancelled' && app.status !== 'no-show')
         .sort((a, b) => {
           if (a.date === b.date) {
             return timeToMinutes(a.startTime) - timeToMinutes(b.startTime);
@@ -112,7 +112,7 @@ export default function CustomerDashboardPage() {
         });
       
       const past = fetchedAppointments
-        .filter(app => app.status === 'completed' || app.status === 'cancelled')
+        .filter(app => app.status === 'completed' || app.status === 'cancelled' || app.status === 'no-show')
         .sort((a,b) => {
             if (a.date === b.date) {
                 return timeToMinutes(b.startTime) - timeToMinutes(a.startTime);
@@ -327,6 +327,7 @@ export default function CustomerDashboardPage() {
         case 'barber-initiated-completion': return 'Barber Marked Done';
         case 'completed': return 'Completed';
         case 'cancelled': return 'Cancelled';
+        case 'no-show': return 'Missed (No-Show)';
         default: return status;
     }
   };
@@ -393,7 +394,7 @@ export default function CustomerDashboardPage() {
                         </p>
                       </div>
                       <div className="md:col-span-3 flex flex-col sm:flex-row justify-end items-center pt-3 mt-3 border-t gap-2">
-                          {app.status !== 'cancelled' && app.status !== 'completed' && renderAppointmentActions(app)}
+                          {app.status !== 'cancelled' && app.status !== 'completed' && app.status !== 'no-show' && renderAppointmentActions(app)}
                           {(app.status === 'upcoming' || app.status === 'customer-initiated-check-in' || app.status === 'barber-initiated-check-in') && (
                             isTooLateToCancel ? (
                                 <Tooltip>
@@ -444,7 +445,7 @@ export default function CustomerDashboardPage() {
         <Card className="border-none shadow-lg rounded-xl overflow-hidden">
           <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-card via-muted/10 to-card">
             <CardTitle className="text-xl font-bold flex items-center"><History className="mr-2 h-5 w-5 text-primary"/> Appointment History</CardTitle>
-            <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">View your past completed or cancelled appointments.</CardDescription>
+            <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">View your past completed, cancelled, or missed appointments.</CardDescription>
           </CardHeader>
           <CardContent className="p-4 md:p-6">
             {(isLoadingAppointments && !pastAppointments.length && !activeAppointments.length) ? ( 
@@ -466,7 +467,11 @@ export default function CustomerDashboardPage() {
                         <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center">
                           <UserCircle className="mr-2 h-4 w-4 flex-shrink-0" /> With: {app.barberName}
                         </p>
-                         <p className={cn("text-xs font-medium capitalize", app.status === 'completed' ? 'text-green-600' : 'text-destructive')}>
+                         <p className={cn(
+                            "text-xs font-medium capitalize", 
+                            app.status === 'completed' ? 'text-green-600' : 
+                            (app.status === 'cancelled' || app.status === 'no-show' ? 'text-destructive' : 'text-muted-foreground')
+                          )}>
                            Status: {getStatusLabelForCustomer(app.status)}
                          </p>
                       </div>
@@ -478,13 +483,15 @@ export default function CustomerDashboardPage() {
                           <Clock className="mr-2 h-4 w-4 flex-shrink-0" /> {app.startTime}
                         </p>
                       </div>
-                       <div className="md:col-span-3 flex flex-col sm:flex-row justify-end items-center pt-3 mt-3 border-t gap-2">
-                           <Button asChild variant="outline" size="sm" className="rounded-full h-9 px-4">
-                                <Link href={`/customer/book/${app.barberId}?serviceId=${app.serviceId}`}>
-                                    Rebook This Service
-                                </Link>
-                            </Button>
-                       </div>
+                       {app.status !== 'no-show' && app.status !== 'cancelled' && (
+                         <div className="md:col-span-3 flex flex-col sm:flex-row justify-end items-center pt-3 mt-3 border-t gap-2">
+                            <Button asChild variant="outline" size="sm" className="rounded-full h-9 px-4">
+                                 <Link href={`/customer/book/${app.barberId}?serviceId=${app.serviceId}`}>
+                                     Rebook This Service
+                                 </Link>
+                             </Button>
+                        </div>
+                       )}
                     </CardContent>
                   </Card>
                 ))}

@@ -9,6 +9,7 @@ import { useMemo, useState, useEffect } from 'react';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 
 const getTodayDateStringLocal = () => new Date().toISOString().split('T')[0];
+const NO_SHOW_GRACE_PERIOD_MINUTES = 5;
 
 const timeToMinutes = (timeStr: string): number => {
   const [time, modifier] = timeStr.split(' ');
@@ -23,7 +24,7 @@ const timeToMinutes = (timeStr: string): number => {
 
 interface TodaysAppointmentsSectionProps {
   appointments: Appointment[];
-  onAppointmentAction: (appointmentId: string, action: 'BARBER_CHECK_IN' | 'BARBER_CONFIRM_START' | 'BARBER_MARK_DONE' | 'BARBER_CONFIRM_COMPLETION') => Promise<void>;
+  onAppointmentAction: (appointmentId: string, action: 'BARBER_CHECK_IN' | 'BARBER_CONFIRM_START' | 'BARBER_MARK_DONE' | 'BARBER_CONFIRM_COMPLETION' | 'BARBER_MARK_NO_SHOW') => Promise<void>;
   isUpdatingAppointmentId: string | null;
 }
 
@@ -51,19 +52,22 @@ export default function TodaysAppointmentsSection({ appointments, onAppointmentA
     const STALE_THRESHOLD_MINUTES = 5; 
 
     return appointments
-      .filter(app => app.date === todayDate && app.status !== 'cancelled' && app.status !== 'completed')
+      .filter(app => app.date === todayDate && app.status !== 'cancelled' && app.status !== 'completed' && app.status !== 'no-show')
       .sort((a, b) => timeToMinutes(a.startTime) - timeToMinutes(b.startTime))
       .map(app => {
         let isStale = false;
-        if (app.status === 'upcoming') {
-          const appStartTimeMinutes = timeToMinutes(app.startTime);
+        let isPastGracePeriod = false;
+        const appStartTimeMinutes = timeToMinutes(app.startTime);
+
+        if (app.status === 'upcoming' || app.status === 'customer-initiated-check-in') {
           if (currentTimeMinutes > appStartTimeMinutes + STALE_THRESHOLD_MINUTES) {
             isStale = true;
           }
+          if (currentTimeMinutes > appStartTimeMinutes + NO_SHOW_GRACE_PERIOD_MINUTES) {
+            isPastGracePeriod = true;
+          }
         }
-        // Note: "next" status is now primarily determined by AppointmentCard based on sorted list.
-        // Stale logic for other statuses ('customer-initiated-check-in', etc.) can be added here if needed.
-        return { ...app, isStale };
+        return { ...app, isStale, isPastGracePeriod };
       });
   }, [appointments, todayDate, currentTimeMinutes]);
 
@@ -110,6 +114,7 @@ export default function TodaysAppointmentsSection({ appointments, onAppointmentA
                   isInteracting={isUpdatingAppointmentId === appointment.id}
                   isStale={appointment.isStale}
                   isNextCandidate={isNextAppointment}
+                  isPastGracePeriod={appointment.isPastGracePeriod}
                 />
               );
             })}

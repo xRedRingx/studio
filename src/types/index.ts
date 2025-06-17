@@ -18,7 +18,6 @@ export interface AppUser {
   specialties?: string[] | null;
   isAcceptingBookings?: boolean;
   fcmToken?: string | null;
-  // averageRating and ratingCount removed
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
   displayName?: string | null;
@@ -58,7 +57,8 @@ export type AppointmentStatus =
   | 'customer-initiated-completion'
   | 'barber-initiated-completion'
   | 'completed'
-  | 'cancelled';
+  | 'cancelled'
+  | 'no-show';
 
 export interface Appointment {
   id:string;
@@ -82,7 +82,7 @@ export interface Appointment {
   customerMarkedDoneAt?: Timestamp | null;
   barberMarkedDoneAt?: Timestamp | null;
   serviceActuallyCompletedAt?: Timestamp | null;
-  // customerRating and ratingComment removed
+  noShowMarkedAt?: Timestamp | null;
 }
 
 export interface UnavailableDate {
@@ -92,5 +92,3 @@ export interface UnavailableDate {
   reason?: string;
   createdAt?: Timestamp;
 }
-
-// Rating interface removed
