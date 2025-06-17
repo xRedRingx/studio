@@ -35,7 +35,7 @@ interface AuthContextType {
   sendPasswordResetLink: (email: string) => Promise<void>;
   updateUserProfile: (
     userId: string,
-    updates: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber' | 'address'>>
+    updates: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber' | 'address' | 'bio' | 'specialties'>> // Added bio and specialties
   ) => Promise<void>;
   signOut: () => Promise<void>;
   updateUserAcceptingBookings: (userId: string, isAccepting: boolean) => Promise<void>;
@@ -50,17 +50,17 @@ async function createUserDocument(firebaseUser: FirebaseUser, dataFromRegistrati
   console.log('createUserDocument received dataFromRegistration:', JSON.stringify(dataFromRegistration, null, 2));
 
   const userRef = doc(firestore, `users/${firebaseUser.uid}`);
-  // No need to check if snapshot exists here if we're merging,
-  // setDoc with merge will create or update.
 
   const { email: authEmail, emailVerified, displayName: authDisplayName } = firebaseUser;
-  const createdAt = Timestamp.now(); // Use server timestamp for consistency
+  const createdAt = Timestamp.now();
 
   const roleFromReg = dataFromRegistration.role;
   const firstNameFromReg = dataFromRegistration.firstName?.trim();
   const lastNameFromReg = dataFromRegistration.lastName?.trim();
   const phoneNumberFromReg = dataFromRegistration.phoneNumber?.trim();
   const addressFromReg = dataFromRegistration.address?.trim();
+  const bioFromReg = dataFromRegistration.bio?.trim(); // Added
+  const specialtiesFromReg = dataFromRegistration.specialties; // Added, assuming it's already an array or null
   const isAcceptingBookingsFromReg = dataFromRegistration.isAcceptingBookings;
 
   let calculatedDisplayName = '';
@@ -72,7 +72,6 @@ async function createUserDocument(firebaseUser: FirebaseUser, dataFromRegistrati
     calculatedDisplayName = lastNameFromReg;
   }
 
-  // Fallback displayName logic
   let finalDisplayName = calculatedDisplayName;
   if (!finalDisplayName || finalDisplayName.trim() === "" || finalDisplayName.toLowerCase() === "undefined undefined") {
     finalDisplayName = (authDisplayName && authDisplayName.trim() !== "" && authDisplayName.toLowerCase() !== "undefined undefined")
@@ -81,49 +80,34 @@ async function createUserDocument(firebaseUser: FirebaseUser, dataFromRegistrati
   }
 
   try {
-    // Build the core user data that's always present
     const userDataToSet: { [key: string]: any } = {
       uid: firebaseUser.uid,
       email: authEmail,
       displayName: finalDisplayName.trim(),
       emailVerified,
-      // createdAt is set on initial creation, updatedAt is always set
-      // setDoc with merge handles this: if doc exists, it won't overwrite createdAt unless explicitly provided
-      updatedAt: createdAt, // This will effectively be createdAt on first write, and updatedAt on subsequent merges
+      updatedAt: createdAt,
     };
 
-    // Conditionally add fields from registration data if they are provided
     if (roleFromReg) userDataToSet.role = roleFromReg;
     if (firstNameFromReg) userDataToSet.firstName = firstNameFromReg; else if (dataFromRegistration.hasOwnProperty('firstName')) userDataToSet.firstName = null;
     if (lastNameFromReg) userDataToSet.lastName = lastNameFromReg; else if (dataFromRegistration.hasOwnProperty('lastName')) userDataToSet.lastName = null;
     if (phoneNumberFromReg) userDataToSet.phoneNumber = phoneNumberFromReg; else if (dataFromRegistration.hasOwnProperty('phoneNumber')) userDataToSet.phoneNumber = null;
     if (addressFromReg) userDataToSet.address = addressFromReg; else if (dataFromRegistration.hasOwnProperty('address')) userDataToSet.address = null;
-    
+
     if (roleFromReg === 'barber') {
       userDataToSet.isAcceptingBookings = isAcceptingBookingsFromReg !== undefined ? isAcceptingBookingsFromReg : true;
-    } else {
-      // Ensure isAcceptingBookings is not set for customers, or removed if merging from a previous barber role
-      if (dataFromRegistration.hasOwnProperty('role') && roleFromReg !== 'barber') {
-         // If role is explicitly not barber, we don't want isAcceptingBookings
-         // For merge: true, to remove a field, you'd typically use FieldValue.delete(),
-         // but since this is a create/merge, simply not including it is fine if it's a new doc.
-         // If merging and changing role from barber to customer, isAcceptingBookings might remain.
-         // This logic path should be robust enough for initial creation.
-      }
+      if (bioFromReg) userDataToSet.bio = bioFromReg; else if (dataFromRegistration.hasOwnProperty('bio')) userDataToSet.bio = null;
+      if (specialtiesFromReg) userDataToSet.specialties = specialtiesFromReg; else if (dataFromRegistration.hasOwnProperty('specialties')) userDataToSet.specialties = null;
     }
-    
-    // For a true "create if not exists, otherwise update with provided fields"
-    // we want createdAt to only be set once.
+
     const snapshot = await getDoc(userRef);
     if (!snapshot.exists()) {
         userDataToSet.createdAt = createdAt;
-        userDataToSet.fcmToken = null; // Initialize fcmToken for new users
+        userDataToSet.fcmToken = null;
     }
 
-
     console.log('Final userDataToSet before setDoc (merge: true):', JSON.stringify(userDataToSet, null, 2));
-
-    await setDoc(userRef, userDataToSet, { merge: true }); // USE MERGE: TRUE
+    await setDoc(userRef, userDataToSet, { merge: true });
 
   } catch (error) {
     console.error("Error in createUserDocument: ", error);
@@ -154,16 +138,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         let userDocSnap = await getDoc(userDocRef);
 
         if (!userDocSnap.exists()) {
-          // Document doesn't exist. This could be a new user from registration
-          // or an auth user whose Firestore doc was somehow deleted.
-          // The registration flow calls createUserDocument. If this onAuthStateChanged
-          // runs very quickly, it might try to create it too.
-          // Using {merge: true} in createUserDocument handles this.
           console.log(`onAuthStateChanged: User doc for ${firebaseUser.uid} not found. Attempting to ensure/create.`);
-
           const minimalDataForCreation: Partial<AppUser> = {};
-          // Use the current role from AuthContext state if available (set by RoleSelector or registration process)
-          if (role) { // 'role' here is the AuthContext's state variable
+          if (role) {
             minimalDataForCreation.role = role;
           } else {
             const roleFromStorageFallback = localStorage.getItem(LOCAL_STORAGE_ROLE_KEY) as UserRole | null;
@@ -173,9 +150,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
           console.log('onAuthStateChanged: calling createUserDocument with minimalData:', JSON.stringify(minimalDataForCreation, null, 2));
           await createUserDocument(firebaseUser, minimalDataForCreation);
-          userDocSnap = await getDoc(userDocRef); // Re-fetch after creation attempt
+          userDocSnap = await getDoc(userDocRef);
         }
-        
+
         if (userDocSnap.exists()) {
           const firestoreUser = userDocSnap.data() as AppUser;
           const appUser: AppUser = {
@@ -188,24 +165,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             lastName: firestoreUser.lastName,
             phoneNumber: firestoreUser.phoneNumber,
             address: firestoreUser.address,
+            bio: firestoreUser.bio, // Added
+            specialties: firestoreUser.specialties, // Added
             isAcceptingBookings: firestoreUser.role === 'barber' ? (firestoreUser.isAcceptingBookings !== undefined ? firestoreUser.isAcceptingBookings : true) : undefined,
             fcmToken: firestoreUser.fcmToken || null,
-            createdAt: firestoreUser.createdAt, // Already a Timestamp from Firestore
-            updatedAt: firestoreUser.updatedAt, // Already a Timestamp from Firestore
+            createdAt: firestoreUser.createdAt,
+            updatedAt: firestoreUser.updatedAt,
           };
           setUser(appUser);
-          persistUserSession(appUser); // Persist potentially merged/updated data
-          if (firestoreUser.role && firestoreUser.role !== role) { // If Firestore role differs from context role
+          persistUserSession(appUser);
+          if (firestoreUser.role && firestoreUser.role !== role) {
              setRoleContextAndStorage(firestoreUser.role);
-          } else if (firestoreUser.role) { // If same or context role was null
+          } else if (firestoreUser.role) {
              setRoleState(firestoreUser.role);
           }
         } else {
           console.warn(`AuthContext: Firebase user ${firebaseUser.uid} exists but Firestore document could not be fetched/created.`);
           setUser(null);
           clearUserSession();
-          // Optionally sign out the user if their data integrity is compromised
-          // await firebaseSignOut(auth);
         }
       } else {
         setUser(null);
@@ -216,7 +193,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     return () => unsubscribe();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [role]); // Added `role` to dependency array for onAuthStateChanged logic
+  }, [role]);
 
 
   const setRoleContextAndStorage = (newRole: UserRole) => {
@@ -225,7 +202,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const persistUserSession = (appUser: AppUser) => {
-    const storableUser = { // Convert Timestamps to ISO strings for localStorage
+    const storableUser = {
       ...appUser,
       createdAt: appUser.createdAt instanceof Timestamp ? appUser.createdAt.toDate().toISOString() : appUser.createdAt,
       updatedAt: appUser.updatedAt instanceof Timestamp ? appUser.updatedAt.toDate().toISOString() : appUser.updatedAt,
@@ -235,44 +212,39 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const clearUserSession = () => {
     localStorage.removeItem(LOCAL_STORAGE_USER_KEY);
-    // Don't clear LOCAL_STORAGE_ROLE_KEY on simple sign-out, user might want to log back in as same role.
-    // It gets overwritten on new role selection or new successful registration.
   };
 
   const registerWithEmailAndPassword = async (
      userDetails: Omit<AppUser, 'uid' | 'createdAt' | 'updatedAt' | 'displayName' | 'emailVerified' | 'fcmToken'> & { password_original_do_not_use: string }
   ) => {
     setIsProcessingAuth(true);
-    const { email, password_original_do_not_use, firstName, lastName, role: userRole, phoneNumber, address, isAcceptingBookings } = userDetails;
+    const { email, password_original_do_not_use, firstName, lastName, role: userRole, phoneNumber, address, bio, specialties, isAcceptingBookings } = userDetails;
 
-    // This is crucial: set the role in context immediately.
-    // This helps onAuthStateChanged make better decisions if it fires quickly.
     setRoleContextAndStorage(userRole);
-
     console.log('registerWithEmailAndPassword: data received from form:', JSON.stringify(userDetails, null, 2));
 
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password_original_do_not_use);
       const firebaseUser = userCredential.user;
 
-      // Prepare the full data object for createUserDocument
       const firestoreDataForCreation: Partial<AppUser> = {
-        email, // Already part of firebaseUser but good to pass for consistency if needed
+        email,
         firstName: firstName,
         lastName: lastName,
         role: userRole,
-        phoneNumber: phoneNumber || null, // Ensure null if empty
-        address: address || null, // Ensure null if empty
+        phoneNumber: phoneNumber || null,
+        address: address || null,
       };
-      
+
       if (userRole === 'barber') {
         firestoreDataForCreation.isAcceptingBookings = isAcceptingBookings !== undefined ? isAcceptingBookings : true;
+        firestoreDataForCreation.bio = bio || null;
+        firestoreDataForCreation.specialties = specialties || null;
       }
 
       console.log('registerWithEmailAndPassword: calling createUserDocument with firestoreDataForCreation:', JSON.stringify(firestoreDataForCreation, null, 2));
       await createUserDocument(firebaseUser, firestoreDataForCreation);
 
-      // After document creation/merging, fetch the definitive version from Firestore
       const userDocRef = doc(firestore, 'users', firebaseUser.uid);
       const userDocSnap = await getDoc(userDocRef);
       if (!userDocSnap.exists()) {
@@ -280,10 +252,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       const createdUser = userDocSnap.data() as AppUser;
 
-      setUser(createdUser); // Set user state with the definitive data from Firestore
+      setUser(createdUser);
       persistUserSession(createdUser);
-      // Role should already be set correctly by setRoleContextAndStorage above or via onAuthStateChanged re-eval
-
       toast({ title: "Registration Successful!", description: "Your account has been created." });
     } catch (error: any) {
       console.error("AuthContext: Error registering user:", error);
@@ -292,7 +262,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } else {
         toast({ title: "Registration Error", description: error.message || "Failed to register. Please try again.", variant: "destructive" });
       }
-      throw error; // Re-throw to allow form to handle it if needed
+      throw error;
     } finally {
       setIsProcessingAuth(false);
     }
@@ -302,8 +272,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsProcessingAuth(true);
     try {
       await signInWithEmailAndPassword(auth, email, password_original_do_not_use);
-      // onAuthStateChanged will handle fetching user data and setting role.
-      // toast({ title: "Login Successful!", description: "Welcome back!" }); // Toast can be moved to onAuthStateChanged success if preferred
     } catch (error: any) {
       console.error("AuthContext: Error signing in:", error);
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
@@ -327,7 +295,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
     } catch (error: any) {
       console.error("AuthContext: Error sending password reset email:", error);
-      // Avoid giving away whether an email is registered or not for security.
       toast({ title: "Password Reset", description: "If your email is registered, you'll receive a reset link shortly.", variant: "default" });
     } finally {
       setIsProcessingAuth(false);
@@ -336,7 +303,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const updateUserProfile = async (
     userId: string,
-    updates: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber' | 'address'>>
+    updates: Partial<Pick<AppUser, 'firstName' | 'lastName' | 'phoneNumber' | 'address' | 'bio' | 'specialties'>>
   ) => {
     if (!auth.currentUser || auth.currentUser.uid !== userId) {
         toast({ title: "Error", description: "Authentication error. Please re-login.", variant: "destructive" });
@@ -349,18 +316,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       const currentDataSnap = await getDoc(userRef);
       const currentData = currentDataSnap.data() as AppUser | undefined;
-      
+
       const newFirstName = updates.firstName?.trim();
       const newLastName = updates.lastName?.trim();
 
-      dataToUpdate.firstName = newFirstName && newFirstName !== "" ? newFirstName : null;
-      dataToUpdate.lastName = newLastName && newLastName !== "" ? newLastName : null;
-      dataToUpdate.phoneNumber = updates.phoneNumber && updates.phoneNumber.trim() !== "" ? updates.phoneNumber.trim() : null;
-      dataToUpdate.address = updates.address && updates.address.trim() !== "" ? updates.address.trim() : null;
+      dataToUpdate.firstName = newFirstName && newFirstName !== "" ? newFirstName : (updates.hasOwnProperty('firstName') ? null : currentData?.firstName);
+      dataToUpdate.lastName = newLastName && newLastName !== "" ? newLastName : (updates.hasOwnProperty('lastName') ? null : currentData?.lastName);
+      dataToUpdate.phoneNumber = updates.phoneNumber && updates.phoneNumber.trim() !== "" ? updates.phoneNumber.trim() : (updates.hasOwnProperty('phoneNumber') ? null : currentData?.phoneNumber);
+      dataToUpdate.address = updates.address && updates.address.trim() !== "" ? updates.address.trim() : (updates.hasOwnProperty('address') ? null : currentData?.address);
       
+      if (updates.hasOwnProperty('bio')) {
+        dataToUpdate.bio = updates.bio && updates.bio.trim() !== "" ? updates.bio.trim() : null;
+      }
+      if (updates.hasOwnProperty('specialties')) {
+         dataToUpdate.specialties = Array.isArray(updates.specialties) && updates.specialties.length > 0 ? updates.specialties : null;
+      }
+
+
       let newDisplayName = '';
-      const finalFirstName = dataToUpdate.firstName;
-      const finalLastName = dataToUpdate.lastName;
+      const finalFirstName = dataToUpdate.firstName || currentData?.firstName;
+      const finalLastName = dataToUpdate.lastName || currentData?.lastName;
 
       if (finalFirstName && finalLastName) {
           newDisplayName = `${finalFirstName} ${finalLastName}`;
@@ -373,23 +348,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       dataToUpdate.displayName = newDisplayName.trim();
 
-
       await updateDoc(userRef, dataToUpdate);
 
       setUser(prevUser => {
         if (!prevUser) return null;
-        const updatedUser = {
-            ...prevUser, 
-            ...dataToUpdate,
-            updatedAt: dataToUpdate.updatedAt, // ensure Timestamp object
-        };
-        persistUserSession(updatedUser);
-        return updatedUser;
+        const updatedUserFields = { ...prevUser };
+        if (updates.hasOwnProperty('firstName')) updatedUserFields.firstName = dataToUpdate.firstName;
+        if (updates.hasOwnProperty('lastName')) updatedUserFields.lastName = dataToUpdate.lastName;
+        if (updates.hasOwnProperty('phoneNumber')) updatedUserFields.phoneNumber = dataToUpdate.phoneNumber;
+        if (updates.hasOwnProperty('address')) updatedUserFields.address = dataToUpdate.address;
+        if (updates.hasOwnProperty('bio')) updatedUserFields.bio = dataToUpdate.bio;
+        if (updates.hasOwnProperty('specialties')) updatedUserFields.specialties = dataToUpdate.specialties;
+        updatedUserFields.displayName = dataToUpdate.displayName;
+        updatedUserFields.updatedAt = dataToUpdate.updatedAt;
+
+        persistUserSession(updatedUserFields);
+        return updatedUserFields;
       });
-       toast({ title: "Success", description: "Your profile has been updated." }); // Moved toast here
+       toast({ title: "Success", description: "Your profile has been updated." });
     } catch (error: any) {
       console.error("AuthContext: Error updating user profile:", error);
-      toast({ title: "Update Error", description: error.message || "Could not update profile.", variant: "destructive" }); // Generic error toast
+      toast({ title: "Update Error", description: error.message || "Could not update profile.", variant: "destructive" });
       throw error;
     } finally {
       setIsProcessingAuth(false);
@@ -425,7 +404,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const userRef = doc(firestore, 'users', userId);
       await updateDoc(userRef, {
-        fcmToken: token, // This will set to null if token is null, effectively deleting it
+        fcmToken: token,
         updatedAt: Timestamp.now(),
       });
       setUser(prevUser => {
@@ -449,7 +428,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setIsProcessingAuth(true);
     try {
       await firebaseSignOut(auth);
-      // User state and role (except from localStorage for next login hint) will be cleared by onAuthStateChanged
       toast({ title: "Signed Out", description: "You have been successfully signed out." });
     } catch (error: any) {
         console.error("AuthContext: Error signing out:", error);
@@ -489,4 +467,3 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
-

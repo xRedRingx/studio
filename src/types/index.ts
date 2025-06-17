@@ -14,6 +14,8 @@ export interface AppUser {
   email: string;
   phoneNumber?: string | null;
   address?: string | null;
+  bio?: string | null; // Added for barber bio
+  specialties?: string[] | null; // Added for barber specialties
   isAcceptingBookings?: boolean;
   fcmToken?: string | null;
   createdAt?: Timestamp;
@@ -90,4 +92,3 @@ export interface UnavailableDate {
   reason?: string;
   createdAt?: Timestamp;
 }
-

@@ -11,8 +11,9 @@ import { firestore } from '@/firebase/config';
 import { collection, doc, getDoc, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { ArrowLeft, CalendarPlus, Scissors, DollarSign, Clock, UserCircle, AlertTriangle, MapPin, Info } from 'lucide-react';
+import { ArrowLeft, CalendarPlus, Scissors, DollarSign, Clock, UserCircle, AlertTriangle, MapPin, Info, Sparkles, MessageSquareText } from 'lucide-react'; // Added Sparkles, MessageSquareText
 import Link from 'next/link';
+import { Badge } from '@/components/ui/badge'; // Added Badge
 
 
 export default function ViewBarberPage() {
@@ -40,12 +41,12 @@ export default function ViewBarberPage() {
         const isAccepting = barberData.isAcceptingBookings !== undefined && barberData.isAcceptingBookings !== null
                             ? barberData.isAcceptingBookings
                             : true;
-        setBarber({ 
-            uid: barberDocSnap.id, 
-            id: barberDocSnap.id, 
-            ...barberData, 
+        setBarber({
+            uid: barberDocSnap.id,
+            id: barberDocSnap.id, // For compatibility if used elsewhere
+            ...barberData,
             isAcceptingBookings: isAccepting,
-            email: barberData.email, 
+            email: barberData.email, // Ensure email is explicitly set
         });
       } else {
         toast({ title: "Error", description: "Barber not found.", variant: "destructive" });
@@ -142,7 +143,35 @@ export default function ViewBarberPage() {
                     </div>
                 </div>
             )}
-            <h3 className="text-xl font-semibold mb-4 text-foreground">Services Offered</h3>
+
+            {/* Bio Section */}
+            {barber.bio && (
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold mb-2 text-foreground flex items-center">
+                  <MessageSquareText className="mr-2 h-5 w-5 text-primary" /> About {barber.firstName}
+                </h3>
+                <p className="text-base text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{barber.bio}</p>
+              </div>
+            )}
+
+            {/* Specialties Section */}
+            {barber.specialties && barber.specialties.length > 0 && (
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold mb-3 text-foreground flex items-center">
+                  <Sparkles className="mr-2 h-5 w-5 text-primary" /> Specialties
+                </h3>
+                <div className="flex flex-wrap gap-2">
+                  {barber.specialties.map((specialty, index) => (
+                    <Badge key={index} variant="secondary" className="text-sm py-1 px-3 rounded-full">
+                      {specialty}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+
+            <h3 className="text-xl font-semibold mb-4 text-foreground pt-4 border-t mt-6">Services Offered</h3>
             {services.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {services.map(service => (
@@ -170,9 +199,10 @@ export default function ViewBarberPage() {
 
           <CardFooter className="p-4 md:p-6 border-t mt-auto">
             <Button
-                asChild={barberIsAcceptingBookings} 
+                asChild={barberIsAcceptingBookings}
                 className="w-full sm:w-auto h-14 rounded-full text-lg px-8"
-                disabled={!barberIsAcceptingBookings} 
+                disabled={!barberIsAcceptingBookings || services.length === 0}
+                title={services.length === 0 && barberIsAcceptingBookings ? "This barber has no services to book yet" : undefined}
             >
               {barberIsAcceptingBookings ? (
                 <Link href={`/customer/book/${barberId}`}>
