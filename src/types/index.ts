@@ -17,8 +17,8 @@ export interface AppUser {
   bio?: string | null;
   specialties?: string[] | null;
   isAcceptingBookings?: boolean;
-  isTemporarilyUnavailable?: boolean; // New: Tracks if barber is currently busy
-  unavailableSince?: Timestamp | null; // New: Timestamp for when barber became busy
+  isTemporarilyUnavailable?: boolean;
+  unavailableSince?: Timestamp | null;
   fcmToken?: string | null;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
@@ -42,7 +42,7 @@ export interface DayAvailability {
   day: DayOfWeek;
   isOpen: boolean;
   startTime: string;
-  endTime: string;
+  endTime:string;
 }
 
 export interface BarberScheduleDoc {
@@ -72,9 +72,9 @@ export interface Appointment {
   serviceName: string;
   price: number;
   date: string; // YYYY-MM-DD
-  startTime: string; // e.g., "10:00 AM" - This will be updated if shifted
-  endTime: string; // Original estimated end time, e.g., "10:30 AM" - This will be updated
-  appointmentTimestamp: Timestamp | null; // This will be updated if shifted
+  startTime: string; // e.g., "10:00 AM"
+  endTime: string; // Original estimated end time, e.g., "10:30 AM"
+  appointmentTimestamp: Timestamp | null;
   status: AppointmentStatus;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
@@ -90,7 +90,16 @@ export interface Appointment {
 export interface UnavailableDate {
   id: string;
   barberId: string;
-  date: string;
+  date: string; // YYYY-MM-DD
   reason?: string;
   createdAt?: Timestamp;
+}
+
+export interface SpendingEntry {
+  id: string;
+  barberId: string;
+  date: string; // YYYY-MM-DD
+  description: string;
+  amount: number;
+  createdAt: Timestamp;
 }
