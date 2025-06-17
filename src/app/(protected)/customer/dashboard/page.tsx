@@ -5,14 +5,14 @@ import ProtectedPage from '@/components/layout/ProtectedPage';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
-import type { Appointment, AppUser, AppointmentStatus, Rating } from '@/types';
+import type { Appointment, AppUser, AppointmentStatus } from '@/types';
 import { firestore } from '@/firebase/config';
-import { collection, query, where, getDocs, orderBy, Timestamp, doc, updateDoc, runTransaction, addDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, Timestamp, doc, updateDoc } from 'firebase/firestore'; // Removed runTransaction and addDoc
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { CalendarDays, Clock, Scissors, Eye, XCircle, Search, UserCircle, Play, CheckSquare, LogIn, History, CheckCircle, CircleSlash, Star } from 'lucide-react';
+import { CalendarDays, Clock, Scissors, Eye, XCircle, Search, UserCircle, Play, CheckSquare, LogIn, History, CheckCircle, CircleSlash } from 'lucide-react'; // Removed Star
 import Link from 'next/link';
-import dynamic from 'next/dynamic';
+// RatingDialog import removed
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,10 +27,7 @@ import { getItemWithTimestampRevival, setItemWithTimestampConversion, LS_MY_APPO
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 
-const RatingDialog = dynamic(() => import('@/components/customer/RatingDialog'), {
-  loading: () => <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-[100]"><LoadingSpinner className="h-8 w-8 text-primary" /></div>,
-  ssr: false
-});
+// RatingDialog dynamic import removed
 
 const LS_PAST_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD = 'customer_dashboard_past_appointments';
 
@@ -64,9 +61,7 @@ export default function CustomerDashboardPage() {
   const [isCancelling, setIsCancelling] = useState(false);
   const [isUpdatingAppointment, setIsUpdatingAppointment] = useState<string | null>(null);
 
-  const [isRatingDialogOpen, setIsRatingDialogOpen] = useState(false);
-  const [appointmentToRate, setAppointmentToRate] = useState<Appointment | null>(null);
-  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+  // RatingDialog related states removed: isRatingDialogOpen, appointmentToRate, isSubmittingRating
 
 
   useEffect(() => {
@@ -211,14 +206,7 @@ export default function CustomerDashboardPage() {
       
       toast({ title: "Success", description: successMessage || "Appointment updated." });
       
-      const updatedApptSnapshot = await getDocs(query(collection(firestore, 'appointments'), where('__name__', '==', appointmentId)));
-      const updatedApptData = { id: updatedApptSnapshot.docs[0].id, ...updatedApptSnapshot.docs[0].data() } as Appointment;
-
-
-      if (updatedApptData.status === 'completed' && !updatedApptData.customerRating) {
-        setAppointmentToRate(updatedApptData);
-        setIsRatingDialogOpen(true);
-      }
+      // Rating dialog trigger removed
       fetchMyAppointments();
 
     } catch (error) {
@@ -243,7 +231,7 @@ export default function CustomerDashboardPage() {
         
         fetchedBarbersData.push({
         uid: doc.id,
-        id: doc.id,
+        // id: doc.id, // id is not part of AppUser, uid is the id
         firstName: data.firstName,
         lastName: data.lastName,
         role: data.role,
@@ -251,8 +239,7 @@ export default function CustomerDashboardPage() {
         address: data.address,
         isAcceptingBookings: isAccepting,
         email: data.email,
-        averageRating: data.averageRating || 0,
-        ratingCount: data.ratingCount || 0,
+        // averageRating and ratingCount removed
         } as AppUser);
       });
       setAvailableBarbers(fetchedBarbersData);
@@ -300,79 +287,7 @@ export default function CustomerDashboardPage() {
     }
   };
 
-  const handleSaveRating = async (appointmentId: string, ratingScore: number, comment?: string) => {
-    if (!user?.uid || !appointmentToRate) {
-        toast({ title: "Error", description: "User or appointment not found for rating.", variant: "destructive" });
-        return;
-    }
-    setIsSubmittingRating(true);
-    const now = Timestamp.now();
-
-    try {
-        await runTransaction(firestore, async (transaction) => {
-            const appointmentRef = doc(firestore, 'appointments', appointmentId);
-            const barberRef = doc(firestore, 'users', appointmentToRate.barberId);
-            const newRatingRef = doc(collection(firestore, 'ratings')); 
-
-            const barberSnap = await transaction.get(barberRef);
-            if (!barberSnap.exists()) {
-                throw new Error("Barber profile not found.");
-            }
-            const barberData = barberSnap.data() as AppUser;
-
-            const appointmentSnap = await transaction.get(appointmentRef);
-            if (!appointmentSnap.exists()) {
-                throw new Error("Appointment not found.");
-            }
-            const currentAppointmentData = appointmentSnap.data() as Appointment;
-            if (currentAppointmentData.customerRating) {
-                console.warn(`Appointment ${appointmentId} already has a rating. Overwriting.`);
-            }
-
-            // const oldRatingTotal = (barberData.averageRating || 0) * (barberData.ratingCount || 0);
-            // const newRatingCount = (barberData.ratingCount || 0) + 1;
-            // const newAverageRating = (oldRatingTotal + ratingScore) / newRatingCount;
-
-            const ratingData: Omit<Rating, 'id'> = { 
-                barberId: appointmentToRate.barberId,
-                customerId: user.uid,
-                appointmentId: appointmentId,
-                score: ratingScore,
-                comment: comment || null,
-                createdAt: now,
-            };
-            transaction.set(newRatingRef, ratingData);
-
-            transaction.update(appointmentRef, {
-                customerRating: ratingScore,
-                ratingComment: comment || null,
-                updatedAt: now,
-            });
-
-            // Temporarily removing direct update to barber's profile from client
-            // This logic should be moved to a Cloud Function.
-            /*
-            transaction.update(barberRef, {
-                averageRating: parseFloat(newAverageRating.toFixed(2)),
-                ratingCount: newRatingCount,
-                updatedAt: now,
-            });
-            */
-        });
-
-        toast({ title: "Rating Submitted!", description: "Thank you for your feedback. Barber's average will update after server processing." });
-        fetchMyAppointments(); 
-        // fetchAvailableBarbers(); // Average rating won't be immediately reflected here from client-side change.
-    } catch (error) {
-        console.error("Error saving rating with transaction:", error);
-        toast({ title: "Rating Error", description: (error as Error).message || "Could not save your rating.", variant: "destructive" });
-    } finally {
-        setIsSubmittingRating(false);
-        setIsRatingDialogOpen(false);
-        setAppointmentToRate(null);
-    }
-  };
-
+  // handleSaveRating function removed
 
   const renderAppointmentActions = (appointment: Appointment) => {
     const isProcessingThis = isUpdatingAppointment === appointment.id;
@@ -424,23 +339,7 @@ export default function CustomerDashboardPage() {
     }
   };
 
-  const renderStars = (rating: number) => {
-    const totalStars = 5;
-    return (
-      <div className="flex items-center">
-        {[...Array(totalStars)].map((_, i) => (
-          <Star
-            key={i}
-            className={cn(
-              "h-4 w-4",
-              i < Math.round(rating) ? "text-yellow-400 fill-yellow-400" : "text-gray-300 dark:text-gray-500"
-            )}
-          />
-        ))}
-        {rating > 0 && <span className="ml-1.5 text-xs text-muted-foreground">({rating.toFixed(1)})</span>}
-      </div>
-    );
-  };
+  // renderStars function removed
 
   return (
     <ProtectedPage expectedRole="customer">
@@ -546,12 +445,7 @@ export default function CustomerDashboardPage() {
                          <p className={cn("text-xs font-medium capitalize", app.status === 'completed' ? 'text-green-600' : 'text-destructive')}>
                            Status: {getStatusLabelForCustomer(app.status)}
                          </p>
-                         {app.status === 'completed' && app.customerRating && (
-                            <div className="flex items-center mt-1">
-                                {renderStars(app.customerRating)}
-                                <span className="ml-2 text-xs text-muted-foreground">(Your Rating)</span>
-                            </div>
-                         )}
+                         {/* Rating display removed */}
                       </div>
                       <div className="space-y-1 text-sm text-left md:text-right">
                         <p className="font-medium flex items-center md:justify-end text-base text-muted-foreground">
@@ -562,16 +456,7 @@ export default function CustomerDashboardPage() {
                         </p>
                       </div>
                        <div className="md:col-span-3 flex flex-col sm:flex-row justify-end items-center pt-3 mt-3 border-t gap-2">
-                           {app.status === 'completed' && !app.customerRating && (
-                             <Button
-                               variant="outline"
-                               size="sm"
-                               className="rounded-full h-9 px-4"
-                               onClick={() => { setAppointmentToRate(app); setIsRatingDialogOpen(true); }}
-                             >
-                               <Star className="mr-1.5 h-4 w-4 text-yellow-400"/> Rate Service
-                             </Button>
-                           )}
+                           {/* "Rate Service" button removed */}
                            <Button asChild variant="outline" size="sm" className="rounded-full h-9 px-4">
                                 <Link href={`/customer/book/${app.barberId}?serviceId=${app.serviceId}`}>
                                     Rebook This Service
@@ -625,12 +510,8 @@ export default function CustomerDashboardPage() {
                               </Badge>
                             )}
                           </div>
-                           {renderStars(barber.averageRating || 0)}
-                           {barber.ratingCount && barber.ratingCount > 0 ? (
-                             <span className="text-xs text-muted-foreground ml-1">({barber.ratingCount} ratings)</span>
-                           ) : (
-                            <span className="text-xs text-muted-foreground ml-1">(No ratings yet)</span>
-                           )}
+                           {/* Rating display removed */}
+                           <span className="text-xs text-muted-foreground ml-1">(Ratings feature disabled)</span>
                            {barber.address && (
                             <p className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[150px] sm:max-w-full mt-0.5">
                                 {barber.address}
@@ -679,16 +560,7 @@ export default function CustomerDashboardPage() {
         </AlertDialog>
       )}
 
-      {isRatingDialogOpen && appointmentToRate && (
-        <RatingDialog
-          isOpen={isRatingDialogOpen}
-          onClose={() => { setIsRatingDialogOpen(false); setAppointmentToRate(null); }}
-          onSubmit={handleSaveRating}
-          appointmentToRate={appointmentToRate}
-          isSubmitting={isSubmittingRating}
-        />
-      )}
+      {/* RatingDialog usage removed */}
     </ProtectedPage>
   );
 }
-

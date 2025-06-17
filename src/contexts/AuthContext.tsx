@@ -29,7 +29,7 @@ interface AuthContextType {
   setUser: React.Dispatch<React.SetStateAction<AppUser | null>>;
   setRole: (role: UserRole) => void;
   registerWithEmailAndPassword: (
-    userDetails: Omit<AppUser, 'uid' | 'createdAt' | 'updatedAt' | 'displayName' | 'emailVerified' | 'fcmToken' | 'averageRating' | 'ratingCount'> & { password_original_do_not_use: string }
+    userDetails: Omit<AppUser, 'uid' | 'createdAt' | 'updatedAt' | 'displayName' | 'emailVerified' | 'fcmToken'> & { password_original_do_not_use: string }
   ) => Promise<void>;
   signInWithEmailAndPassword: (email: string, password_original_do_not_use: string) => Promise<void>;
   sendPasswordResetLink: (email: string) => Promise<void>;
@@ -98,8 +98,7 @@ async function createUserDocument(firebaseUser: FirebaseUser, dataFromRegistrati
       userDataToSet.isAcceptingBookings = isAcceptingBookingsFromReg !== undefined ? isAcceptingBookingsFromReg : true;
       if (bioFromReg) userDataToSet.bio = bioFromReg; else if (dataFromRegistration.hasOwnProperty('bio')) userDataToSet.bio = null;
       if (specialtiesFromReg) userDataToSet.specialties = specialtiesFromReg; else if (dataFromRegistration.hasOwnProperty('specialties')) userDataToSet.specialties = null;
-      userDataToSet.averageRating = 0; // Initialize rating fields for new barbers
-      userDataToSet.ratingCount = 0;
+      // averageRating and ratingCount initialization removed
     }
 
     const snapshot = await getDoc(userRef);
@@ -171,8 +170,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             specialties: firestoreUser.specialties,
             isAcceptingBookings: firestoreUser.role === 'barber' ? (firestoreUser.isAcceptingBookings !== undefined ? firestoreUser.isAcceptingBookings : true) : undefined,
             fcmToken: firestoreUser.fcmToken || null,
-            averageRating: firestoreUser.averageRating || 0,
-            ratingCount: firestoreUser.ratingCount || 0,
+            // averageRating and ratingCount removed
             createdAt: firestoreUser.createdAt,
             updatedAt: firestoreUser.updatedAt,
           };
@@ -219,7 +217,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const registerWithEmailAndPassword = async (
-     userDetails: Omit<AppUser, 'uid' | 'createdAt' | 'updatedAt' | 'displayName' | 'emailVerified' | 'fcmToken' | 'averageRating' | 'ratingCount'> & { password_original_do_not_use: string }
+     userDetails: Omit<AppUser, 'uid' | 'createdAt' | 'updatedAt' | 'displayName' | 'emailVerified' | 'fcmToken'> & { password_original_do_not_use: string }
   ) => {
     setIsProcessingAuth(true);
     const { email, password_original_do_not_use, firstName, lastName, role: userRole, phoneNumber, address, bio, specialties, isAcceptingBookings } = userDetails;
@@ -244,8 +242,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         firestoreDataForCreation.isAcceptingBookings = isAcceptingBookings !== undefined ? isAcceptingBookings : true;
         firestoreDataForCreation.bio = bio || null;
         firestoreDataForCreation.specialties = specialties || null;
-        firestoreDataForCreation.averageRating = 0;
-        firestoreDataForCreation.ratingCount = 0;
+        // averageRating and ratingCount initialization removed
       }
 
       console.log('registerWithEmailAndPassword: calling createUserDocument with firestoreDataForCreation:', JSON.stringify(firestoreDataForCreation, null, 2));
@@ -367,7 +364,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (updates.hasOwnProperty('specialties')) updatedUserFields.specialties = dataToUpdate.specialties;
         updatedUserFields.displayName = dataToUpdate.displayName;
         updatedUserFields.updatedAt = dataToUpdate.updatedAt;
-        // averageRating and ratingCount are not updated here, handled by rating submission logic
+        // averageRating and ratingCount are not updated here
 
         persistUserSession(updatedUserFields);
         return updatedUserFields;

@@ -18,8 +18,7 @@ export interface AppUser {
   specialties?: string[] | null;
   isAcceptingBookings?: boolean;
   fcmToken?: string | null;
-  averageRating?: number; // New: Average rating for barbers
-  ratingCount?: number; // New: Total number of ratings for barbers
+  // averageRating and ratingCount removed
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
   displayName?: string | null;
@@ -83,8 +82,7 @@ export interface Appointment {
   customerMarkedDoneAt?: Timestamp | null;
   barberMarkedDoneAt?: Timestamp | null;
   serviceActuallyCompletedAt?: Timestamp | null;
-  customerRating?: number | null; // New: Rating given by customer for this appointment (1-5)
-  ratingComment?: string | null; // New: Optional comment from customer
+  // customerRating and ratingComment removed
 }
 
 export interface UnavailableDate {
@@ -95,13 +93,4 @@ export interface UnavailableDate {
   createdAt?: Timestamp;
 }
 
-// New: Rating interface (can be expanded later if we store ratings in a separate collection)
-export interface Rating {
-  id: string; // Or appointmentId if it's 1-to-1 with appointment
-  barberId: string;
-  customerId: string;
-  appointmentId: string;
-  score: number; // 1-5
-  comment?: string;
-  createdAt: Timestamp;
-}
+// Rating interface removed
