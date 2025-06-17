@@ -4,89 +4,73 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // =====================================================================
-    // Helper Functions (Simplified for Testing)
-    // =====================================================================
-
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
-
-    // =====================================================================
-    // User Profile Rules (Relaxed for Testing)
-    // =====================================================================
+    // Users Collection
+    // Allow any authenticated user to read and write to their own document.
+    // Allow any authenticated user to read other user profiles (e.g., for barber listings).
     match /users/{userId} {
-      allow read: if true; // Allow public read for easier testing of barber/customer profiles
-      
-      // Allow create if signed in and is the owner of the document path
-      allow create: if isSignedIn() && isOwner(userId);
-
-      // Allow update if signed in and is the owner
-      allow update: if isSignedIn() && isOwner(userId);
-      
-      // Generally, user documents are not deleted directly, but if needed for testing:
-      // allow delete: if isSignedIn() && isOwner(userId); 
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+      // For simplicity in testing, allow create by anyone authenticated.
+      // In production, you'd restrict creation to only during sign-up.
+      allow create: if request.auth != null;
     }
 
-    // =====================================================================
-    // Services Rules (Relaxed for Testing)
-    // =====================================================================
+    // Services Collection
+    // Barbers can manage their own services.
+    // Customers can read services.
     match /services/{serviceId} {
-      allow read: if true; // Public read for services
-
-      // Allow create/update/delete by any authenticated user for testing
-      allow create: if isSignedIn();
-      allow update: if isSignedIn();
-      allow delete: if isSignedIn();
+      allow read: if request.auth != null;
+      // Allow write/create/delete if authenticated (for testing).
+      // In production, restrict to only the barber who owns the service.
+      allow write, create, delete: if request.auth != null;
+      // allow write, create, delete: if request.auth != null && request.resource.data.barberId == request.auth.uid; // Example of a more secure rule
     }
 
-    // =====================================================================
-    // Barber Schedule Rules (Relaxed for Testing)
-    // =====================================================================
+    // Barber Schedules Collection (and subcollections)
+    // Barbers manage their own schedule and unavailable dates.
+    // Customers can read schedules/unavailable dates for booking.
     match /barberSchedules/{barberId} {
-        allow read: if true; // Public read for schedules
-        
-        // Allow write by any authenticated user for testing
-        allow write: if isSignedIn(); // Covers create and update
+      allow read: if request.auth != null;
+      // Allow write/create/delete if authenticated (for testing).
+      // In production, restrict to only the barber.
+      allow write, create: if request.auth != null;
+      // allow write, create: if request.auth != null && barberId == request.auth.uid; // Example of a more secure rule
 
-        match /unavailableDates/{dateId} {
-            allow read: if true; // Public read for unavailable dates
-            
-            // Allow create/delete by any authenticated user for testing
-            allow create: if isSignedIn();
-            allow delete: if isSignedIn();
-        }
+      match /unavailableDates/{dateId} {
+        allow read: if request.auth != null;
+        // Allow write/create/delete if authenticated (for testing).
+        // In production, restrict to only the barber.
+        allow write, create, delete: if request.auth != null;
+        // allow write, create, delete: if request.auth != null && get(/databases/$(database)/documents/barberSchedules/$(request.auth.uid)).data.barberId == request.auth.uid; // More complex check
+      }
     }
 
-    // =====================================================================
-    // Appointment Rules (Relaxed for Testing)
-    // =====================================================================
+    // Appointments Collection
+    // Customers can create their own appointments.
+    // Barbers and Customers can read/update their respective appointments.
     match /appointments/{appointmentId} {
-      // Allow read by any authenticated user
-      allow read: if isSignedIn();
+      allow read: if request.auth != null; // Might refine to only involved parties in production
+      // Allow create/update/delete if authenticated (for testing).
+      // In production, more granular control is needed.
+      // e.g., customer can create if customerId matches auth.uid
+      // e.g., customer can update status to 'cancelled' if customerId matches auth.uid and status is 'upcoming'
+      // e.g., barber can update if barberId matches auth.uid
+      allow write, create, delete: if request.auth != null;
+    }
 
-      // Allow create by any authenticated user
-      // For testing, we remove checks like role, specific customerId match, barber availability
-      allow create: if isSignedIn() &&
-                    request.resource.data.barberId is string && // Basic data integrity
-                    request.resource.data.serviceId is string &&
-                    request.resource.data.date is string &&
-                    request.resource.data.startTime is string &&
-                    request.resource.data.status is string && // e.g., 'upcoming'
-                    request.resource.data.createdAt is timestamp &&
-                    request.resource.data.updatedAt is timestamp;
+    // Spendings Collection
+    // Barbers can manage their own spending entries.
+    match /spendings/{spendingId} {
+      allow read: if request.auth != null; // In production, barber should only read their own
+      // Allow write/create/delete if authenticated (for testing).
+      // In production, restrict to only the barber who owns the entry.
+      allow write, create, delete: if request.auth != null;
+      // allow write, create, delete: if request.auth != null && request.resource.data.barberId == request.auth.uid; // Example of a more secure rule
+    }
 
-      // Allow update by any authenticated user
-      // For testing, we remove complex status transition logic
-      allow update: if isSignedIn() &&
-                    request.resource.data.updatedAt is timestamp; // Ensure updatedAt is always set
-
-      // Appointments should generally be 'cancelled' via update, not hard deleted by clients
-      allow delete: if false; 
+    // Default deny all other paths
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
