@@ -10,8 +10,9 @@ import { firestore } from '@/firebase/config';
 import { collection, query, where, getDocs, orderBy, Timestamp, doc, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { CalendarDays, Clock, Scissors, Eye, XCircle, Search, UserCircle, Play, CheckSquare, LogIn, History, CheckCircle, CircleSlash } from 'lucide-react';
+import { CalendarDays, Clock, Scissors, Eye, XCircle, Search, UserCircle, Play, CheckSquare, LogIn, History, CheckCircle, CircleSlash, Star } from 'lucide-react'; // Added Star
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,7 +25,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { getItemWithTimestampRevival, setItemWithTimestampConversion, LS_MY_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD, getSimpleItem, setSimpleItem, LS_AVAILABLE_BARBERS_KEY_CUSTOMER_DASHBOARD } from '@/lib/localStorageUtils';
 import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge'; // Added Badge import
+import { Badge } from '@/components/ui/badge';
+
+const RatingDialog = dynamic(() => import('@/components/customer/RatingDialog'), {
+  loading: () => <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-[100]"><LoadingSpinner className="h-8 w-8 text-primary" /></div>,
+  ssr: false
+});
 
 const LS_PAST_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD = 'customer_dashboard_past_appointments';
 
@@ -58,10 +64,14 @@ export default function CustomerDashboardPage() {
   const [isCancelling, setIsCancelling] = useState(false);
   const [isUpdatingAppointment, setIsUpdatingAppointment] = useState<string | null>(null);
 
+  const [isRatingDialogOpen, setIsRatingDialogOpen] = useState(false);
+  const [appointmentToRate, setAppointmentToRate] = useState<Appointment | null>(null);
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+
 
   useEffect(() => {
     setToday(getTodayDateString());
-    if (typeof window !== 'undefined') { 
+    if (typeof window !== 'undefined') {
         const cachedActiveAppointments = getItemWithTimestampRevival<Appointment[]>(LS_MY_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD);
         if (cachedActiveAppointments) {
             setActiveAppointments(cachedActiveAppointments);
@@ -91,8 +101,8 @@ export default function CustomerDashboardPage() {
       const q = query(
         appointmentsCollection,
         where('customerId', '==', user.uid),
-        orderBy('date', 'desc'), 
-        orderBy('startTime', 'desc') 
+        orderBy('date', 'desc'),
+        orderBy('startTime', 'desc')
       );
       const querySnapshot = await getDocs(q);
       const fetchedAppointments: Appointment[] = [];
@@ -101,8 +111,8 @@ export default function CustomerDashboardPage() {
       });
 
       const active = fetchedAppointments
-        .filter(app => app.status !== 'completed' && app.status !== 'cancelled') 
-        .sort((a, b) => { 
+        .filter(app => app.status !== 'completed' && app.status !== 'cancelled')
+        .sort((a, b) => {
           if (a.date === b.date) {
             return timeToMinutes(a.startTime) - timeToMinutes(b.startTime);
           }
@@ -111,7 +121,7 @@ export default function CustomerDashboardPage() {
       
       const past = fetchedAppointments
         .filter(app => app.status === 'completed' || app.status === 'cancelled')
-        .sort((a,b) => { 
+        .sort((a,b) => {
             if (a.date === b.date) {
                 return timeToMinutes(b.startTime) - timeToMinutes(a.startTime);
             }
@@ -145,7 +155,7 @@ export default function CustomerDashboardPage() {
     let successMessage = "";
 
     try {
-      const currentAppointment = activeAppointments.find(app => app.id === appointmentId);
+      const currentAppointment = [...activeAppointments, ...pastAppointments].find(app => app.id === appointmentId);
       if (!currentAppointment) {
         toast({ title: "Error", description: "Appointment not found.", variant: "destructive" });
         setIsUpdatingAppointment(null);
@@ -199,8 +209,17 @@ export default function CustomerDashboardPage() {
 
       await updateDoc(appointmentRef, updateData);
       
-      fetchMyAppointments(); 
       toast({ title: "Success", description: successMessage || "Appointment updated." });
+      
+      // Refetch and potentially trigger rating dialog
+      const updatedApptSnapshot = await getDoc(appointmentRef);
+      const updatedApptData = { id: updatedApptSnapshot.id, ...updatedApptSnapshot.data() } as Appointment;
+
+      if (updatedApptData.status === 'completed' && !updatedApptData.customerRating) {
+        setAppointmentToRate(updatedApptData);
+        setIsRatingDialogOpen(true);
+      }
+      fetchMyAppointments();
 
     } catch (error) {
       console.error("Error updating appointment:", error);
@@ -224,14 +243,16 @@ export default function CustomerDashboardPage() {
         
         fetchedBarbersData.push({
         uid: doc.id,
-        id: doc.id, 
+        id: doc.id,
         firstName: data.firstName,
         lastName: data.lastName,
         role: data.role,
         phoneNumber: data.phoneNumber,
         address: data.address,
-        isAcceptingBookings: isAccepting, 
+        isAcceptingBookings: isAccepting,
         email: data.email,
+        averageRating: data.averageRating || 0,
+        ratingCount: data.ratingCount || 0,
         } as AppUser);
       });
       setAvailableBarbers(fetchedBarbersData);
@@ -254,7 +275,7 @@ export default function CustomerDashboardPage() {
   }, [user?.uid, fetchMyAppointments, fetchAvailableBarbers, today, initialLoadComplete]);
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString + 'T00:00:00'); 
+    const date = new Date(dateString + 'T00:00:00');
     return date.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   };
 
@@ -268,7 +289,7 @@ export default function CustomerDashboardPage() {
         updatedAt: Timestamp.now(),
       });
       
-      fetchMyAppointments(); 
+      fetchMyAppointments();
       toast({ title: "Appointment Cancelled", description: "Your appointment has been successfully cancelled." });
     } catch (error) {
       console.error("Error cancelling appointment:", error);
@@ -276,6 +297,29 @@ export default function CustomerDashboardPage() {
     } finally {
       setIsCancelling(false);
       setAppointmentToCancel(null);
+    }
+  };
+
+  const handleSaveRating = async (appointmentId: string, rating: number, comment?: string) => {
+    if (!user?.uid) return;
+    setIsSubmittingRating(true);
+    try {
+      const appointmentRef = doc(firestore, 'appointments', appointmentId);
+      await updateDoc(appointmentRef, {
+        customerRating: rating,
+        ratingComment: comment || null,
+        updatedAt: Timestamp.now(),
+      });
+      toast({ title: "Rating Submitted!", description: "Thank you for your feedback." });
+      fetchMyAppointments(); // Refresh appointments to show rating potentially
+      // In Stage 2, we'll also update the barber's average rating here.
+    } catch (error) {
+      console.error("Error saving rating:", error);
+      toast({ title: "Rating Error", description: "Could not save your rating.", variant: "destructive" });
+    } finally {
+      setIsSubmittingRating(false);
+      setIsRatingDialogOpen(false);
+      setAppointmentToRate(null);
     }
   };
 
@@ -327,6 +371,24 @@ export default function CustomerDashboardPage() {
         case 'cancelled': return 'Cancelled';
         default: return status;
     }
+  };
+
+  const renderStars = (rating: number) => {
+    const totalStars = 5;
+    return (
+      <div className="flex items-center">
+        {[...Array(totalStars)].map((_, i) => (
+          <Star
+            key={i}
+            className={cn(
+              "h-4 w-4",
+              i < Math.round(rating) ? "text-yellow-400 fill-yellow-400" : "text-gray-300 dark:text-gray-500"
+            )}
+          />
+        ))}
+        {rating > 0 && <span className="ml-1.5 text-xs text-muted-foreground">({rating.toFixed(1)})</span>}
+      </div>
+    );
   };
 
   return (
@@ -433,6 +495,12 @@ export default function CustomerDashboardPage() {
                          <p className={cn("text-xs font-medium capitalize", app.status === 'completed' ? 'text-green-600' : 'text-destructive')}>
                            Status: {getStatusLabelForCustomer(app.status)}
                          </p>
+                         {app.status === 'completed' && app.customerRating && (
+                            <div className="flex items-center mt-1">
+                                {renderStars(app.customerRating)}
+                                <span className="ml-2 text-xs text-muted-foreground">(Your Rating)</span>
+                            </div>
+                         )}
                       </div>
                       <div className="space-y-1 text-sm text-left md:text-right">
                         <p className="font-medium flex items-center md:justify-end text-base text-muted-foreground">
@@ -442,15 +510,23 @@ export default function CustomerDashboardPage() {
                           <Clock className="mr-2 h-4 w-4 flex-shrink-0" /> {app.startTime}
                         </p>
                       </div>
-                       {app.status === 'completed' && (
-                         <div className="md:col-span-3 flex justify-end items-center pt-3 mt-3 border-t">
-                            <Button asChild variant="outline" size="sm" className="rounded-full h-9 px-4">
+                       <div className="md:col-span-3 flex flex-col sm:flex-row justify-end items-center pt-3 mt-3 border-t gap-2">
+                           {app.status === 'completed' && !app.customerRating && (
+                             <Button
+                               variant="outline"
+                               size="sm"
+                               className="rounded-full h-9 px-4"
+                               onClick={() => { setAppointmentToRate(app); setIsRatingDialogOpen(true); }}
+                             >
+                               <Star className="mr-1.5 h-4 w-4 text-yellow-400"/> Rate Service
+                             </Button>
+                           )}
+                           <Button asChild variant="outline" size="sm" className="rounded-full h-9 px-4">
                                 <Link href={`/customer/book/${app.barberId}?serviceId=${app.serviceId}`}>
                                     Rebook This Service
                                 </Link>
                             </Button>
-                         </div>
-                       )}
+                       </div>
                     </CardContent>
                   </Card>
                 ))}
@@ -484,22 +560,28 @@ export default function CustomerDashboardPage() {
                       <div className="flex items-center gap-4 flex-grow">
                         <UserCircle className="h-10 w-10 text-muted-foreground flex-shrink-0" />
                         <div className="flex-grow">
-                          <div className="flex items-center gap-2 mb-0.5">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-x-2 gap-y-0.5 mb-0.5">
                             <h3 className="text-base font-semibold">
                               {barber.firstName} {barber.lastName}
                             </h3>
                             {barber.isAcceptingBookings ? (
-                              <Badge variant="default" className="bg-green-500 hover:bg-green-600 text-white text-xs py-0.5 px-2">
+                              <Badge variant="default" className="bg-green-500 hover:bg-green-600 text-white text-xs py-0.5 px-2 whitespace-nowrap">
                                 <CheckCircle className="mr-1 h-3 w-3" /> Accepting Bookings
                               </Badge>
                             ) : (
-                              <Badge variant="secondary" className="text-xs py-0.5 px-2">
+                              <Badge variant="secondary" className="text-xs py-0.5 px-2 whitespace-nowrap">
                                 <CircleSlash className="mr-1 h-3 w-3" /> Not Accepting Bookings
                               </Badge>
                             )}
                           </div>
+                           {renderStars(barber.averageRating || 0)}
+                           {barber.ratingCount && barber.ratingCount > 0 ? (
+                             <span className="text-xs text-muted-foreground ml-1">({barber.ratingCount} ratings)</span>
+                           ) : (
+                            <span className="text-xs text-muted-foreground ml-1">(No ratings yet)</span>
+                           )}
                            {barber.address && (
-                            <p className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[150px] sm:max-w-full">
+                            <p className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[150px] sm:max-w-full mt-0.5">
                                 {barber.address}
                             </p>
                             )}
@@ -518,6 +600,7 @@ export default function CustomerDashboardPage() {
           </CardContent>
         </Card>
       </div>
+
       {appointmentToCancel && (
         <AlertDialog open={!!appointmentToCancel} onOpenChange={(open) => !open && setAppointmentToCancel(null)}>
           <AlertDialogContent className="rounded-xl">
@@ -544,7 +627,16 @@ export default function CustomerDashboardPage() {
           </AlertDialogContent>
         </AlertDialog>
       )}
+
+      {isRatingDialogOpen && appointmentToRate && (
+        <RatingDialog
+          isOpen={isRatingDialogOpen}
+          onClose={() => { setIsRatingDialogOpen(false); setAppointmentToRate(null); }}
+          onSubmit={handleSaveRating}
+          appointmentToRate={appointmentToRate}
+          isSubmitting={isSubmittingRating}
+        />
+      )}
     </ProtectedPage>
   );
 }
-

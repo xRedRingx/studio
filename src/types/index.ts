@@ -14,10 +14,12 @@ export interface AppUser {
   email: string;
   phoneNumber?: string | null;
   address?: string | null;
-  bio?: string | null; // Added for barber bio
-  specialties?: string[] | null; // Added for barber specialties
+  bio?: string | null;
+  specialties?: string[] | null;
   isAcceptingBookings?: boolean;
   fcmToken?: string | null;
+  averageRating?: number; // New: Average rating for barbers
+  ratingCount?: number; // New: Total number of ratings for barbers
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
   displayName?: string | null;
@@ -50,14 +52,14 @@ export interface BarberScheduleDoc {
 }
 
 export type AppointmentStatus =
-  | 'upcoming' // Initial state
-  | 'customer-initiated-check-in' // Customer clicked check-in
-  | 'barber-initiated-check-in'   // Barber recorded customer arrival / Walk-in initial
-  | 'in-progress'                 // Both customer and barber confirmed check-in / Service started
-  | 'customer-initiated-completion'// Customer clicked mark done
-  | 'barber-initiated-completion'  // Barber clicked mark done
-  | 'completed'                   // Both confirmed service is done
-  | 'cancelled';                  // Appointment cancelled
+  | 'upcoming'
+  | 'customer-initiated-check-in'
+  | 'barber-initiated-check-in'
+  | 'in-progress'
+  | 'customer-initiated-completion'
+  | 'barber-initiated-completion'
+  | 'completed'
+  | 'cancelled';
 
 export interface Appointment {
   id:string;
@@ -71,18 +73,18 @@ export interface Appointment {
   date: string; // YYYY-MM-DD
   startTime: string; // e.g., "10:00 AM"
   endTime: string; // Original estimated end time, e.g., "10:30 AM"
-  appointmentTimestamp: Timestamp | null; // New field for combined date/time
+  appointmentTimestamp: Timestamp | null;
   status: AppointmentStatus;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
-
-  // New fields for mutual check-in/out
   customerCheckedInAt?: Timestamp | null;
   barberCheckedInAt?: Timestamp | null;
-  serviceActuallyStartedAt?: Timestamp | null; // When status becomes 'in-progress'
+  serviceActuallyStartedAt?: Timestamp | null;
   customerMarkedDoneAt?: Timestamp | null;
   barberMarkedDoneAt?: Timestamp | null;
-  serviceActuallyCompletedAt?: Timestamp | null; // When status becomes 'completed'
+  serviceActuallyCompletedAt?: Timestamp | null;
+  customerRating?: number | null; // New: Rating given by customer for this appointment (1-5)
+  ratingComment?: string | null; // New: Optional comment from customer
 }
 
 export interface UnavailableDate {
@@ -91,4 +93,15 @@ export interface UnavailableDate {
   date: string;
   reason?: string;
   createdAt?: Timestamp;
+}
+
+// New: Rating interface (can be expanded later if we store ratings in a separate collection)
+export interface Rating {
+  id: string; // Or appointmentId if it's 1-to-1 with appointment
+  barberId: string;
+  customerId: string;
+  appointmentId: string;
+  score: number; // 1-5
+  comment?: string;
+  createdAt: Timestamp;
 }

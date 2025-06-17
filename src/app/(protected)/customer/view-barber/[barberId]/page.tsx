@@ -11,9 +11,10 @@ import { firestore } from '@/firebase/config';
 import { collection, doc, getDoc, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { ArrowLeft, CalendarPlus, Scissors, DollarSign, Clock, UserCircle, AlertTriangle, MapPin, Info, Sparkles, MessageSquareText } from 'lucide-react'; // Added Sparkles, MessageSquareText
+import { ArrowLeft, CalendarPlus, Scissors, DollarSign, Clock, UserCircle, AlertTriangle, MapPin, Info, Sparkles, MessageSquareText, Star } from 'lucide-react'; // Added Star
 import Link from 'next/link';
-import { Badge } from '@/components/ui/badge'; // Added Badge
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 
 export default function ViewBarberPage() {
@@ -43,10 +44,12 @@ export default function ViewBarberPage() {
                             : true;
         setBarber({
             uid: barberDocSnap.id,
-            id: barberDocSnap.id, // For compatibility if used elsewhere
+            id: barberDocSnap.id, 
             ...barberData,
             isAcceptingBookings: isAccepting,
-            email: barberData.email, // Ensure email is explicitly set
+            email: barberData.email,
+            averageRating: barberData.averageRating || 0,
+            ratingCount: barberData.ratingCount || 0,
         });
       } else {
         toast({ title: "Error", description: "Barber not found.", variant: "destructive" });
@@ -75,6 +78,23 @@ export default function ViewBarberPage() {
   useEffect(() => {
     fetchBarberAndServices();
   }, [fetchBarberAndServices]);
+
+  const renderStars = (rating: number) => {
+    const totalStars = 5;
+    return (
+      <div className="flex items-center">
+        {[...Array(totalStars)].map((_, i) => (
+          <Star
+            key={i}
+            className={cn(
+              "h-5 w-5", // Slightly larger stars on this page
+              i < Math.round(rating) ? "text-yellow-400 fill-yellow-400" : "text-gray-300 dark:text-gray-500"
+            )}
+          />
+        ))}
+      </div>
+    );
+  };
 
   if (isLoading) {
     return (
@@ -118,6 +138,14 @@ export default function ViewBarberPage() {
                     <CardTitle className="text-2xl sm:text-3xl font-bold">
                     {barber.firstName} {barber.lastName}
                     </CardTitle>
+                    <div className="flex items-center space-x-2 mt-1.5">
+                        {renderStars(barber.averageRating || 0)}
+                        {barber.ratingCount && barber.ratingCount > 0 ? (
+                            <span className="text-sm text-muted-foreground">({barber.ratingCount} ratings)</span>
+                        ) : (
+                            <span className="text-sm text-muted-foreground">(No ratings yet)</span>
+                        )}
+                    </div>
                     <CardDescription className="text-sm sm:text-base text-gray-500 dark:text-gray-400 mt-1">View services and book an appointment.</CardDescription>
                     {barber.address && (
                       <p className="text-sm text-gray-500 dark:text-gray-400 flex items-center mt-1.5">
@@ -144,7 +172,6 @@ export default function ViewBarberPage() {
                 </div>
             )}
 
-            {/* Bio Section */}
             {barber.bio && (
               <div className="mb-6">
                 <h3 className="text-lg font-semibold mb-2 text-foreground flex items-center">
@@ -154,7 +181,6 @@ export default function ViewBarberPage() {
               </div>
             )}
 
-            {/* Specialties Section */}
             {barber.specialties && barber.specialties.length > 0 && (
               <div className="mb-6">
                 <h3 className="text-lg font-semibold mb-3 text-foreground flex items-center">
