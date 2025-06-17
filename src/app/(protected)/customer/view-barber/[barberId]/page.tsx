@@ -11,7 +11,7 @@ import { firestore } from '@/firebase/config';
 import { collection, doc, getDoc, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { ArrowLeft, CalendarPlus, Scissors, DollarSign, Clock, UserCircle, AlertTriangle, MapPin, Info, Sparkles, MessageSquareText, UserClock } from 'lucide-react';
+import { ArrowLeft, CalendarPlus, Scissors, DollarSign, Clock, UserCircle, AlertTriangle, MapPin, Info, Sparkles, MessageSquareText, Hourglass } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -126,7 +126,7 @@ export default function ViewBarberPage() {
             )}
              {barberIsTemporarilyUnavailable && (
                 <Alert variant="default" className="mb-6 rounded-md border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 [&>svg]:text-yellow-500">
-                  <UserClock className="h-5 w-5" />
+                  <Hourglass className="h-5 w-5" />
                   <AlertTitle>Temporarily Unavailable</AlertTitle>
                   <AlertDescription>{barber.firstName} is temporarily busy. Please check back soon. Booking is unavailable at this moment.</AlertDescription>
                 </Alert>

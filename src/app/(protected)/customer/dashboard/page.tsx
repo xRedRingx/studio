@@ -10,7 +10,7 @@ import { firestore } from '@/firebase/config';
 import { collection, query, where, getDocs, orderBy, Timestamp, doc, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { CalendarDays, Clock, Scissors, Eye, XCircle, Search, UserCircle, Play, CheckSquare, LogIn, History, CheckCircle, CircleSlash, UserX, UserClock } from 'lucide-react';
+import { CalendarDays, Clock, Scissors, Eye, XCircle, Search, UserCircle, Play, CheckSquare, LogIn, History, CheckCircle, CircleSlash, UserX, Hourglass } from 'lucide-react';
 import Link from 'next/link';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -246,7 +246,7 @@ export default function CustomerDashboardPage() {
             {(isLoadingBarbers && !availableBarbers.length) ? <div className="flex items-center justify-center py-6"><LoadingSpinner className="h-8 w-8 text-primary" /><p className="ml-3 text-base">Loading barbers...</p></div> :
              availableBarbers.length === 0 ? <div className="text-center py-6"><Search className="mx-auto h-12 w-12 text-muted-foreground mb-3" /><p className="text-base text-gray-500">No barbers listed or accepting online bookings.</p></div> :
              <div className="space-y-4">{availableBarbers.map(barber => (<Card key={barber.uid} className="shadow-md rounded-lg border hover:shadow-lg transition-shadow"><CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"><div className="flex items-center gap-4 flex-grow"><UserCircle className="h-10 w-10 text-muted-foreground" /><div className="flex-grow"><div className="flex flex-col sm:flex-row sm:items-center gap-x-2 gap-y-0.5 mb-0.5"><h3 className="text-base font-semibold">{barber.firstName} {barber.lastName}</h3>
-              {barber.isTemporarilyUnavailable ? <Badge variant="destructive" className="bg-yellow-500 hover:bg-yellow-600 text-white text-xs py-0.5 px-2 whitespace-nowrap"><UserClock className="mr-1 h-3 w-3" />Temporarily Busy</Badge> :
+              {barber.isTemporarilyUnavailable ? <Badge variant="destructive" className="bg-yellow-500 hover:bg-yellow-600 text-white text-xs py-0.5 px-2 whitespace-nowrap"><Hourglass className="mr-1 h-3 w-3" />Temporarily Busy</Badge> :
                barber.isAcceptingBookings ? <Badge variant="default" className="bg-green-500 hover:bg-green-600 text-white text-xs py-0.5 px-2 whitespace-nowrap"><CheckCircle className="mr-1 h-3 w-3" />Accepting Bookings</Badge> :
                <Badge variant="secondary" className="text-xs py-0.5 px-2 whitespace-nowrap"><CircleSlash className="mr-1 h-3 w-3" />Not Accepting Bookings</Badge>}</div><span className="text-xs text-muted-foreground ml-1">(Ratings disabled)</span>{barber.address && <p className="text-xs text-gray-500 truncate max-w-[150px] sm:max-w-full mt-0.5">{barber.address}</p>}</div></div><Button asChild variant="outline" size="sm" className="rounded-full h-10 px-4 text-sm sm:text-base w-full sm:w-auto mt-3 sm:mt-0"><Link href={`/customer/view-barber/${barber.uid}`}><Eye className="mr-2 h-4 w-4" />View Profile</Link></Button></CardContent></Card>))}</div>}
           </CardContent></Card>

@@ -13,7 +13,7 @@ import { firestore } from '@/firebase/config';
 import { collection, doc, getDoc, getDocs, query, where, addDoc, Timestamp, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { AlertCircle, CalendarDays, CheckCircle, ChevronLeft, Clock, DollarSign, Scissors, Users, Info, Ban, AlertTriangle, Forward, Check, LayoutDashboard, X, UserCircle as UserCircleIcon, UserClock } from 'lucide-react';
+import { AlertCircle, CalendarDays, CheckCircle, ChevronLeft, Clock, DollarSign, Scissors, Users, Info, Ban, AlertTriangle, Forward, Check, LayoutDashboard, X, UserCircle as UserCircleIcon, Hourglass } from 'lucide-react';
 import { APP_NAME } from '@/lib/constants';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
@@ -276,7 +276,7 @@ export default function BookingPage() {
         price: selectedService.price, date: selectedDateStr, startTime: appointmentStartTimeStr, endTime: appointmentEndTimeStr,
         appointmentTimestamp: appointmentTimestampValue, status: 'upcoming', createdAt: now, updatedAt: now,
         customerCheckedInAt: null, barberCheckedInAt: null, serviceActuallyStartedAt: null,
-        customerMarkedDoneAt: null, barberMarkedDoneAt: null, serviceActuallyCompletedAt: null,
+        customerMarkedDoneAt: null, barberMarkedDoneAt: null, serviceActuallyCompletedAt: null, noShowMarkedAt: null,
       };
       const docRef = await addDoc(collection(firestore, 'appointments'), newAppointmentData);
       const finalAppointment: Appointment = { id: docRef.id, ...newAppointmentData };
@@ -318,7 +318,7 @@ export default function BookingPage() {
     return (<ProtectedPage expectedRole="customer"><div className="space-y-6 max-w-xl mx-auto text-center py-10"><AlertTriangle className="mx-auto h-16 w-16 text-yellow-500 mb-4" /><h1 className="text-2xl font-bold font-headline">Booking Not Available</h1><p className="text-base text-gray-600 dark:text-gray-400">{barber.firstName} {barber.lastName} is not accepting online bookings.</p><Button onClick={() => router.push(`/customer/view-barber/${barberId}`)} className="mt-6 h-12 rounded-full px-6 text-base">Barber's Profile</Button></div></ProtectedPage>);
   }
   if (barberIsTemporarilyUnavailable && bookingStep !== 'confirmed' && bookingStep !== 'queued') {
-    return (<ProtectedPage expectedRole="customer"><div className="space-y-6 max-w-xl mx-auto text-center py-10"><UserClock className="mx-auto h-16 w-16 text-yellow-500 mb-4" /><h1 className="text-2xl font-bold font-headline">Barber Temporarily Busy</h1><p className="text-base text-gray-600 dark:text-gray-400">{barber.firstName} {barber.lastName} is temporarily unavailable. Please check back soon.</p><Button onClick={() => router.push(`/customer/view-barber/${barberId}`)} className="mt-6 h-12 rounded-full px-6 text-base">Barber's Profile</Button></div></ProtectedPage>);
+    return (<ProtectedPage expectedRole="customer"><div className="space-y-6 max-w-xl mx-auto text-center py-10"><Hourglass className="mx-auto h-16 w-16 text-yellow-500 mb-4" /><h1 className="text-2xl font-bold font-headline">Barber Temporarily Busy</h1><p className="text-base text-gray-600 dark:text-gray-400">{barber.firstName} {barber.lastName} is temporarily unavailable. Please check back soon.</p><Button onClick={() => router.push(`/customer/view-barber/${barberId}`)} className="mt-6 h-12 rounded-full px-6 text-base">Barber's Profile</Button></div></ProtectedPage>);
   }
 
   const renderStepContent = () => {

@@ -22,7 +22,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Settings2, AlertTriangle, Info, Briefcase, UserClock } from 'lucide-react';
+import { PlusCircle, Settings2, AlertTriangle, Info, Briefcase, Hourglass } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -437,7 +437,7 @@ export default function BarberDashboardPage() {
 
             <Card className="border-none shadow-lg rounded-xl overflow-hidden">
               <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-card via-muted/10 to-card">
-                <CardTitle className="text-xl font-bold flex items-center"><UserClock className="mr-2 h-5 w-5 text-accent" /> Temporary Status</CardTitle>
+                <CardTitle className="text-xl font-bold flex items-center"><Hourglass className="mr-2 h-5 w-5 text-accent" /> Temporary Status</CardTitle>
               </CardHeader>
               <CardContent className="p-4 md:p-6">
                 {user ? (
