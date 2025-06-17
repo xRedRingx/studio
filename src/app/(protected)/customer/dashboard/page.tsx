@@ -5,12 +5,12 @@ import ProtectedPage from '@/components/layout/ProtectedPage';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
-import type { Appointment, AppUser, AppointmentStatus } from '@/types';
+import type { Appointment, AppUser, AppointmentStatus, Rating } from '@/types';
 import { firestore } from '@/firebase/config';
-import { collection, query, where, getDocs, orderBy, Timestamp, doc, updateDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, Timestamp, doc, updateDoc, runTransaction, addDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { CalendarDays, Clock, Scissors, Eye, XCircle, Search, UserCircle, Play, CheckSquare, LogIn, History, CheckCircle, CircleSlash, Star } from 'lucide-react'; // Added Star
+import { CalendarDays, Clock, Scissors, Eye, XCircle, Search, UserCircle, Play, CheckSquare, LogIn, History, CheckCircle, CircleSlash, Star } from 'lucide-react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import {
@@ -211,9 +211,9 @@ export default function CustomerDashboardPage() {
       
       toast({ title: "Success", description: successMessage || "Appointment updated." });
       
-      // Refetch and potentially trigger rating dialog
-      const updatedApptSnapshot = await getDoc(appointmentRef);
-      const updatedApptData = { id: updatedApptSnapshot.id, ...updatedApptSnapshot.data() } as Appointment;
+      const updatedApptSnapshot = await getDocs(query(collection(firestore, 'appointments'), where('__name__', '==', appointmentId)));
+      const updatedApptData = { id: updatedApptSnapshot.docs[0].id, ...updatedApptSnapshot.docs[0].data() } as Appointment;
+
 
       if (updatedApptData.status === 'completed' && !updatedApptData.customerRating) {
         setAppointmentToRate(updatedApptData);
@@ -300,28 +300,84 @@ export default function CustomerDashboardPage() {
     }
   };
 
-  const handleSaveRating = async (appointmentId: string, rating: number, comment?: string) => {
-    if (!user?.uid) return;
+  const handleSaveRating = async (appointmentId: string, ratingScore: number, comment?: string) => {
+    if (!user?.uid || !appointmentToRate) {
+        toast({ title: "Error", description: "User or appointment not found for rating.", variant: "destructive" });
+        return;
+    }
     setIsSubmittingRating(true);
+    const now = Timestamp.now();
+
     try {
-      const appointmentRef = doc(firestore, 'appointments', appointmentId);
-      await updateDoc(appointmentRef, {
-        customerRating: rating,
-        ratingComment: comment || null,
-        updatedAt: Timestamp.now(),
-      });
-      toast({ title: "Rating Submitted!", description: "Thank you for your feedback." });
-      fetchMyAppointments(); // Refresh appointments to show rating potentially
-      // In Stage 2, we'll also update the barber's average rating here.
+        await runTransaction(firestore, async (transaction) => {
+            const appointmentRef = doc(firestore, 'appointments', appointmentId);
+            const barberRef = doc(firestore, 'users', appointmentToRate.barberId);
+            const newRatingRef = doc(collection(firestore, 'ratings')); // Auto-generate ID
+
+            // 1. Get current barber data
+            const barberSnap = await transaction.get(barberRef);
+            if (!barberSnap.exists()) {
+                throw new Error("Barber profile not found.");
+            }
+            const barberData = barberSnap.data() as AppUser;
+
+            // 2. Get appointment data (to ensure it's not already rated by this user if necessary, though UI should prevent)
+            const appointmentSnap = await transaction.get(appointmentRef);
+            if (!appointmentSnap.exists()) {
+                throw new Error("Appointment not found.");
+            }
+            const currentAppointmentData = appointmentSnap.data() as Appointment;
+            if (currentAppointmentData.customerRating) {
+                 // This case should ideally be prevented by the UI, but good to double check
+                console.warn(`Appointment ${appointmentId} already has a rating. Overwriting.`);
+            }
+
+
+            // 3. Calculate new average rating and count for the barber
+            const oldRatingTotal = (barberData.averageRating || 0) * (barberData.ratingCount || 0);
+            const newRatingCount = (barberData.ratingCount || 0) + 1;
+            const newAverageRating = (oldRatingTotal + ratingScore) / newRatingCount;
+
+            // 4. Create new rating document
+            const ratingData: Omit<Rating, 'id'> = { // Omit id as it's auto-generated
+                barberId: appointmentToRate.barberId,
+                customerId: user.uid,
+                appointmentId: appointmentId,
+                score: ratingScore,
+                comment: comment || null,
+                createdAt: now,
+            };
+            transaction.set(newRatingRef, ratingData);
+
+            // 5. Update appointment with rating details
+            transaction.update(appointmentRef, {
+                customerRating: ratingScore,
+                ratingComment: comment || null,
+                updatedAt: now,
+            });
+
+            // 6. Update barber's profile with new average rating and count
+            transaction.update(barberRef, {
+                averageRating: parseFloat(newAverageRating.toFixed(2)), // Store with 2 decimal places
+                ratingCount: newRatingCount,
+                updatedAt: now,
+            });
+        });
+
+        toast({ title: "Rating Submitted!", description: "Thank you for your feedback." });
+        fetchMyAppointments(); // Refresh user's appointments
+        fetchAvailableBarbers(); // Refresh barber list to show updated average rating
+
     } catch (error) {
-      console.error("Error saving rating:", error);
-      toast({ title: "Rating Error", description: "Could not save your rating.", variant: "destructive" });
+        console.error("Error saving rating with transaction:", error);
+        toast({ title: "Rating Error", description: (error as Error).message || "Could not save your rating.", variant: "destructive" });
     } finally {
-      setIsSubmittingRating(false);
-      setIsRatingDialogOpen(false);
-      setAppointmentToRate(null);
+        setIsSubmittingRating(false);
+        setIsRatingDialogOpen(false);
+        setAppointmentToRate(null);
     }
   };
+
 
   const renderAppointmentActions = (appointment: Appointment) => {
     const isProcessingThis = isUpdatingAppointment === appointment.id;
