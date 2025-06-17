@@ -427,6 +427,43 @@ export default function BookingPage() {
     setIsSubmitting(true);
 
     const selectedDateStr = formatDateToYYYYMMDD(selectedDate);
+
+    // Daily cancellation check
+    const dailyCancellations = customerExistingAppointments.filter(
+      app => app.date === selectedDateStr && app.customerId === user.uid && app.status === 'cancelled'
+    ).length;
+
+    if (dailyCancellations >= 2) {
+      toast({
+        title: "Booking Limit Reached",
+        description: "You've cancelled 2 appointments today. You cannot book another appointment for this day.",
+        variant: "destructive",
+      });
+      setIsSubmitting(false);
+      return;
+    }
+
+    // Weekly cancellation check
+    const { weekStart, weekEnd } = getWeekBoundaries(selectedDate);
+    const weeklyCancellations = customerExistingAppointments.filter(app => {
+      const appDate = new Date(app.date + 'T00:00:00');
+      return app.customerId === user.uid &&
+             app.status === 'cancelled' &&
+             appDate >= weekStart &&
+             appDate <= weekEnd;
+    }).length;
+
+    if (weeklyCancellations >= 4) {
+      toast({
+        title: "Booking Limit Reached",
+        description: "You've cancelled 4 appointments this week. You cannot book another appointment for this week.",
+        variant: "destructive",
+      });
+      setIsSubmitting(false);
+      return;
+    }
+
+    // Existing booking limit checks
     const dailyBookingsWithAnyBarber = customerExistingAppointments.filter(
       app => app.date === selectedDateStr && app.customerId === user.uid && app.status !== 'cancelled'
     );
@@ -440,7 +477,6 @@ export default function BookingPage() {
       return;
     }
 
-    const { weekStart, weekEnd } = getWeekBoundaries(selectedDate);
     const weeklyBookingsWithAnyBarber = customerExistingAppointments.filter(app => {
       const appDate = new Date(app.date + 'T00:00:00'); 
       return app.customerId === user.uid &&
@@ -477,14 +513,6 @@ export default function BookingPage() {
       finalJsDate.setHours(hours, minutes, 0, 0);
       const appointmentTimestampValue = Timestamp.fromDate(finalJsDate);
       
-      console.log('[BookingPage] Confirming Booking - Details:');
-      console.log(`  Selected Date (JS Object): ${selectedDate.toString()}`);
-      console.log(`  Selected Time Slot (Local): ${appointmentStartTimeStr}`);
-      console.log(`  Final JS Date for Timestamp (Local interpretation by JS): ${finalJsDate.toString()}`);
-      console.log(`  Final JS Date (ISO UTC for Timestamp.fromDate): ${finalJsDate.toISOString()}`);
-      console.log(`  Generated appointmentTimestampValue (UTC from Firestore): ${appointmentTimestampValue.toDate().toISOString()}`);
-
-
       const newAppointmentData: Omit<Appointment, 'id'> = {
         barberId: barber.uid, 
         barberName: `${barber.firstName} ${barber.lastName}`,
