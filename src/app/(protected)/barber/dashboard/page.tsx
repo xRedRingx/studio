@@ -356,27 +356,29 @@ export default function BarberDashboardPage() {
     }
   };
   
-  const handleToggleTemporaryStatus = async (newCheckedState: boolean) => {
+  const handleToggleTemporaryStatus = async (newSwitchIsOnState: boolean) => {
     if (!user || !user.uid || !updateBarberTemporaryStatus) return;
 
-    setLocalIsTemporarilyUnavailable(newCheckedState); // Optimistic UI update
+    const barberIsBecomingUnavailable = !newSwitchIsOnState; // True if switch is OFF (becoming unavailable)
+
+    setLocalIsTemporarilyUnavailable(barberIsBecomingUnavailable); // Optimistic UI update
     setIsUpdatingTemporaryStatus(true);
     setIsProcessingAuth(true); // Signal global processing
 
     try {
-      await updateBarberTemporaryStatus(user.uid, newCheckedState, user.unavailableSince);
+      await updateBarberTemporaryStatus(user.uid, barberIsBecomingUnavailable, user.unavailableSince);
       toast({
         title: "Availability Updated",
-        description: `You are now marked as ${newCheckedState ? 'temporarily unavailable' : 'available'}. ${newCheckedState ? '' : 'Appointments may have been shifted.'}`,
+        description: `You are now marked as ${barberIsBecomingUnavailable ? 'temporarily unavailable' : 'available'}. ${!barberIsBecomingUnavailable ? 'Appointments may have been shifted.' : ''}`,
       });
       // Refetch appointments if status changed to available and shifts might have occurred
-      if (!newCheckedState) {
+      if (!barberIsBecomingUnavailable) {
         fetchAppointments();
       }
     } catch (error: any) {
       console.error("Error updating temporary status:", error);
       toast({ title: "Error", description: error.message || "Could not update temporary status.", variant: "destructive" });
-      setLocalIsTemporarilyUnavailable(!newCheckedState); // Revert on error
+      setLocalIsTemporarilyUnavailable(!barberIsBecomingUnavailable); // Revert on error
     } finally {
       setIsUpdatingTemporaryStatus(false);
       setIsProcessingAuth(false);
@@ -442,15 +444,24 @@ export default function BarberDashboardPage() {
               <CardContent className="p-4 md:p-6">
                 {user ? (
                   <div className="flex items-center space-x-3">
-                    <Switch id="temporary-unavailable-toggle" checked={localIsTemporarilyUnavailable} onCheckedChange={handleToggleTemporaryStatus} disabled={isUpdatingTemporaryStatus} aria-label="Toggle temporary unavailability" />
-                    <Label htmlFor="temporary-unavailable-toggle" className="text-base">{localIsTemporarilyUnavailable ? 'Temporarily Unavailable' : 'Available'}</Label>
+                    <Switch 
+                        id="temporary-unavailable-toggle" 
+                        checked={!localIsTemporarilyUnavailable} 
+                        onCheckedChange={handleToggleTemporaryStatus} 
+                        disabled={isUpdatingTemporaryStatus} 
+                        aria-label="Toggle temporary availability. ON means Available, OFF means Busy." 
+                    />
+                    <Label htmlFor="temporary-unavailable-toggle" className="text-base">
+                        {!localIsTemporarilyUnavailable ? 'Available' : 'Temporarily Unavailable'}
+                    </Label>
                     {isUpdatingTemporaryStatus && <LoadingSpinner className="h-5 w-5 text-accent ml-2" />}
                   </div>
                 ) : <div className="flex items-center"><LoadingSpinner className="h-5 w-5 text-accent mr-2" /><p>Loading status...</p></div>}
                 <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                  {localIsTemporarilyUnavailable 
-                    ? `You've been unavailable ${unavailableSinceDuration || 'for a bit'}. Toggle off to become available and shift today's appointments.` 
-                    : "Set yourself as temporarily unavailable (e.g., short break). Appointments for today will be shifted upon your return."}
+                  {!localIsTemporarilyUnavailable 
+                    ? "Set yourself as temporarily unavailable (e.g., short break). Toggle OFF if you need to step out. Appointments for today will be shifted upon your return."
+                    : `You've been unavailable ${unavailableSinceDuration || 'for a bit'}. Toggle ON to become available and shift today's appointments.` 
+                  }
                 </p>
               </CardContent>
             </Card>
