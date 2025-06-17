@@ -11,10 +11,11 @@ import { firestore } from '@/firebase/config';
 import { collection, doc, getDoc, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { ArrowLeft, CalendarPlus, Scissors, DollarSign, Clock, UserCircle, AlertTriangle, MapPin, Info, Sparkles, MessageSquareText } from 'lucide-react'; // Star removed
+import { ArrowLeft, CalendarPlus, Scissors, DollarSign, Clock, UserCircle, AlertTriangle, MapPin, Info, Sparkles, MessageSquareText, UserClock } from 'lucide-react';
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 
 export default function ViewBarberPage() {
@@ -28,10 +29,7 @@ export default function ViewBarberPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchBarberAndServices = useCallback(async () => {
-    if (!barberId) {
-        router.push('/customer/dashboard');
-        return;
-    }
+    if (!barberId) { router.push('/customer/dashboard'); return; }
     setIsLoading(true);
     try {
       const barberDocRef = doc(firestore, 'users', barberId);
@@ -39,34 +37,25 @@ export default function ViewBarberPage() {
 
       if (barberDocSnap.exists() && barberDocSnap.data().role === 'barber') {
         const barberData = barberDocSnap.data() as AppUser;
-        const isAccepting = barberData.isAcceptingBookings !== undefined && barberData.isAcceptingBookings !== null
-                            ? barberData.isAcceptingBookings
-                            : true;
+        const isAccepting = barberData.isAcceptingBookings !== undefined ? barberData.isAcceptingBookings : true;
+        const isTempUnavailable = barberData.isTemporarilyUnavailable || false;
+
         setBarber({
-            uid: barberDocSnap.id,
-            // id: barberDocSnap.id, // id is not part of AppUser, uid is the id
-            ...barberData,
+            uid: barberDocSnap.id, ...barberData,
             isAcceptingBookings: isAccepting,
+            isTemporarilyUnavailable: isTempUnavailable,
             email: barberData.email,
-            // averageRating and ratingCount removed
         });
       } else {
         toast({ title: "Error", description: "Barber not found.", variant: "destructive" });
-        router.push('/customer/dashboard');
-        return;
+        router.push('/customer/dashboard'); return;
       }
 
-      const servicesQuery = query(
-        collection(firestore, 'services'),
-        where('barberId', '==', barberId),
-        orderBy('createdAt', 'desc')
-      );
+      const servicesQuery = query(collection(firestore, 'services'), where('barberId', '==', barberId), orderBy('createdAt', 'desc'));
       const servicesSnapshot = await getDocs(servicesQuery);
-      const fetchedServices = servicesSnapshot.docs.map(sDoc => ({ id: sDoc.id, ...sDoc.data() } as BarberService));
-      setServices(fetchedServices);
-
+      setServices(servicesSnapshot.docs.map(sDoc => ({ id: sDoc.id, ...sDoc.data() } as BarberService)));
     } catch (error) {
-      console.error("Error fetching barber details or services:", error);
+      console.error("Error fetching barber/services:", error);
       toast({ title: "Error", description: "Could not load barber's information.", variant: "destructive" });
       router.push('/customer/dashboard');
     } finally {
@@ -74,11 +63,7 @@ export default function ViewBarberPage() {
     }
   }, [barberId, toast, router]);
 
-  useEffect(() => {
-    fetchBarberAndServices();
-  }, [fetchBarberAndServices]);
-
-  // renderStars function removed
+  useEffect(() => { fetchBarberAndServices(); }, [fetchBarberAndServices]);
 
   if (isLoading) {
     return (
@@ -97,15 +82,15 @@ export default function ViewBarberPage() {
         <div className="text-center py-10">
           <UserCircle className="mx-auto h-16 w-16 text-muted-foreground mb-4" />
           <h2 className="text-xl font-bold text-destructive">Barber information not available.</h2>
-          <Button onClick={() => router.push('/customer/dashboard')} className="mt-6 h-12 rounded-full px-6 text-base">
-            Back to Dashboard
-          </Button>
+          <Button onClick={() => router.push('/customer/dashboard')} className="mt-6 h-12 rounded-full px-6 text-base">Back to Dashboard</Button>
         </div>
       </ProtectedPage>
     );
   }
 
   const barberIsAcceptingBookings = barber.isAcceptingBookings !== undefined ? barber.isAcceptingBookings : true;
+  const barberIsTemporarilyUnavailable = barber.isTemporarilyUnavailable || false;
+  const canBook = barberIsAcceptingBookings && !barberIsTemporarilyUnavailable;
 
   return (
     <ProtectedPage expectedRole="customer">
@@ -119,10 +104,7 @@ export default function ViewBarberPage() {
             <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-3 sm:space-y-0 sm:space-x-4">
                 <UserCircle className="h-20 w-20 sm:h-24 sm:w-24 text-muted-foreground flex-shrink-0" />
                 <div className="pt-1">
-                    <CardTitle className="text-2xl sm:text-3xl font-bold">
-                    {barber.firstName} {barber.lastName}
-                    </CardTitle>
-                    {/* Star rating display removed */}
+                    <CardTitle className="text-2xl sm:text-3xl font-bold">{barber.firstName} {barber.lastName}</CardTitle>
                      <span className="text-sm text-muted-foreground">(Ratings feature disabled)</span>
                     <CardDescription className="text-sm sm:text-base text-gray-500 dark:text-gray-400 mt-1">View services and book an appointment.</CardDescription>
                     {barber.address && (
@@ -136,44 +118,35 @@ export default function ViewBarberPage() {
 
           <CardContent className="p-4 md:p-6">
             {!barberIsAcceptingBookings && (
-                <div className="mb-6 p-4 border-l-4 border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20 rounded-md shadow-sm">
-                    <div className="flex">
-                        <div className="flex-shrink-0">
-                        <AlertTriangle className="h-5 w-5 text-yellow-500" aria-hidden="true" />
-                        </div>
-                        <div className="ml-3">
-                        <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                            {barber.firstName} is not currently accepting new online bookings. Please check back later.
-                        </p>
-                        </div>
-                    </div>
-                </div>
+                <Alert variant="destructive" className="mb-6 rounded-md">
+                  <AlertTriangle className="h-5 w-5" />
+                  <AlertTitle>Not Accepting Online Bookings</AlertTitle>
+                  <AlertDescription>{barber.firstName} is not currently accepting new online bookings. Please check back later.</AlertDescription>
+                </Alert>
+            )}
+             {barberIsTemporarilyUnavailable && (
+                <Alert variant="default" className="mb-6 rounded-md border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 [&>svg]:text-yellow-500">
+                  <UserClock className="h-5 w-5" />
+                  <AlertTitle>Temporarily Unavailable</AlertTitle>
+                  <AlertDescription>{barber.firstName} is temporarily busy. Please check back soon. Booking is unavailable at this moment.</AlertDescription>
+                </Alert>
             )}
 
             {barber.bio && (
               <div className="mb-6">
-                <h3 className="text-lg font-semibold mb-2 text-foreground flex items-center">
-                  <MessageSquareText className="mr-2 h-5 w-5 text-primary" /> About {barber.firstName}
-                </h3>
+                <h3 className="text-lg font-semibold mb-2 text-foreground flex items-center"><MessageSquareText className="mr-2 h-5 w-5 text-primary" /> About {barber.firstName}</h3>
                 <p className="text-base text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{barber.bio}</p>
               </div>
             )}
 
             {barber.specialties && barber.specialties.length > 0 && (
               <div className="mb-6">
-                <h3 className="text-lg font-semibold mb-3 text-foreground flex items-center">
-                  <Sparkles className="mr-2 h-5 w-5 text-primary" /> Specialties
-                </h3>
+                <h3 className="text-lg font-semibold mb-3 text-foreground flex items-center"><Sparkles className="mr-2 h-5 w-5 text-primary" /> Specialties</h3>
                 <div className="flex flex-wrap gap-2">
-                  {barber.specialties.map((specialty, index) => (
-                    <Badge key={index} variant="secondary" className="text-sm py-1 px-3 rounded-full">
-                      {specialty}
-                    </Badge>
-                  ))}
+                  {barber.specialties.map((specialty, index) => (<Badge key={index} variant="secondary" className="text-sm py-1 px-3 rounded-full">{specialty}</Badge>))}
                 </div>
               </div>
             )}
-
 
             <h3 className="text-xl font-semibold mb-4 text-foreground pt-4 border-t mt-6">Services Offered</h3>
             {services.length > 0 ? (
@@ -181,10 +154,7 @@ export default function ViewBarberPage() {
                 {services.map(service => (
                   <Card key={service.id} className="shadow-md rounded-lg border flex flex-col hover:shadow-lg transition-shadow duration-200">
                     <CardHeader className="pb-2 pt-4 px-4">
-                      <CardTitle className="text-base font-semibold flex items-center">
-                        <Scissors className="mr-2 h-5 w-5 text-primary flex-shrink-0" />
-                        <span className="truncate" title={service.name}>{service.name}</span>
-                      </CardTitle>
+                      <CardTitle className="text-base font-semibold flex items-center"><Scissors className="mr-2 h-5 w-5 text-primary flex-shrink-0" /><span className="truncate" title={service.name}>{service.name}</span></CardTitle>
                     </CardHeader>
                     <CardContent className="text-sm text-gray-600 dark:text-gray-400 space-y-1 px-4 pb-3 flex-grow">
                       <p className="flex items-center"><DollarSign className="mr-1.5 h-4 w-4 text-gray-400 dark:text-gray-500 flex-shrink-0" />Price: <span className="font-medium text-foreground ml-1">${service.price.toFixed(2)}</span></p>
@@ -194,27 +164,13 @@ export default function ViewBarberPage() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-6">
-                <Info className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
-                <p className="text-base text-gray-500 dark:text-gray-400">This barber has not listed any services yet.</p>
-              </div>
+              <div className="text-center py-6"><Info className="mx-auto h-10 w-10 text-muted-foreground mb-3" /><p className="text-base text-gray-500 dark:text-gray-400">This barber has not listed any services yet.</p></div>
             )}
           </CardContent>
 
           <CardFooter className="p-4 md:p-6 border-t mt-auto">
-            <Button
-                asChild={barberIsAcceptingBookings}
-                className="w-full sm:w-auto h-14 rounded-full text-lg px-8"
-                disabled={!barberIsAcceptingBookings || services.length === 0}
-                title={services.length === 0 && barberIsAcceptingBookings ? "This barber has no services to book yet" : undefined}
-            >
-              {barberIsAcceptingBookings ? (
-                <Link href={`/customer/book/${barberId}`}>
-                  <CalendarPlus className="mr-2 h-5 w-5" /> Book with {barber.firstName}
-                </Link>
-              ) : (
-                <><CalendarPlus className="mr-2 h-5 w-5" /> Not Accepting Bookings</>
-              )}
+            <Button asChild={canBook} className="w-full sm:w-auto h-14 rounded-full text-lg px-8" disabled={!canBook || services.length === 0} title={services.length === 0 && canBook ? "Barber has no services to book." : (!canBook ? "Barber is not available for booking right now." : undefined)}>
+              {canBook ? (<Link href={`/customer/book/${barberId}`}><CalendarPlus className="mr-2 h-5 w-5" /> Book with {barber.firstName}</Link>) : (<><CalendarPlus className="mr-2 h-5 w-5" /> {barberIsTemporarilyUnavailable ? 'Temporarily Busy' : 'Not Accepting Bookings'}</>)}
             </Button>
           </CardFooter>
         </Card>
