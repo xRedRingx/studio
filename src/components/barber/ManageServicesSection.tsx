@@ -22,7 +22,7 @@ import LoadingSpinner from '@/components/ui/loading-spinner';
 
 const ServiceDialog = dynamic(() => import('./ServiceDialog'), {
   loading: () => <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-[100]"><LoadingSpinner className="h-8 w-8 text-primary" /></div>,
-  ssr: false 
+  ssr: false
 });
 
 interface ManageServicesSectionProps {
@@ -87,9 +87,12 @@ export default function ManageServicesSection({
       </CardHeader>
       <CardContent className="p-4 md:p-6">
         {services.length === 0 ? (
-          <div className="text-center py-6">
-            <Info className="mx-auto h-10 w-10 text-muted-foreground mb-3" />
-            <p className="text-base text-gray-500 dark:text-gray-400">You have not added any services yet. Click "Add New Service" to begin.</p>
+          <div className="text-center py-8 px-4 border-2 border-dashed border-muted rounded-lg bg-card">
+            <Info className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="text-lg font-semibold text-foreground mb-1">No Services Yet</h3>
+            <p className="text-base text-gray-500 dark:text-gray-400">
+              You haven't added any services. Click the "Add New Service" button above to get started and let customers know what you offer!
+            </p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -138,7 +141,7 @@ export default function ManageServicesSection({
           </div>
         )}
       </CardContent>
-      {isDialogOpen && ( 
+      {isDialogOpen && (
         <ServiceDialog
           isOpen={isDialogOpen}
           onClose={handleCloseDialog}

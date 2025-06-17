@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
-import { CalendarDays, PlusCircle, Trash2, Ban } from 'lucide-react';
+import { CalendarDays, PlusCircle, Trash2, Ban, Info } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/loading-spinner';
 import {
   AlertDialog,
@@ -68,14 +68,14 @@ export default function ManageUnavailableDatesSection({
   };
 
   const modifiersStyles = {
-    alreadyUnavailable: { 
+    alreadyUnavailable: {
       backgroundColor: 'hsl(var(--muted))',
       color: 'hsl(var(--muted-foreground)/0.6)',
       border: '1px dashed hsl(var(--border))',
       borderRadius: 'var(--radius-sm, 0.375rem)',
     },
   };
-  
+
   useEffect(() => {
     if (selectedDate) {
       const isMarked = alreadyMarkedUnavailableDateObjects.some(
@@ -110,7 +110,7 @@ export default function ManageUnavailableDatesSection({
     }
     setIsCalendarOpen(false);
   };
-  
+
 
   const handleConfirmRemove = async () => {
     if (dateToRemove) {
@@ -122,7 +122,7 @@ export default function ManageUnavailableDatesSection({
       setDateToRemove(null);
     }
   };
-  
+
   const isAddButtonDisabled = !selectedDate || isProcessing || isSelectedDateAlreadyMarked;
 
   return (
@@ -182,9 +182,9 @@ export default function ManageUnavailableDatesSection({
               />
             </div>
           </div>
-          <Button 
-            type="submit" 
-            className="h-12 rounded-full text-base" 
+          <Button
+            type="submit"
+            className="h-12 rounded-full text-base"
             disabled={isAddButtonDisabled}
           >
             {isProcessing ? <LoadingSpinner className="mr-2 h-5 w-5" /> : <PlusCircle className="mr-2 h-5 w-5" />}
@@ -195,7 +195,13 @@ export default function ManageUnavailableDatesSection({
         <div>
           <h3 className="text-lg font-semibold mb-3">Current Unavailable Dates</h3>
           {unavailableDates.length === 0 ? (
-            <p className="text-sm text-gray-500 dark:text-gray-400">You have no specific dates marked as unavailable.</p>
+            <div className="text-center py-8 px-4 border-2 border-dashed border-muted rounded-lg bg-card">
+              <Info className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold text-foreground mb-1">No Unavailable Dates Marked</h3>
+              <p className="text-base text-gray-500 dark:text-gray-400">
+                You haven't blocked out any specific dates. If you need to take a day off, add it using the form above.
+              </p>
+            </div>
           ) : (
             <ul className="space-y-2">
               {unavailableDates.sort((a,b) => a.date.localeCompare(b.date)).map((ud) => (
