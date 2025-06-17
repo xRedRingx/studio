@@ -10,7 +10,7 @@ import { firestore } from '@/firebase/config';
 import { collection, query, where, getDocs, orderBy, Timestamp, doc, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/loading-spinner';
-import { CalendarDays, Clock, Scissors, Eye, XCircle, Search, UserCircle, Play, CheckSquare, LogIn, History } from 'lucide-react';
+import { CalendarDays, Clock, Scissors, Eye, XCircle, Search, UserCircle, Play, CheckSquare, LogIn, History, CheckCircle, CircleSlash } from 'lucide-react';
 import Link from 'next/link';
 import {
   AlertDialog,
@@ -23,7 +23,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { getItemWithTimestampRevival, setItemWithTimestampConversion, LS_MY_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD, getSimpleItem, setSimpleItem, LS_AVAILABLE_BARBERS_KEY_CUSTOMER_DASHBOARD } from '@/lib/localStorageUtils';
-import { cn } from '@/lib/utils'; // Added this import
+import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge'; // Added Badge import
 
 const LS_PAST_APPOINTMENTS_KEY_CUSTOMER_DASHBOARD = 'customer_dashboard_past_appointments';
 
@@ -90,8 +91,8 @@ export default function CustomerDashboardPage() {
       const q = query(
         appointmentsCollection,
         where('customerId', '==', user.uid),
-        orderBy('date', 'desc'), // Order by date descending for easier separation
-        orderBy('startTime', 'desc') // Then by time
+        orderBy('date', 'desc'), 
+        orderBy('startTime', 'desc') 
       );
       const querySnapshot = await getDocs(q);
       const fetchedAppointments: Appointment[] = [];
@@ -101,7 +102,7 @@ export default function CustomerDashboardPage() {
 
       const active = fetchedAppointments
         .filter(app => app.status !== 'completed' && app.status !== 'cancelled') 
-        .sort((a, b) => { // Sort active ascending
+        .sort((a, b) => { 
           if (a.date === b.date) {
             return timeToMinutes(a.startTime) - timeToMinutes(b.startTime);
           }
@@ -110,7 +111,7 @@ export default function CustomerDashboardPage() {
       
       const past = fetchedAppointments
         .filter(app => app.status === 'completed' || app.status === 'cancelled')
-        .sort((a,b) => { // Keep past descending (most recent first)
+        .sort((a,b) => { 
             if (a.date === b.date) {
                 return timeToMinutes(b.startTime) - timeToMinutes(a.startTime);
             }
@@ -198,7 +199,6 @@ export default function CustomerDashboardPage() {
 
       await updateDoc(appointmentRef, updateData);
       
-      // Refetch all appointments to update both lists correctly
       fetchMyAppointments(); 
       toast({ title: "Success", description: successMessage || "Appointment updated." });
 
@@ -268,7 +268,6 @@ export default function CustomerDashboardPage() {
         updatedAt: Timestamp.now(),
       });
       
-      // Refetch all appointments to update both lists
       fetchMyAppointments(); 
       toast({ title: "Appointment Cancelled", description: "Your appointment has been successfully cancelled." });
     } catch (error) {
@@ -412,7 +411,7 @@ export default function CustomerDashboardPage() {
             <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">View your past completed or cancelled appointments.</CardDescription>
           </CardHeader>
           <CardContent className="p-4 md:p-6">
-            {(isLoadingAppointments && !pastAppointments.length && !activeAppointments.length) ? ( // Show loading only if both are empty and loading
+            {(isLoadingAppointments && !pastAppointments.length && !activeAppointments.length) ? ( 
               <div className="flex items-center justify-center py-6">
                 <LoadingSpinner className="h-8 w-8 text-primary" />
                 <p className="ml-3 text-base">Loading history...</p>
@@ -443,7 +442,6 @@ export default function CustomerDashboardPage() {
                           <Clock className="mr-2 h-4 w-4 flex-shrink-0" /> {app.startTime}
                         </p>
                       </div>
-                       {/* Rebook button can be added here in a future iteration */}
                        {app.status === 'completed' && (
                          <div className="md:col-span-3 flex justify-end items-center pt-3 mt-3 border-t">
                             <Button asChild variant="outline" size="sm" className="rounded-full h-9 px-4">
@@ -486,9 +484,20 @@ export default function CustomerDashboardPage() {
                       <div className="flex items-center gap-4 flex-grow">
                         <UserCircle className="h-10 w-10 text-muted-foreground flex-shrink-0" />
                         <div className="flex-grow">
-                          <h3 className="text-base font-semibold">
-                            {barber.firstName} {barber.lastName}
-                          </h3>
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <h3 className="text-base font-semibold">
+                              {barber.firstName} {barber.lastName}
+                            </h3>
+                            {barber.isAcceptingBookings ? (
+                              <Badge variant="default" className="bg-green-500 hover:bg-green-600 text-white text-xs py-0.5 px-2">
+                                <CheckCircle className="mr-1 h-3 w-3" /> Accepting Bookings
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary" className="text-xs py-0.5 px-2">
+                                <CircleSlash className="mr-1 h-3 w-3" /> Not Accepting Bookings
+                              </Badge>
+                            )}
+                          </div>
                            {barber.address && (
                             <p className="text-xs text-gray-500 dark:text-gray-400 truncate max-w-[150px] sm:max-w-full">
                                 {barber.address}
