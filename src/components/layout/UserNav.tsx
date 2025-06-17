@@ -12,7 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
-import { LogOut, User as UserIcon, Phone, Mail, Settings, LayoutDashboard, Scissors, CalendarClock, CalendarOff, Edit, BellRing, BellOff } from "lucide-react"; 
+import { LogOut, User as UserIcon, Phone, Mail, Settings, LayoutDashboard, Scissors, CalendarClock, CalendarOff, Edit, BellRing, BellOff, DollarSign } from "lucide-react"; 
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { messaging } from "@/firebase/config"; 
@@ -173,6 +173,12 @@ export default function UserNav() {
                   <span>My Availability</span>
                 </Link>
               </DropdownMenuItem>
+              <DropdownMenuItem asChild className="text-base py-2.5 px-3 cursor-pointer">
+                <Link href="/barber/earnings">
+                  <DollarSign className="mr-2 h-4 w-4" />
+                  <span>My Earnings</span>
+                </Link>
+              </DropdownMenuItem>
             </>
           )}
           
@@ -218,3 +224,4 @@ export default function UserNav() {
     </DropdownMenu>
   );
 }
+
