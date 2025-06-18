@@ -1,19 +1,29 @@
 {
   "functions": [
+    // Configuration for Firebase Cloud Functions.
     {
+      // Specifies the source directory for the Cloud Functions.
       "source": "functions",
+      // Defines the codebase name, useful if managing multiple sets of functions.
       "codebase": "default",
+      // Lists files and directories to ignore during deployment.
       "ignore": [
-        "node_modules",
-        ".git",
-        "firebase-debug.log",
-        "firebase-debug.*.log",
-        "*.local"
+        "node_modules", // Ignores the Node.js modules directory.
+        ".git", // Ignores Git version control files.
+        "firebase-debug.log", // Ignores Firebase debug logs.
+        "firebase-debug.*.log", // Ignores wildcarded Firebase debug logs.
+        "*.local" // Ignores local configuration files.
       ],
+      // Specifies commands to run before deploying the functions.
       "predeploy": [
+        // Runs ESLint to check for code quality issues.
         "npm --prefix \"$RESOURCE_DIR\" run lint",
+        // Compiles TypeScript code to JavaScript.
         "npm --prefix \"$RESOURCE_DIR\" run build"
       ]
     }
   ]
 }
+// This file configures Firebase project settings, specifically for Cloud Functions.
+// It defines the source directory, ignored files, and pre-deployment scripts
+// like linting and building the TypeScript code.

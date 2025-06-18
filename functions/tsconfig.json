@@ -1,17 +1,31 @@
 {
+  // This is the main TypeScript configuration file for the Firebase Cloud Functions.
   "compilerOptions": {
+    // Specifies the module system to use for the compiled JavaScript.
+    // 'NodeNext' is suitable for modern Node.js environments supporting ES modules.
     "module": "NodeNext",
+    // Enables interoperability between CommonJS and ES modules.
     "esModuleInterop": true,
+    // Defines how modules are resolved. 'nodenext' is used with module: "NodeNext".
     "moduleResolution": "nodenext",
+    // Ensures that all codepaths in a function return a value if the function has a return type.
     "noImplicitReturns": true,
+    // Reports errors on unused local variables.
     "noUnusedLocals": true,
+    // Specifies the output directory for compiled JavaScript files.
     "outDir": "lib",
+    // Generates corresponding .map files for debugging.
     "sourceMap": true,
+    // Enables all strict type-checking options.
     "strict": true,
+    // Specifies the ECMAScript target version for the compiled JavaScript.
+    // 'es2017' is a common target for Cloud Functions supporting features like async/await.
     "target": "es2017"
   },
+  // Compiles files on save when supported by the editor/IDE.
   "compileOnSave": true,
+  // Specifies the files to be included in the compilation.
   "include": [
-    "src"
+    "src" // Includes all .ts files within the 'src' directory.
   ]
 }

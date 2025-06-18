@@ -1,4 +1,6 @@
 {
+    // Enables inline AI code completion suggestions within the editor.
     "IDX.aI.enableInlineCompletion": true,
+    // Enables AI-powered codebase indexing for features like smart search or contextual help.
     "IDX.aI.enableCodebaseIndexing": true
 }

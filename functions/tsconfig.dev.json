@@ -1,5 +1,10 @@
 {
+  // This tsconfig.json is specifically for development-time checks,
+  // often used by IDEs or ESLint when it needs to parse auxiliary files
+  // that are not part of the main application build (like .eslintrc.js itself).
   "include": [
+    // Includes the ESLint configuration file in this TypeScript project context.
+    // This allows TypeScript-aware linting rules to understand the ESLint config file itself.
     ".eslintrc.js"
   ]
 }

@@ -1,21 +1,25 @@
 {
-  "$schema": "https://ui.shadcn.com/schema.json",
-  "style": "default",
-  "rsc": true,
-  "tsx": true,
+  "$schema": "https://ui.shadcn.com/schema.json", // Specifies the JSON schema for validation and editor assistance.
+  "style": "default", // Defines the default style for ShadCN UI components.
+  "rsc": true, // Indicates if React Server Components (RSC) are enabled and should be considered.
+  "tsx": true, // Indicates that TypeScript (TSX) files are used for components.
   "tailwind": {
-    "config": "tailwind.config.ts",
-    "css": "src/app/globals.css",
-    "baseColor": "neutral",
-    "cssVariables": true,
-    "prefix": ""
+    "config": "tailwind.config.ts", // Path to the Tailwind CSS configuration file.
+    "css": "src/app/globals.css", // Path to the main global CSS file where Tailwind directives are processed.
+    "baseColor": "neutral", // The base color palette used by ShadCN UI for generating components.
+    "cssVariables": true, // Enables the use of CSS variables for theming ShadCN UI components.
+    "prefix": "" // An optional prefix for Tailwind CSS utility classes (empty means no prefix).
   },
   "aliases": {
-    "components": "@/components",
-    "utils": "@/lib/utils",
-    "ui": "@/components/ui",
-    "lib": "@/lib",
-    "hooks": "@/hooks"
+    // Defines path aliases for easier importing of modules.
+    "components": "@/components", // Alias for the main components directory.
+    "utils": "@/lib/utils", // Alias for utility functions.
+    "ui": "@/components/ui", // Alias for ShadCN UI primitive components.
+    "lib": "@/lib", // Alias for the general library directory.
+    "hooks": "@/hooks" // Alias for custom React hooks.
   },
-  "iconLibrary": "lucide"
+  "iconLibrary": "lucide" // Specifies 'lucide-react' as the icon library to be used with ShadCN UI.
 }
+// This file configures the ShadCN UI library integration with the project.
+// It defines styling preferences, paths to relevant files (Tailwind config, global CSS),
+// and aliases for module imports, making it easier to manage UI components.

@@ -89,4 +89,7 @@ BarberFlow is a modern, full-stack web application designed to seamlessly connec
 *   `src/lib/`: Utility functions, constants.
 *   `src/types/`: TypeScript type definitions.
 *   `public/`: Static assets, including `firebase-messaging-sw.js`.
-```
+
+<!-- This README provides a comprehensive overview of the BarberFlow application. -->
+<!-- It details features, tech stack, setup instructions, and project structure. -->
+<!-- It is intended for developers and anyone looking to understand or contribute to the project. -->
