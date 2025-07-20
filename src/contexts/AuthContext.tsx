@@ -14,7 +14,8 @@ import {
   sendPasswordResetEmail as firebaseSendPasswordResetEmail,
   type User as FirebaseUser
 } from 'firebase/auth';
-import { collection, doc, getDoc, setDoc, updateDoc, Timestamp, writeBatch, query, where, getDocs, getFunctions, httpsCallable } from 'firebase/firestore';
+import { collection, doc, getDoc, setDoc, updateDoc, Timestamp, writeBatch, query, where, getDocs } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 import { useToast } from '@/hooks/use-toast';
 
