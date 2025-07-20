@@ -8,7 +8,7 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } from "firebase-functions/v2/firestore";
 import * as admin from "firebase-admin";
-import type { AppUser, Appointment } from "../../src/types";
+import type { AppUser, Appointment, BarberService } from "../../src/types";
 
 // Initialize Firebase Admin SDK
 admin.initializeApp();
@@ -243,11 +243,12 @@ export const onBarberUpdate = onDocumentUpdated("users/{userId}", async (event) 
 
     // Check if the barber was temporarily unavailable and now is available.
     if (before.isTemporarilyUnavailable === true && after.isTemporarilyUnavailable === false) {
-        const busyStartTime = before.unavailableSince?.toDate();
-        const busyEndTime = after.updatedAt?.toDate();
+        // Ensure that the timestamps are valid Firestore Timestamps before proceeding
+        const busyStartTime = before.unavailableSince instanceof admin.firestore.Timestamp ? before.unavailableSince.toDate() : null;
+        const busyEndTime = after.updatedAt instanceof admin.firestore.Timestamp ? after.updatedAt.toDate() : null;
 
         if (!busyStartTime || !busyEndTime) {
-            console.log(`[Shift Notify] Barber ${barberId} is now available, but missing timestamps. Cannot calculate shift.`);
+            console.log(`[Shift Notify] Barber ${barberId} is now available, but missing valid timestamps. Cannot calculate shift.`);
             return;
         }
 
@@ -262,7 +263,7 @@ export const onBarberUpdate = onDocumentUpdated("users/{userId}", async (event) 
 
         const todayStr = new Date().toISOString().split('T')[0];
         // Find all of today's appointments for this barber that were not completed/cancelled
-        // and started after the busy period began.
+        // and were scheduled to start after the busy period began.
         const appointmentsSnapshot = await db.collection("appointments")
             .where('barberId', '==', barberId)
             .where('date', '==', todayStr)
@@ -278,8 +279,10 @@ export const onBarberUpdate = onDocumentUpdated("users/{userId}", async (event) 
         console.log(`[Shift Notify] Found ${appointmentsSnapshot.docs.length} appointments to notify about shifting.`);
         for (const doc of appointmentsSnapshot.docs) {
             const appointment = doc.data() as Appointment;
-            const { customerId } = appointment;
-            const newStartTime = appointment.startTime; // The new shifted start time is already on the document.
+            // The appointment document was already updated by the frontend context function
+            // when the barber's status was toggled. This function's job is just to notify.
+            const newStartTime = appointment.startTime;
+            const customerId = appointment.customerId;
 
             if (customerId) {
                 const customer = await getUserData(customerId);

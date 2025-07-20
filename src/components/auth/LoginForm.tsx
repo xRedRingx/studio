@@ -1,3 +1,4 @@
+
 /**
  * @fileoverview LoginForm component.
  * This component provides a reusable login form with email and password fields.
@@ -113,7 +114,7 @@ export default function LoginForm({ role }: LoginFormProps) {
               <div className="flex items-center justify-between">
                 <FormLabel className="text-base">Password</FormLabel>
                 {/* Link to the forgot password page. */}
-                <Link href="/forgot-password" tabIndex={-1} className="text-sm text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring rounded-sm">
+                <Link href="/forgot-password" role="link" tabIndex={0} className="text-sm text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-ring rounded-sm">
                   Forgot password?
                 </Link>
               </div>
