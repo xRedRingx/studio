@@ -43,9 +43,9 @@ export default function AuthFormWrapper({ title, description, role, children, fo
 
   return (
     // Full-screen flex container to center the card.
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-background via-muted/10 to-background p-4 sm:p-6">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4 sm:p-6">
       {/* Card component to contain the form. */}
-      <Card className="w-full max-w-md shadow-xl border-none rounded-xl bg-card/90 backdrop-blur-sm">
+      <Card className="w-full max-w-md shadow-sm border">
         <CardHeader className="text-center p-6 md:p-8">
           {/* Application Logo, linking to the homepage. */}
           <Link href="/" aria-label="Go to homepage" className="mx-auto mb-6 flex justify-center">
@@ -54,7 +54,7 @@ export default function AuthFormWrapper({ title, description, role, children, fo
           {/* Title of the form, optionally including the role. */}
           <CardTitle className="font-headline text-xl sm:text-2xl font-bold">{title} {roleText}</CardTitle>
           {/* Description text below the title. */}
-          <CardDescription className="text-sm sm:text-base text-gray-500 dark:text-gray-400 pt-2">
+          <CardDescription className="text-sm sm:text-base text-muted-foreground pt-2">
             {description}
           </CardDescription>
         </CardHeader>
@@ -65,7 +65,7 @@ export default function AuthFormWrapper({ title, description, role, children, fo
       </Card>
       {/* Optional footer link, e.g., "Don't have an account? Register". */}
       {footerLink && (
-         <p className="mt-6 text-center text-sm text-gray-500 dark:text-gray-400 px-4">
+         <p className="mt-6 text-center text-sm text-muted-foreground px-4">
           {footerLink.label}{' '}
           <Link href={footerLink.href} className="font-medium text-primary hover:underline">
             {footerLink.text}

@@ -120,37 +120,37 @@ export default function ManageServicesSection({
   };
 
   return (
-    <Card className="border-none shadow-lg rounded-xl overflow-hidden">
-      <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 md:p-6 gap-3 bg-gradient-to-tr from-card via-muted/10 to-card">
+    <Card>
+      <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 md:p-6 gap-3">
         <div>
           <CardTitle className="text-2xl font-bold font-headline">Manage Your Services</CardTitle>
-          <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">Add, edit, or remove the services you offer.</CardDescription>
+          <CardDescription className="text-sm text-muted-foreground mt-1">Add, edit, or remove the services you offer.</CardDescription>
         </div>
         {/* Button to open the dialog for adding a new service. */}
-        <Button onClick={() => handleOpenDialog()} className="rounded-full h-11 px-6 text-base w-full sm:w-auto" disabled={isSubmitting}>
+        <Button onClick={() => handleOpenDialog()} className="w-full sm:w-auto" size="lg" disabled={isSubmitting}>
           <PlusCircle className="mr-2 h-4 w-4" /> Add New Service
         </Button>
       </CardHeader>
       <CardContent className="p-4 md:p-6">
         {/* Display message if no services are available. */}
         {services.length === 0 ? (
-          <div className="text-center py-8 px-4 border-2 border-dashed border-muted rounded-lg bg-card">
+          <div className="text-center py-8 px-4 border-2 border-dashed border-muted rounded-lg bg-background">
             <Info className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold text-foreground mb-1">No Services Yet</h3>
-            <p className="text-base text-gray-500 dark:text-gray-400">
-              You haven't added any services. Click the "Add New Service" button above to get started and let customers know what you offer!
+            <p className="text-base text-muted-foreground">
+              You haven't added any services. Click the "Add New Service" button to get started.
             </p>
           </div>
         ) : (
           // List existing services.
           <div className="space-y-4">
             {services.map((service) => (
-              <Card key={service.id} className="shadow-md rounded-lg border hover:shadow-lg transition-shadow duration-200">
+              <Card key={service.id} className="shadow-sm hover:shadow-md transition-shadow duration-200">
                 <CardContent className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                   {/* Service details. */}
                   <div className="flex-grow">
                     <h3 className="font-semibold text-base">{service.name}</h3>
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 text-sm text-gray-500 dark:text-gray-400 mt-1">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-4 text-sm text-muted-foreground mt-1">
                       <span className="flex items-center"><DollarSign className="mr-1 h-4 w-4" /> Price: ${service.price.toFixed(2)}</span>
                       <span className="flex items-center mt-1 sm:mt-0"><Clock className="mr-1 h-4 w-4" /> Duration: <span className="text-primary ml-1">{service.duration} min</span></span>
                     </div>
@@ -173,13 +173,13 @@ export default function ManageServicesSection({
                       <AlertDialogContent className="rounded-xl">
                         <AlertDialogHeader>
                           <AlertDialogTitle className="text-xl font-bold">Are you sure?</AlertDialogTitle>
-                          <AlertDialogDescription className="text-base text-gray-500 dark:text-gray-400 pt-1">
+                          <AlertDialogDescription className="text-base text-muted-foreground pt-1">
                             This action cannot be undone. This will permanently delete the service "{serviceToDelete?.name}".
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter className="mt-4">
-                          <AlertDialogCancel onClick={() => setServiceToDelete(null)} className="rounded-full h-10 px-4" disabled={isSubmitting}>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={handleDeleteConfirm} className="rounded-full h-10 px-4" variant="destructive" disabled={isSubmitting}>
+                          <AlertDialogCancel onClick={() => setServiceToDelete(null)} disabled={isSubmitting}>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleDeleteConfirm} variant="destructive" disabled={isSubmitting}>
                             {isSubmitting ? <LoadingSpinner className="mr-2 h-4 w-4" /> : null}
                             {isSubmitting ? 'Deleting...' : 'Delete Service'}
                           </AlertDialogAction>

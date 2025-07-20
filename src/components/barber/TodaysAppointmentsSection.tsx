@@ -116,12 +116,12 @@ export default function TodaysAppointmentsSection({ appointments, onAppointmentA
   // Display loading state if `todayDate` is not yet determined.
   if (!todayDate) {
     return (
-      <Card className="border-none shadow-lg rounded-xl overflow-hidden bg-gradient-to-tr from-card via-muted/10 to-card">
+      <Card>
         <CardHeader className="p-4 md:p-6">
           <CardTitle className="text-xl font-bold flex items-center">
             <CalendarDays className="mr-2 h-5 w-5 text-primary" /> Today's Appointments
           </CardTitle>
-          <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">Loading appointments for today...</CardDescription>
+          <CardDescription className="text-sm text-muted-foreground mt-1">Loading appointments for today...</CardDescription>
         </CardHeader>
         <CardContent className="flex justify-center items-center py-8 p-4 md:p-6">
           <LoadingSpinner className="h-8 w-8 text-primary" />
@@ -136,17 +136,17 @@ export default function TodaysAppointmentsSection({ appointments, onAppointmentA
   });
 
   return (
-    <Card className="border-none shadow-lg rounded-xl overflow-hidden bg-gradient-to-tr from-card via-muted/10 to-card">
+    <Card>
       <CardHeader className="p-4 md:p-6">
         <CardTitle className="text-xl font-bold flex items-center">
           <CalendarDays className="mr-2 h-5 w-5 text-primary" /> Today's Appointments
         </CardTitle>
-        <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">View and manage your appointments for <span className="text-primary font-medium">{formattedTodayDate}</span>.</CardDescription>
+        <CardDescription className="text-sm text-muted-foreground mt-1">View and manage your appointments for <span className="text-primary font-medium">{formattedTodayDate}</span>.</CardDescription>
       </CardHeader>
       <CardContent className="p-4 md:p-6">
         {/* Display message if no appointments are scheduled for today. */}
         {todaysAppointments.length === 0 ? (
-          <p className="text-base text-gray-500 dark:text-gray-400">No active appointments scheduled for today.</p>
+          <p className="text-base text-muted-foreground">No active appointments scheduled for today.</p>
         ) : (
           // List today's appointments using AppointmentCard.
           <div className="space-y-4">

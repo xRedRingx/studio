@@ -53,10 +53,10 @@ export default function SetWorkScheduleSection({ schedule, onUpdateSchedule, onS
   };
 
   return (
-    <Card className="border-none shadow-lg rounded-xl overflow-hidden">
-      <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-card via-muted/10 to-card">
+    <Card>
+      <CardHeader className="p-4 md:p-6">
         <CardTitle className="text-2xl font-bold font-headline">Set Your Work Schedule</CardTitle>
-        <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage your weekly availability and operating hours.</CardDescription>
+        <CardDescription className="text-sm text-muted-foreground mt-1">Manage your weekly availability and operating hours.</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 p-4 md:p-6">
         {/* Iterate over `daysOfWeekOrder` to render a `DayScheduleInput` for each day. */}
@@ -69,7 +69,7 @@ export default function SetWorkScheduleSection({ schedule, onUpdateSchedule, onS
         ))}
         {/* Button to save all schedule changes. */}
         <div className="pt-6 flex justify-end">
-            <Button onClick={onSaveChanges} disabled={isSaving} className="h-12 rounded-full px-6 text-base">
+            <Button onClick={onSaveChanges} disabled={isSaving} size="lg">
               {isSaving && <LoadingSpinner className="mr-2 h-4 w-4" />} {/* Show spinner if saving. */}
               {isSaving ? 'Saving...' : 'Save Schedule Changes'}
             </Button>

@@ -266,75 +266,75 @@ export default function BarberEarningsPage() {
             {/* Grid for displaying financial summary cards. */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {/* Daily Earnings Card */}
-              <Card className="border-none shadow-xl rounded-xl overflow-hidden transform hover:scale-105 transition-transform duration-300">
-                <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-primary/10 via-background to-background">
+              <Card>
+                <CardHeader className="p-4 md:p-6">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-xl font-bold flex items-center"><CalendarDays className="mr-2 h-6 w-6 text-primary" />Today's Earnings</CardTitle>
                     <Wallet className="h-8 w-8 text-primary/70" />
                   </div>
-                  <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">{format(currentDate, 'eeee, MMM d')}</CardDescription>
+                  <CardDescription className="text-sm text-muted-foreground mt-1">{format(currentDate, 'eeee, MMM d')}</CardDescription>
                 </CardHeader>
-                <CardContent className="p-4 md:p-6"><p className="text-4xl font-bold text-primary mb-1">{formatCurrency(dailyEarnings)}</p><p className="text-sm text-muted-foreground">From {numDailyAppointments} appointment(s)</p></CardContent>
+                <CardContent className="p-4 md:p-6 pt-0"><p className="text-4xl font-bold text-primary mb-1">{formatCurrency(dailyEarnings)}</p><p className="text-sm text-muted-foreground">From {numDailyAppointments} appointment(s)</p></CardContent>
               </Card>
 
               {/* Daily Spendings Card */}
-              <Card className="border-none shadow-xl rounded-xl overflow-hidden transform hover:scale-105 transition-transform duration-300">
-                <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-destructive/10 via-background to-background">
+              <Card>
+                <CardHeader className="p-4 md:p-6">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-xl font-bold flex items-center"><TrendingDown className="mr-2 h-6 w-6 text-destructive" />Today's Spendings</CardTitle>
                     <Banknote className="h-8 w-8 text-destructive/70" />
                   </div>
-                   <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">{format(currentDate, 'eeee, MMM d')}</CardDescription>
+                   <CardDescription className="text-sm text-muted-foreground mt-1">{format(currentDate, 'eeee, MMM d')}</CardDescription>
                 </CardHeader>
-                <CardContent className="p-4 md:p-6"><p className="text-4xl font-bold text-destructive mb-1">{formatCurrency(dailySpendings)}</p><p className="text-sm text-muted-foreground">Manually entered for today</p></CardContent>
+                <CardContent className="p-4 md:p-6 pt-0"><p className="text-4xl font-bold text-destructive mb-1">{formatCurrency(dailySpendings)}</p><p className="text-sm text-muted-foreground">Manually entered for today</p></CardContent>
               </Card>
 
               {/* Daily Profits Card */}
-              <Card className="border-none shadow-xl rounded-xl overflow-hidden transform hover:scale-105 transition-transform duration-300">
-                 <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-green-500/10 via-background to-background">
+              <Card>
+                 <CardHeader className="p-4 md:p-6">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-xl font-bold flex items-center"><LineChart className="mr-2 h-6 w-6 text-green-600" />Today's Profits</CardTitle>
                     <DollarSign className="h-8 w-8 text-green-600/70" />
                   </div>
-                   <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">{format(currentDate, 'eeee, MMM d')}</CardDescription>
+                   <CardDescription className="text-sm text-muted-foreground mt-1">{format(currentDate, 'eeee, MMM d')}</CardDescription>
                 </CardHeader>
-                <CardContent className="p-4 md:p-6"><p className="text-4xl font-bold text-green-600 mb-1">{formatCurrency(dailyProfits)}</p><p className="text-sm text-muted-foreground">Earnings - Spendings</p></CardContent>
+                <CardContent className="p-4 md:p-6 pt-0"><p className="text-4xl font-bold text-green-600 mb-1">{formatCurrency(dailyProfits)}</p><p className="text-sm text-muted-foreground">Earnings - Spendings</p></CardContent>
               </Card>
 
               {/* Weekly Earnings Card */}
-              <Card className="border-none shadow-xl rounded-xl overflow-hidden transform hover:scale-105 transition-transform duration-300 md:col-start-1">
-                <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-accent/10 via-background to-background">
+              <Card className="md:col-start-1">
+                <CardHeader className="p-4 md:p-6">
                    <div className="flex items-center justify-between">
                       <CardTitle className="text-xl font-bold flex items-center"><TrendingUp className="mr-2 h-6 w-6 text-accent" />This Week's Earnings</CardTitle>
                        <Wallet className="h-8 w-8 text-accent/70" />
                   </div>
-                  <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">{format(startOfWeek(currentDate, { weekStartsOn: 1 }), 'MMM d')} - {format(endOfWeek(currentDate, { weekStartsOn: 1 }), 'MMM d')}</CardDescription>
+                  <CardDescription className="text-sm text-muted-foreground mt-1">{format(startOfWeek(currentDate, { weekStartsOn: 1 }), 'MMM d')} - {format(endOfWeek(currentDate, { weekStartsOn: 1 }), 'MMM d')}</CardDescription>
                 </CardHeader>
-                <CardContent className="p-4 md:p-6"><p className="text-4xl font-bold text-accent mb-1">{formatCurrency(weeklyEarnings)}</p><p className="text-sm text-muted-foreground">From {numWeeklyAppointments} appointment(s)</p></CardContent>
+                <CardContent className="p-4 md:p-6 pt-0"><p className="text-4xl font-bold text-accent mb-1">{formatCurrency(weeklyEarnings)}</p><p className="text-sm text-muted-foreground">From {numWeeklyAppointments} appointment(s)</p></CardContent>
               </Card>
 
               {/* Weekly Spendings Card */}
-              <Card className="border-none shadow-xl rounded-xl overflow-hidden transform hover:scale-105 transition-transform duration-300">
-                <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-red-500/10 via-background to-background">
+              <Card>
+                <CardHeader className="p-4 md:p-6">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-xl font-bold flex items-center"><TrendingDown className="mr-2 h-6 w-6 text-red-600" />This Week's Spendings</CardTitle>
                     <Banknote className="h-8 w-8 text-red-600/70" />
                   </div>
-                  <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">{format(startOfWeek(currentDate, { weekStartsOn: 1 }), 'MMM d')} - {format(endOfWeek(currentDate, { weekStartsOn: 1 }), 'MMM d')}</CardDescription>
+                  <CardDescription className="text-sm text-muted-foreground mt-1">{format(startOfWeek(currentDate, { weekStartsOn: 1 }), 'MMM d')} - {format(endOfWeek(currentDate, { weekStartsOn: 1 }), 'MMM d')}</CardDescription>
                 </CardHeader>
-                <CardContent className="p-4 md:p-6"><p className="text-4xl font-bold text-red-600 mb-1">{formatCurrency(weeklySpendings)}</p><p className="text-sm text-muted-foreground">Total manually entered</p></CardContent>
+                <CardContent className="p-4 md:p-6 pt-0"><p className="text-4xl font-bold text-red-600 mb-1">{formatCurrency(weeklySpendings)}</p><p className="text-sm text-muted-foreground">Total manually entered</p></CardContent>
               </Card>
 
               {/* Weekly Profits Card */}
-              <Card className="border-none shadow-xl rounded-xl overflow-hidden transform hover:scale-105 transition-transform duration-300">
-                <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-emerald-500/10 via-background to-background">
+              <Card>
+                <CardHeader className="p-4 md:p-6">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-xl font-bold flex items-center"><LineChart className="mr-2 h-6 w-6 text-emerald-600" />This Week's Profits</CardTitle>
                      <DollarSign className="h-8 w-8 text-emerald-600/70" />
                   </div>
-                  <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">{format(startOfWeek(currentDate, { weekStartsOn: 1 }), 'MMM d')} - {format(endOfWeek(currentDate, { weekStartsOn: 1 }), 'MMM d')}</CardDescription>
+                  <CardDescription className="text-sm text-muted-foreground mt-1">{format(startOfWeek(currentDate, { weekStartsOn: 1 }), 'MMM d')} - {format(endOfWeek(currentDate, { weekStartsOn: 1 }), 'MMM d')}</CardDescription>
                 </CardHeader>
-                <CardContent className="p-4 md:p-6"><p className="text-4xl font-bold text-emerald-600 mb-1">{formatCurrency(weeklyProfits)}</p><p className="text-sm text-muted-foreground">Earnings - Spendings</p></CardContent>
+                <CardContent className="p-4 md:p-6 pt-0"><p className="text-4xl font-bold text-emerald-600 mb-1">{formatCurrency(weeklyProfits)}</p><p className="text-sm text-muted-foreground">Earnings - Spendings</p></CardContent>
               </Card>
             </div>
 
@@ -348,7 +348,7 @@ export default function BarberEarningsPage() {
             />
 
             {/* Note about data freshness. */}
-            <Card className="mt-8 border-none shadow-lg rounded-xl overflow-hidden">
+            <Card className="mt-8">
                 <CardHeader className="p-4 md:p-6"><CardTitle className="text-lg font-semibold">Note</CardTitle></CardHeader>
                 <CardContent className="p-4 md:p-6 pt-0"><p className="text-sm text-muted-foreground">Earnings are from 'completed' appointments. Spendings are manually entered. Profits are Earnings - Spendings. Data reflects last refresh.</p></CardContent>
             </Card>

@@ -184,10 +184,10 @@ export default function ManageUnavailableDatesSection({
   const isAddButtonDisabled = !selectedDate || isProcessing || isSelectedDateAlreadyMarked;
 
   return (
-    <Card className="border-none shadow-lg rounded-xl overflow-hidden">
-      <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-card via-muted/10 to-card">
+    <Card>
+      <CardHeader className="p-4 md:p-6">
         <CardTitle className="text-2xl font-bold font-headline">Manage Unavailable Dates</CardTitle>
-        <CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">Block out specific dates. Dates already marked are styled in the calendar. To re-enable a date, remove it from the list below.</CardDescription>
+        <CardDescription className="text-sm text-muted-foreground mt-1">Block out specific dates. Dates already marked are styled in the calendar. To re-enable a date, remove it from the list below.</CardDescription>
       </CardHeader>
       <CardContent className="p-4 md:p-6 space-y-6">
         {/* Form for adding a new unavailable date. */}
@@ -247,7 +247,7 @@ export default function ManageUnavailableDatesSection({
           {/* Submit Button for Adding Unavailable Date */}
           <Button
             type="submit"
-            className="h-12 rounded-full text-base"
+            className="h-12 text-base"
             disabled={isAddButtonDisabled}
           >
             {isProcessing ? <LoadingSpinner className="mr-2 h-5 w-5" /> : <PlusCircle className="mr-2 h-5 w-5" />}
@@ -260,10 +260,10 @@ export default function ManageUnavailableDatesSection({
           <h3 className="text-lg font-semibold mb-3">Current Unavailable Dates</h3>
           {/* Message if no unavailable dates are marked. */}
           {unavailableDates.length === 0 ? (
-            <div className="text-center py-8 px-4 border-2 border-dashed border-muted rounded-lg bg-card">
+            <div className="text-center py-8 px-4 border-2 border-dashed border-muted rounded-lg bg-background">
               <Info className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold text-foreground mb-1">No Unavailable Dates Marked</h3>
-              <p className="text-base text-gray-500 dark:text-gray-400">
+              <p className="text-base text-muted-foreground">
                 You haven't blocked out any specific dates. If you need to take a day off, add it using the form above.
               </p>
             </div>
@@ -274,7 +274,7 @@ export default function ManageUnavailableDatesSection({
                 <li key={ud.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-md shadow-sm hover:bg-muted/75 transition-colors duration-150">
                   <div>
                     <p className="font-medium">{formatYYYYMMDDToDisplay(ud.date)}</p>
-                    {ud.reason && <p className="text-xs text-gray-500 dark:text-gray-400">{ud.reason}</p>}
+                    {ud.reason && <p className="text-xs text-muted-foreground">{ud.reason}</p>}
                   </div>
                   {/* Delete Button with Confirmation Dialog */}
                    <AlertDialog>
@@ -287,14 +287,14 @@ export default function ManageUnavailableDatesSection({
                       <AlertDialogContent className="rounded-xl">
                         <AlertDialogHeader>
                           <AlertDialogTitle className="text-xl font-bold">Confirm Removal</AlertDialogTitle>
-                          <AlertDialogDescription className="text-base text-gray-500 dark:text-gray-400 pt-1">
+                          <AlertDialogDescription className="text-base text-muted-foreground pt-1">
                             Are you sure you want to remove {formatYYYYMMDDToDisplay(dateToRemove?.date || '')} from your unavailable dates?
                             Customers will be able to book on this day again.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter className="mt-4">
-                          <AlertDialogCancel onClick={() => setDateToRemove(null)} disabled={isProcessing} className="rounded-full h-10 px-4">Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={handleConfirmRemove} disabled={isProcessing} variant="destructive" className="rounded-full h-10 px-4">
+                          <AlertDialogCancel onClick={() => setDateToRemove(null)} disabled={isProcessing}>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleConfirmRemove} disabled={isProcessing} variant="destructive">
                             {isProcessing ? <LoadingSpinner className="mr-2 h-4 w-4" /> : null}
                             Remove
                           </AlertDialogAction>

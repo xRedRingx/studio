@@ -514,7 +514,7 @@ export default function BarberDashboardPage() {
                 <TooltipTrigger asChild>
                   {/* Button to open walk-in dialog. Disabled with tooltip if conditions not met. */}
                   <span tabIndex={isAddWalkInDisabled ? 0 : -1}> {/* For accessibility of disabled button tooltip. */}
-                    <Button onClick={() => setIsWalkInDialogOpen(true)} className="w-full sm:w-auto h-11 rounded-full px-6 text-base" disabled={isAddWalkInDisabled} aria-describedby={isAddWalkInDisabled ? "add-walkin-tooltip" : undefined}>
+                    <Button onClick={() => setIsWalkInDialogOpen(true)} className="w-full sm:w-auto" size="lg" disabled={isAddWalkInDisabled} aria-describedby={isAddWalkInDisabled ? "add-walkin-tooltip" : undefined}>
                         <PlusCircle className="mr-2 h-5 w-5" /> Add Walk-In
                     </Button>
                   </span>
@@ -527,11 +527,11 @@ export default function BarberDashboardPage() {
           {/* Grid for status toggles: Online Booking and Temporary Status. */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Card for Online Booking Status Toggle. */}
-            <Card className="border-none shadow-lg rounded-xl overflow-hidden">
-              <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-card via-muted/10 to-card">
+            <Card>
+              <CardHeader className="p-4 md:p-6">
                 <CardTitle className="text-xl font-bold flex items-center"><Settings2 className="mr-2 h-5 w-5 text-primary" /> Online Booking Status</CardTitle>
               </CardHeader>
-              <CardContent className="p-4 md:p-6">
+              <CardContent className="p-4 md:p-6 pt-0">
                 {user ? ( // Show toggle if user data is loaded.
                   <div className="flex items-center space-x-3">
                     <Switch id="accepting-bookings-toggle" checked={localIsAcceptingBookings} onCheckedChange={handleToggleAcceptingBookings} disabled={isUpdatingAcceptingBookings} aria-label="Toggle online bookings" />
@@ -540,16 +540,16 @@ export default function BarberDashboardPage() {
                   </div>
                 ) : <div className="flex items-center"><LoadingSpinner className="h-5 w-5 text-primary mr-2" /><p>Loading status...</p></div>}
                 {/* Helper text explaining the toggle's functionality. */}
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">Turn this off to prevent new online bookings. Existing appointments are not affected. You can still add walk-ins.</p>
+                <p className="text-sm text-muted-foreground mt-2">Turn this off to prevent new online bookings. Existing appointments are not affected. You can still add walk-ins.</p>
               </CardContent>
             </Card>
 
             {/* Card for Temporary Availability Status Toggle. */}
-            <Card className="border-none shadow-lg rounded-xl overflow-hidden">
-              <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-card via-muted/10 to-card">
+            <Card>
+              <CardHeader className="p-4 md:p-6">
                 <CardTitle className="text-xl font-bold flex items-center"><Hourglass className="mr-2 h-5 w-5 text-accent" /> Temporary Status</CardTitle>
               </CardHeader>
-              <CardContent className="p-4 md:p-6">
+              <CardContent className="p-4 md:p-6 pt-0">
                 {user ? ( // Show toggle if user data is loaded.
                   <div className="flex items-center space-x-3">
                     <Switch
@@ -568,7 +568,7 @@ export default function BarberDashboardPage() {
                   </div>
                 ) : <div className="flex items-center"><LoadingSpinner className="h-5 w-5 text-accent mr-2" /><p>Loading status...</p></div>}
                 {/* Descriptive text based on current temporary status. */}
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                <p className="text-sm text-muted-foreground mt-2">
                   {!localIsTemporarilyUnavailable
                     ? "Set yourself as temporarily unavailable (e.g., short break). Toggle OFF if you need to step out. Appointments for today will be shifted upon your return."
                     : `You've been unavailable ${unavailableSinceDuration || 'for a bit'}. Toggle ON to become available and shift today's appointments.`
@@ -580,7 +580,7 @@ export default function BarberDashboardPage() {
 
           {/* Alert prompt to add services if none exist. */}
           {(!isLoadingServices && services.length === 0) && (
-            <Alert variant="default" className="border-primary/50 shadow-md rounded-lg">
+            <Alert variant="default" className="border-primary/50">
               <Info className="h-5 w-5 text-primary" />
               <AlertTitle className="font-semibold text-lg">Add Services</AlertTitle>
               <AlertDescription className="text-base">No services added yet. Add services to allow bookings and walk-ins.

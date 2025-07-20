@@ -46,9 +46,9 @@ export default function AppointmentCard({ appointment, onAppointmentAction, isIn
   // Dynamically set card styling based on appointment state.
   let cardTitleClass = "text-base font-semibold";
   let cardBgClass = "bg-card";
-  let cardBorderClass = "border border-border";
+  let cardBorderClass = "border";
   let statusBadge = null; // JSX for a status badge, if any.
-  let timeClass = "text-gray-500 dark:text-gray-400";
+  let timeClass = "text-muted-foreground";
   let mainIcon = <User className="mr-2 h-4 w-4 opacity-70" />; // Default icon.
 
   // Determine if the appointment needs special attention (stale or past grace period for no-show).
@@ -57,22 +57,22 @@ export default function AppointmentCard({ appointment, onAppointmentAction, isIn
   // Apply specific styling if the appointment needs attention.
   if (needsAttention) {
     cardTitleClass = "text-yellow-700 dark:text-yellow-500";
-    cardBgClass = "bg-yellow-500/10 dark:bg-yellow-700/15";
-    cardBorderClass = "border-yellow-500 ring-2 ring-yellow-500/50 shadow-lg shadow-yellow-500/20";
+    cardBgClass = "bg-yellow-500/10";
+    cardBorderClass = "border-yellow-500";
     statusBadge = <span className="text-xs font-semibold uppercase text-yellow-600 dark:text-yellow-400 px-2 py-1 rounded-full bg-yellow-500/20 flex items-center"><AlertTriangle className="h-3.5 w-3.5 mr-1.5"/>Needs Attention</span>;
     timeClass = "text-yellow-700 dark:text-yellow-500";
     mainIcon = <AlertTriangle className="mr-2 h-4 w-4 text-yellow-600 dark:text-yellow-400" />;
   } else if (isNextCandidate && (status === 'upcoming' || status === 'customer-initiated-check-in' || status === 'barber-initiated-check-in')) {
     // Styling for the "Next Up" appointment.
     cardTitleClass = "text-primary-foreground";
-    cardBgClass = "bg-primary/90 dark:bg-primary/80";
-    cardBorderClass = "border-primary ring-2 ring-primary/80 shadow-lg shadow-primary/30";
+    cardBgClass = "bg-primary text-primary-foreground";
+    cardBorderClass = "border-primary";
     statusBadge = <span className="text-xs font-semibold uppercase text-primary-foreground px-2 py-1 rounded-full bg-primary-foreground/20 flex items-center"><AlertCircle className="h-3.5 w-3.5 mr-1.5"/>Next Up</span>;
     timeClass = "text-primary-foreground/90";
     mainIcon = <Users className="mr-2 h-4 w-4 opacity-80" />;
   } else if (status === 'in-progress') {
     // Styling for "In Progress" appointments.
-     cardBgClass = "bg-primary/10 dark:bg-primary/15";
+     cardBgClass = "bg-primary/10";
      cardBorderClass = "border-primary/50";
      cardTitleClass = "text-primary";
      timeClass = "text-primary";
@@ -80,7 +80,7 @@ export default function AppointmentCard({ appointment, onAppointmentAction, isIn
      mainIcon = <Play className="mr-2 h-4 w-4 text-primary" />;
   } else if (status === 'completed') {
     // Styling for "Completed" appointments.
-     cardBgClass = "bg-green-500/10 dark:bg-green-700/15 opacity-90";
+     cardBgClass = "bg-green-500/10 opacity-90";
      cardBorderClass = "border-green-500/50";
      cardTitleClass = "text-green-700 dark:text-green-400";
      timeClass = "text-green-600 dark:text-green-500";
@@ -88,7 +88,7 @@ export default function AppointmentCard({ appointment, onAppointmentAction, isIn
   } else if (status === 'no-show') {
     // Styling for "No-Show" appointments.
     cardTitleClass = "text-destructive";
-    cardBgClass = "bg-destructive/10 dark:bg-destructive/15 opacity-80";
+    cardBgClass = "bg-destructive/10 opacity-80";
     cardBorderClass = "border-destructive/50";
     statusBadge = <span className="text-xs font-semibold uppercase text-destructive px-2 py-1 rounded-full bg-destructive/15 flex items-center"><UserX className="h-3 w-3 mr-1.5"/>No-Show</span>;
     timeClass = "text-destructive/80";
@@ -207,7 +207,7 @@ export default function AppointmentCard({ appointment, onAppointmentAction, isIn
   };
 
   return (
-    <Card className={cn("shadow-md hover:shadow-lg rounded-xl transition-all duration-200 ease-in-out overflow-hidden", cardBorderClass, cardBgClass)}>
+    <Card className={cn("transition-all duration-200 ease-in-out", cardBorderClass, cardBgClass)}>
       <CardHeader className="pb-3 pt-4 px-4">
         <div className="flex items-center justify-between">
             {/* Appointment title with customer name and icon. */}
