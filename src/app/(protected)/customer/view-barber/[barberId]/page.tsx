@@ -12,7 +12,7 @@ import { useParams, useRouter } from 'next/navigation'; // Hooks for route param
 import ProtectedPage from '@/components/layout/ProtectedPage'; // Ensures authenticated customer access.
 import type { AppUser, BarberService } from '@/types'; // Type definitions.
 import { Button } from '@/components/ui/button'; // Button UI component.
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'; // Card UI component.
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'; // Card UI components.
 import { firestore } from '@/firebase/config'; // Firebase Firestore instance.
 import { collection, doc, getDoc, getDocs, query, where, orderBy } from 'firebase/firestore'; // Firestore methods.
 import { useToast } from '@/hooks/use-toast'; // Toast notification hook.
@@ -116,7 +116,7 @@ export default function ViewBarberPage() {
   // Determine barber's current booking availability for UI elements.
   const barberIsAcceptingBookings = barber.isAcceptingBookings !== undefined ? barber.isAcceptingBookings : true;
   const barberIsTemporarilyUnavailable = barber.isTemporarilyUnavailable || false;
-  const canBook = barberIsAcceptingBookings && !barberIsTemporarilyUnavailable;
+  const canBook = barberIsAcceptingBookings && !barberIsTemporarilyUnavailable && services.length > 0;
 
   return (
     // ProtectedPage ensures only authenticated customers can access this page.
@@ -204,23 +204,25 @@ export default function ViewBarberPage() {
             )}
           </CardContent>
 
-          {/* Footer with "Book" button. */}
-          <CardFooter className="p-4 md:p-6 border-t mt-auto">
-            <Button
-              asChild={canBook} // Renders as Link if canBook is true.
-              className="w-full sm:w-auto h-14 rounded-full text-lg px-8"
-              disabled={!canBook || services.length === 0} // Disabled if cannot book or no services.
-              title={services.length === 0 && canBook ? "Barber has no services to book." : (!canBook ? "Barber is not available for booking right now." : undefined)}
-            >
-              {canBook ? ( // If can book, render Link to booking page.
-                <Link href={`/customer/book/${barberId}`}>
-                  <CalendarPlus className="mr-2 h-5 w-5" /> Book with {barber.firstName}
-                </Link>
-              ) : ( // If cannot book, display reason.
-                <><CalendarPlus className="mr-2 h-5 w-5" /> {barberIsTemporarilyUnavailable ? 'Temporarily Busy' : 'Not Accepting Bookings'}</>
-              )}
-            </Button>
-          </CardFooter>
+          {/* Footer with "Book" button, hidden if no services. */}
+          {services.length > 0 && (
+            <CardFooter className="p-4 md:p-6 border-t mt-auto">
+                <Button
+                asChild={canBook} // Renders as Link if canBook is true.
+                className="w-full sm:w-auto h-14 rounded-full text-lg px-8"
+                disabled={!canBook}
+                title={!canBook ? "Barber is not available for booking right now." : undefined}
+                >
+                {canBook ? ( // If can book, render Link to booking page.
+                    <Link href={`/customer/book/${barberId}`}>
+                    <CalendarPlus className="mr-2 h-5 w-5" /> Book with {barber.firstName}
+                    </Link>
+                ) : ( // If cannot book, display reason.
+                    <><CalendarPlus className="mr-2 h-5 w-5" /> {barberIsTemporarilyUnavailable ? 'Temporarily Busy' : 'Not Accepting Bookings'}</>
+                )}
+                </Button>
+            </CardFooter>
+          )}
         </Card>
       </div>
     </ProtectedPage>

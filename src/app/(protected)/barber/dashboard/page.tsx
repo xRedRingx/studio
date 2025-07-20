@@ -448,16 +448,12 @@ export default function BarberDashboardPage() {
   };
 
   /**
-   * Toggles the barber's temporary unavailability status.
-   * If becoming available, it also triggers logic to shift today's appointments.
+   * Toggles the barber's temporary unavailability status by calling the backend function.
    * @param {boolean} newSwitchIsOnState - The new state from the switch (true if available, false if busy).
    */
   const handleToggleTemporaryStatus = async (newSwitchIsOnState: boolean) => {
     if (!user || !user.uid || !updateBarberTemporaryStatus) return;
 
-    // Determine if the barber is becoming unavailable based on the new switch state.
-    // Switch ON (newSwitchIsOnState = true) means barber is AVAILABLE (so isTemporarilyUnavailable = false).
-    // Switch OFF (newSwitchIsOnState = false) means barber is BUSY (so isTemporarilyUnavailable = true).
     const barberIsBecomingUnavailable = !newSwitchIsOnState;
 
     setLocalIsTemporarilyUnavailable(barberIsBecomingUnavailable); // Optimistic UI update.
@@ -465,13 +461,14 @@ export default function BarberDashboardPage() {
     setIsProcessingAuth(true); // Signal global processing in AuthContext.
 
     try {
-      // Call AuthContext function to update status and handle appointment shifts.
-      await updateBarberTemporaryStatus(user.uid, barberIsBecomingUnavailable, user.unavailableSince);
+      // Call AuthContext function which now calls the backend Cloud Function.
+      await updateBarberTemporaryStatus(user.uid, barberIsBecomingUnavailable);
+      
       toast({
         title: "Availability Updated",
-        description: `You are now marked as ${barberIsBecomingUnavailable ? 'temporarily unavailable' : 'available'}. ${!barberIsBecomingUnavailable ? 'Appointments may have been shifted.' : ''}`,
+        description: `You are now marked as ${barberIsBecomingUnavailable ? 'temporarily unavailable' : 'available'}. ${!barberIsBecomingUnavailable ? 'Appointments may be shifted.' : ''}`,
       });
-      // If status changed to available and shifts might have occurred, refetch appointments.
+      // If status changed to available, refetch appointments to get the shifted times.
       if (!barberIsBecomingUnavailable) {
         fetchAppointments();
       }

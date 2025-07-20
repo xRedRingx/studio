@@ -6,8 +6,9 @@
 
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } from "firebase-functions/v2/firestore";
+import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
-import type { AppUser, Appointment, BarberService } from "../../src/types";
+import type { AppUser, Appointment } from "../../src/types";
 
 // Initialize Firebase Admin SDK
 admin.initializeApp();
@@ -19,19 +20,30 @@ const REMINDER_MINUTES_BEFORE = 30;
 const REMINDER_WINDOW_MINUTES = 5;
 const TIMEZONE = "Africa/Algiers";
 
+// Helper Functions
+const timeToMinutes = (timeStr: string): number => {
+    if (!timeStr || !timeStr.includes(' ')) return 0;
+    const [time, modifier] = timeStr.split(' ');
+    let [hours, minutes] = time.split(':').map(Number);
+    if (hours === 12) hours = modifier.toUpperCase() === 'AM' ? 0 : 12;
+    else if (modifier.toUpperCase() === 'PM' && hours < 12) hours += 12;
+    return hours * 60 + minutes;
+};
+
+const minutesToTime = (totalMinutes: number): string => {
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    const displayHour = h % 12 === 0 ? 12 : h % 12;
+    const period = h < 12 || h === 24 ? 'AM' : 'PM';
+    return `${String(displayHour).padStart(2, '0')}:${String(m).padStart(2, '0')} ${period}`;
+};
+
+const formatDateToYYYYMMDD = (date: Date): string => date.toISOString().split('T')[0];
+
 // =================================================================================
 // 1. SCHEDULED FUNCTION - Send Appointment Reminders
 // =================================================================================
 
-/**
- * A scheduled Cloud Function that sends push notification reminders for upcoming appointments.
- *
- * @remarks
- * Firebase Index Required for `appointments` collection:
- * - `status` (Ascending)
- * - `reminderSent` (Ascending)
- * - `appointmentTimestamp` (Ascending)
- */
 export const sendAppointmentReminders = onSchedule(
   {
     schedule: `every ${REMINDER_WINDOW_MINUTES} minutes`,
@@ -89,213 +101,203 @@ export const sendAppointmentReminders = onSchedule(
 
 
 // =================================================================================
-// 2. FIRESTORE TRIGGER - New Booking & Cancellation Handlers
+// 2. FIRESTORE TRIGGERS - Booking, Cancellation, Deletion
 // =================================================================================
 
-/**
- * Function: onAppointmentCreate
- * Triggered when a new appointment document is created.
- * Sends a notification to the barber and creates a public, anonymized "booked slot"
- * for client-side availability checks.
- */
 export const onAppointmentCreate = onDocumentCreated("appointments/{appointmentId}", async (event) => {
     const snapshot = event.data;
-    if (!snapshot) {
-        console.log("[New Booking] No data associated with the event.");
-        return;
-    }
+    if (!snapshot) return;
+
     const appointment = snapshot.data() as Appointment;
     const appointmentId = snapshot.id;
     const { barberId, customerName, serviceName, date, startTime, endTime } = appointment;
 
-    // --- Action 1: Notify Barber ---
-    console.log(`[New Booking] New appointment created: ${appointmentId}. Notifying barber ${barberId}.`);
+    console.log(`[New Booking] Notifying barber ${barberId}.`);
     const barber = await getUserData(barberId);
     if (barber?.fcmToken) {
         const message = {
-            notification: {
-                title: "✅ New Booking!",
-                body: `${customerName} booked ${serviceName} for ${date} at ${startTime}.`,
-            },
+            notification: { title: "✅ New Booking!", body: `${customerName} booked ${serviceName} for ${date} at ${startTime}.` },
             token: barber.fcmToken,
         };
         await sendNotification(barberId, message, `new booking notification for ${appointmentId}`);
     }
 
-    // --- Action 2: Create Public Booked Slot ---
-    // This creates an anonymized document that clients can safely read to check for availability.
     const publicSlotRef = db.doc(`publicBarberData/${barberId}/bookedSlots/${appointmentId}`);
     try {
-        await publicSlotRef.set({
-            startTime: startTime,
-            endTime: endTime,
-            date: date,
-        });
-        console.log(`[New Booking] Created public booked slot for appointment ${appointmentId}.`);
+        await publicSlotRef.set({ startTime, endTime, date });
+        console.log(`[New Booking] Created public booked slot for ${appointmentId}.`);
     } catch (error) {
         console.error(`[New Booking] Failed to create public booked slot for ${appointmentId}:`, error);
     }
 });
 
-
-/**
- * Function: onAppointmentUpdate
- * Triggered when an appointment document is updated.
- * Handles two main cases:
- * 1. If status changes to 'cancelled', it sends notifications and deletes the public booked slot.
- * 2. If status changes to 'completed' or 'no-show', it also deletes the public booked slot.
- */
 export const onAppointmentUpdate = onDocumentUpdated("appointments/{appointmentId}", async (event) => {
-    const change = event.data;
-    if (!change) return;
+    const { before, after } = event.data!;
+    const beforeData = before.data() as Appointment;
+    const afterData = after.data() as Appointment;
 
-    const before = change.before.data() as Appointment;
-    const after = change.after.data() as Appointment;
-    const appointmentId = change.after.id;
+    const hasBecomeCancelled = beforeData.status !== 'cancelled' && afterData.status === 'cancelled';
+    const hasBecomeInactive = !['completed', 'no-show'].includes(beforeData.status) && ['completed', 'no-show'].includes(afterData.status);
 
-    const hasBecomeCancelled = before.status !== 'cancelled' && after.status === 'cancelled';
-    const hasBecomeInactive = !['completed', 'no-show'].includes(before.status) && ['completed', 'no-show'].includes(after.status);
-
-    // --- Case 1: Appointment was just cancelled ---
     if (hasBecomeCancelled) {
-        const { barberId, customerId, customerName, barberName, serviceName } = after;
-        console.log(`[Cancellation] Appointment ${appointmentId} was cancelled. Notifying parties.`);
-
-        // Notify the Barber
+        const { barberId, customerId, customerName, barberName, serviceName } = afterData;
+        console.log(`[Cancellation] Notifying for appointment ${after.id}.`);
         if (barberId) {
             const barber = await getUserData(barberId);
             if (barber?.fcmToken) {
-                const message = {
-                    notification: { title: "Appointment Cancelled", body: `Your appointment with ${customerName} for ${serviceName} has been cancelled.` },
-                    token: barber.fcmToken,
-                };
-                await sendNotification(barberId, message, `cancellation for ${appointmentId}`);
+                const message = { notification: { title: "Appointment Cancelled", body: `Your appointment with ${customerName} for ${serviceName} has been cancelled.` }, token: barber.fcmToken };
+                await sendNotification(barberId, message, `cancellation for ${after.id}`);
             }
         }
-
-        // Notify the Customer
         if (customerId) {
             const customer = await getUserData(customerId);
             if (customer?.fcmToken) {
-                const message = {
-                    notification: { title: "Appointment Cancelled", body: `Your appointment with ${barberName} for ${serviceName} has been cancelled.` },
-                    token: customer.fcmToken,
-                };
-                await sendNotification(customerId, message, `cancellation for ${appointmentId}`);
+                const message = { notification: { title: "Appointment Cancelled", body: `Your appointment with ${barberName} for ${serviceName} has been cancelled.` }, token: customer.fcmToken };
+                await sendNotification(customerId, message, `cancellation for ${after.id}`);
             }
         }
     }
 
-    // --- Case 2: Appointment just became inactive (cancelled, completed, no-show) ---
-    // This is to clean up the public booked slots.
     if (hasBecomeCancelled || hasBecomeInactive) {
-        const publicSlotRef = db.doc(`publicBarberData/${after.barberId}/bookedSlots/${appointmentId}`);
+        const publicSlotRef = db.doc(`publicBarberData/${afterData.barberId}/bookedSlots/${after.id}`);
         try {
             await publicSlotRef.delete();
-            console.log(`[Inactive] Deleted public booked slot for inactive appointment ${appointmentId}.`);
+            console.log(`[Inactive] Deleted public booked slot for ${after.id}.`);
         } catch (error) {
-            // It's okay if it fails (e.g., doesn't exist), just log it.
-            console.warn(`[Inactive] Could not delete public booked slot for ${appointmentId}:`, error);
+            console.warn(`[Inactive] Could not delete public booked slot for ${after.id}:`, error);
         }
     }
 });
 
-/**
- * Function: onAppointmentDelete
- * Triggered when an appointment document is deleted directly (less common, but for cleanup).
- * Deletes the corresponding public booked slot.
- */
 export const onAppointmentDelete = onDocumentDeleted("appointments/{appointmentId}", async (event) => {
     const deletedAppointment = event.data?.data() as Appointment;
     if (!deletedAppointment) return;
 
-    const { barberId } = deletedAppointment;
-    const appointmentId = event.params.appointmentId;
-    
-    const publicSlotRef = db.doc(`publicBarberData/${barberId}/bookedSlots/${appointmentId}`);
+    const publicSlotRef = db.doc(`publicBarberData/${deletedAppointment.barberId}/bookedSlots/${event.params.appointmentId}`);
     try {
         await publicSlotRef.delete();
-        console.log(`[Delete] Deleted public booked slot for deleted appointment ${appointmentId}.`);
+        console.log(`[Delete] Deleted public booked slot for ${event.params.appointmentId}.`);
     } catch (error) {
-        console.warn(`[Delete] Could not delete public booked slot for ${appointmentId}:`, error);
+        console.warn(`[Delete] Could not delete public booked slot for ${event.params.appointmentId}:`, error);
     }
 });
 
-
 // =================================================================================
-// 3. FIRESTORE TRIGGER - Barber Busy Mode / Appointment Shift Notifications
+// 3. FIRESTORE TRIGGER & CALLABLE - Barber Busy Mode / Appointment Shift
 // =================================================================================
 
-/**
- * Function: onBarberUpdate
- * Triggered when a barber's user document is updated.
- * Specifically handles the case when a barber goes from "temporarily unavailable" back to "available".
- * If so, it finds affected customers and notifies them of their appointment shifts.
- */
 export const onBarberUpdate = onDocumentUpdated("users/{userId}", async (event) => {
-    const change = event.data;
-    if (!change) return;
+    const { before, after } = event.data!;
+    const beforeData = before.data() as AppUser;
+    const afterData = after.data() as AppUser;
 
-    const before = change.before.data() as AppUser;
-    const after = change.after.data() as AppUser;
-    const barberId = change.after.id;
-
-    // Check if the barber was temporarily unavailable and now is available.
-    if (before.isTemporarilyUnavailable === true && after.isTemporarilyUnavailable === false) {
-        const busyStartTime = before.unavailableSince?.toDate();
-        const busyEndTime = after.updatedAt?.toDate();
+    if (beforeData.isTemporarilyUnavailable === true && afterData.isTemporarilyUnavailable === false) {
+        const busyStartTime = beforeData.unavailableSince?.toDate();
+        const busyEndTime = afterData.updatedAt?.toDate();
 
         if (!busyStartTime || !busyEndTime) {
-            console.log(`[Shift Notify] Barber ${barberId} is now available, but missing timestamps. Cannot calculate shift.`);
+            console.log(`[Shift Notify] Barber ${after.id} is now available, but missing timestamps.`);
             return;
         }
 
         const busyDurationMinutes = Math.round((busyEndTime.getTime() - busyStartTime.getTime()) / (1000 * 60));
 
         if (busyDurationMinutes <= 0) {
-            console.log(`[Shift Notify] Barber ${barberId} available. No significant busy duration (${busyDurationMinutes} mins). No notifications sent.`);
+            console.log(`[Shift Notify] Barber ${after.id} available. No significant duration.`);
             return;
         }
 
-        console.log(`[Shift Notify] Barber ${barberId} is now available after being busy for ${busyDurationMinutes} minutes. Checking for appointments to notify.`);
+        console.log(`[Shift Notify] Barber ${after.id} available after ${busyDurationMinutes} mins. Notifying.`);
 
-        const todayStr = new Date().toISOString().split('T')[0];
-        // Find all of today's appointments for this barber that were not completed/cancelled
-        // and started after the busy period began.
         const appointmentsSnapshot = await db.collection("appointments")
-            .where('barberId', '==', barberId)
-            .where('date', '==', todayStr)
+            .where('barberId', '==', after.id)
+            .where('date', '==', formatDateToYYYYMMDD(new Date()))
             .where('status', 'in', ['upcoming', 'customer-initiated-check-in', 'barber-initiated-check-in'])
-            .where('appointmentTimestamp', '>=', before.unavailableSince)
+            .where('appointmentTimestamp', '>=', beforeData.unavailableSince!)
             .get();
 
         if (appointmentsSnapshot.empty) {
-            console.log(`[Shift Notify] No upcoming appointments found for barber ${barberId} to notify.`);
+            console.log(`[Shift Notify] No upcoming appointments to notify for barber ${after.id}.`);
             return;
         }
 
-        console.log(`[Shift Notify] Found ${appointmentsSnapshot.docs.length} appointments to notify about shifting.`);
         for (const doc of appointmentsSnapshot.docs) {
             const appointment = doc.data() as Appointment;
-            // The appointment document was already updated by the frontend context function
-            // when the barber's status was toggled. This function's job is just to notify.
-            const newStartTime = appointment.startTime;
             const customerId = appointment.customerId;
-
             if (customerId) {
                 const customer = await getUserData(customerId);
                 if (customer?.fcmToken) {
                     const message = {
                         notification: {
                             title: "🗓️ Your Appointment Time Has Shifted",
-                            body: `Your barber was briefly unavailable. Your appointment has been moved by about ${busyDurationMinutes} minutes. Your new start time is ${newStartTime}.`,
+                            body: `Your barber was briefly unavailable. Your appointment has been moved by about ${busyDurationMinutes} minutes. Your new start time is ${appointment.startTime}.`,
                         },
                         token: customer.fcmToken,
                     };
-                    await sendNotification(customerId, message, `shift notification for appointment ${doc.id}`);
+                    await sendNotification(customerId, message, `shift notification for ${doc.id}`);
                 }
             }
         }
+    }
+});
+
+export const toggleBarberTemporaryStatus = onCall(async (request) => {
+    if (!request.auth) {
+        throw new HttpsError('unauthenticated', 'The function must be called while authenticated.');
+    }
+    const barberId = request.auth.uid;
+    const { isTemporarilyUnavailable } = request.data;
+    const now = admin.firestore.Timestamp.now();
+    const barberRef = db.doc(`users/${barberId}`);
+    const batch = db.batch();
+
+    try {
+        const barberSnap = await barberRef.get();
+        if (!barberSnap.exists) {
+            throw new HttpsError('not-found', 'Barber profile not found.');
+        }
+        const barberData = barberSnap.data() as AppUser;
+
+        if (isTemporarilyUnavailable) {
+            batch.update(barberRef, { isTemporarilyUnavailable: true, unavailableSince: now, updatedAt: now });
+        } else {
+            batch.update(barberRef, { isTemporarilyUnavailable: false, unavailableSince: null, updatedAt: now });
+            const busyStartTime = barberData.unavailableSince?.toDate();
+            if (busyStartTime) {
+                const busyDurationMs = now.toDate().getTime() - busyStartTime.getTime();
+                const busyDurationMinutes = Math.round(busyDurationMs / (1000 * 60));
+
+                if (busyDurationMinutes > 0) {
+                    const appointmentsSnapshot = await db.collection("appointments")
+                        .where('barberId', '==', barberId)
+                        .where('date', '==', formatDateToYYYYMMDD(new Date()))
+                        .where('status', 'in', ['upcoming', 'customer-initiated-check-in', 'barber-initiated-check-in'])
+                        .where('appointmentTimestamp', '>=', barberData.unavailableSince!)
+                        .get();
+
+                    appointmentsSnapshot.forEach(doc => {
+                        const appointment = doc.data() as Appointment;
+                        const serviceDuration = timeToMinutes(appointment.endTime) - timeToMinutes(appointment.startTime);
+                        const newStartTimeMinutes = timeToMinutes(appointment.startTime) + busyDurationMinutes;
+                        const newEndTimeMinutes = newStartTimeMinutes + serviceDuration;
+                        const newTimestamp = admin.firestore.Timestamp.fromDate(new Date(appointment.appointmentTimestamp!.toDate().getTime() + busyDurationMs));
+                        
+                        batch.update(doc.ref, {
+                            startTime: minutesToTime(newStartTimeMinutes),
+                            endTime: minutesToTime(newEndTimeMinutes),
+                            appointmentTimestamp: newTimestamp,
+                            updatedAt: now,
+                        });
+                    });
+                }
+            }
+        }
+        await batch.commit();
+        return { success: true, message: `Status updated to ${isTemporarilyUnavailable ? 'unavailable' : 'available'}.` };
+    } catch (error) {
+        console.error("Error in toggleBarberTemporaryStatus:", error);
+        if (error instanceof HttpsError) throw error;
+        throw new HttpsError('internal', 'An internal error occurred while updating status.');
     }
 });
 
@@ -304,35 +306,18 @@ export const onBarberUpdate = onDocumentUpdated("users/{userId}", async (event) 
 // HELPER FUNCTIONS
 // =================================================================================
 
-/**
- * Fetches a user's data from the 'users' collection in Firestore.
- * @param {string} userId - The ID of the user to fetch.
- * @returns {Promise<AppUser | null>} The user's data or null if not found.
- */
 async function getUserData(userId: string): Promise<AppUser | null> {
   const userDoc = await db.collection("users").doc(userId).get();
   return userDoc.exists ? userDoc.data() as AppUser : null;
 }
 
-/**
- * Sends a push notification payload using Firebase Cloud Messaging.
- * Includes error handling for invalid or unregistered FCM tokens.
- * @param {string} userId - The recipient's user ID (for logging and token removal).
- * @param {admin.messaging.Message} message - The message payload to send.
- * @param {string} contextLog - A string for logging to identify the notification's context.
- * @returns {Promise<void>}
- */
 async function sendNotification(userId: string, message: admin.messaging.Message, contextLog: string): Promise<void> {
     try {
         await messaging.send(message);
         console.log(`[Notification] Successfully sent ${contextLog} to user ${userId}.`);
     } catch (error: any) {
         console.error(`[Notification] Error sending ${contextLog} to user ${userId}:`, error);
-        // If the error is due to an invalid token, remove it from the user's document.
-        if (
-            error.code === 'messaging/invalid-registration-token' ||
-            error.code === 'messaging/registration-token-not-registered'
-        ) {
+        if (error.code === 'messaging/invalid-registration-token' || error.code === 'messaging/registration-token-not-registered') {
             console.log(`[Notification] Invalid FCM token for user ${userId}. Removing it.`);
             await db.collection("users").doc(userId).update({ fcmToken: admin.firestore.FieldValue.delete() });
         }

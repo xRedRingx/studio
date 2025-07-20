@@ -14,7 +14,7 @@ import {
   sendPasswordResetEmail as firebaseSendPasswordResetEmail,
   type User as FirebaseUser
 } from 'firebase/auth';
-import { collection, doc, getDoc, setDoc, updateDoc, Timestamp, writeBatch, query, where, getDocs } from 'firebase/firestore';
+import { collection, doc, getDoc, setDoc, updateDoc, Timestamp, writeBatch, query, where, getDocs, getFunctions, httpsCallable } from 'firebase/firestore';
 
 import { useToast } from '@/hooks/use-toast';
 
@@ -66,8 +66,7 @@ interface AuthContextType {
   updateUserFCMToken: (userId: string, token: string | null) => Promise<void>;
   updateBarberTemporaryStatus: (
     barberId: string,
-    isTemporarilyUnavailable: boolean,
-    currentUnavailableSince: Timestamp | null | undefined
+    isTemporarilyUnavailable: boolean
   ) => Promise<void>;
 }
 
@@ -351,95 +350,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   
   const updateBarberTemporaryStatus = async (
     barberId: string,
-    isTemporarilyUnavailable: boolean,
-    currentUnavailableSince: Timestamp | null | undefined
+    isTemporarilyUnavailable: boolean
   ) => {
     setIsProcessingAuth(true);
-    const userRef = doc(firestore, 'users', barberId);
-    const now = Timestamp.now();
-    const batch = writeBatch(firestore);
-
     try {
-      if (isTemporarilyUnavailable) { // Going busy
-        batch.update(userRef, {
-          isTemporarilyUnavailable: true,
-          unavailableSince: now,
-          updatedAt: now,
+        const functions = getFunctions(auth.app);
+        const toggleStatusFunc = httpsCallable(functions, 'toggleBarberTemporaryStatus');
+        await toggleStatusFunc({ isTemporarilyUnavailable });
+        
+        // Optimistically update the local user state. The source of truth is now the backend,
+        // but this provides a faster UI response. Firestore listeners will eventually sync it.
+        setUser(prevUser => {
+            if (!prevUser || prevUser.uid !== barberId) return prevUser;
+            const updatedUser = {
+                ...prevUser,
+                isTemporarilyUnavailable,
+                unavailableSince: isTemporarilyUnavailable ? Timestamp.now() : null,
+                updatedAt: Timestamp.now()
+            };
+            persistUserSession(updatedUser);
+            return updatedUser;
         });
-      } else { // Going available, need to shift appointments
-        batch.update(userRef, {
-          isTemporarilyUnavailable: false,
-          unavailableSince: null,
-          updatedAt: now,
-        });
 
-        if (currentUnavailableSince) {
-          const busyEndTime = now.toDate();
-          const busyStartTime = currentUnavailableSince.toDate();
-          const busyDurationMs = busyEndTime.getTime() - busyStartTime.getTime();
-          const busyDurationMinutes = Math.round(busyDurationMs / (1000 * 60));
-
-          if (busyDurationMinutes > 0) {
-            const todayStr = formatDateToYYYYMMDD(new Date());
-            const appointmentsQuery = query(
-              collection(firestore, 'appointments'),
-              where('barberId', '==', barberId),
-              where('date', '==', todayStr),
-              where('status', 'in', ['upcoming', 'customer-initiated-check-in', 'barber-initiated-check-in']) // Only shift not started ones
-            );
-            const appointmentsSnapshot = await getDocs(appointmentsQuery);
-
-            appointmentsSnapshot.forEach(apptDoc => {
-              const appointment = apptDoc.data() as Appointment;
-              const apptStartTimeMinutes = timeToMinutes(appointment.startTime);
-              
-              // Only shift appointments that were supposed to start after or during the busy period began
-              if (appointment.appointmentTimestamp && appointment.appointmentTimestamp.toDate() >= busyStartTime) {
-                  const newStartTimeMinutes = apptStartTimeMinutes + busyDurationMinutes;
-                  
-                  // Get the original service duration to calculate the new end time
-                  const serviceDuration = timeToMinutes(appointment.endTime) - apptStartTimeMinutes;
-                  const newEndTimeMinutes = newStartTimeMinutes + serviceDuration;
-
-                  const newStartTimeStr = minutesToTime(newStartTimeMinutes);
-                  const newEndTimeStr = minutesToTime(newEndTimeMinutes);
-                  
-                  let newAppointmentTimestamp = null;
-                  if (appointment.appointmentTimestamp) {
-                    const shiftedDate = new Date(appointment.appointmentTimestamp.toDate().getTime() + busyDurationMs);
-                    newAppointmentTimestamp = Timestamp.fromDate(shiftedDate);
-                  }
-
-                  batch.update(apptDoc.ref, {
-                    startTime: newStartTimeStr,
-                    endTime: newEndTimeStr,
-                    appointmentTimestamp: newAppointmentTimestamp,
-                    updatedAt: now,
-                  });
-              }
-            });
-            toast({ title: "Status Updated", description: `Today's appointments shifted by ~${busyDurationMinutes} minutes.` });
-          }
-        }
-      }
-      await batch.commit();
-      setUser(prevUser => {
-        if (!prevUser || prevUser.uid !== barberId) return prevUser;
-        const updatedUser = {
-          ...prevUser,
-          isTemporarilyUnavailable,
-          unavailableSince: isTemporarilyUnavailable ? now : null,
-          updatedAt: now
-        };
-        persistUserSession(updatedUser);
-        return updatedUser;
-      });
     } catch (error: any) {
-      console.error("AuthContext: Error updating temporary status/shifting appointments:", error);
-      toast({ title: "Status Update Error", description: error.message || "Could not update temporary status.", variant: "destructive" });
-      throw error;
+        console.error("AuthContext: Error calling toggleBarberTemporaryStatus function:", error);
+        toast({ title: "Status Update Error", description: error.message || "Could not update temporary status.", variant: "destructive" });
+        throw error;
     } finally {
-      setIsProcessingAuth(false);
+        setIsProcessingAuth(false);
     }
   };
 
