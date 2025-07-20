@@ -396,11 +396,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               // Only shift appointments that were supposed to start after or during the busy period began
               if (appointment.appointmentTimestamp && appointment.appointmentTimestamp.toDate() >= busyStartTime) {
                   const newStartTimeMinutes = apptStartTimeMinutes + busyDurationMinutes;
-                  const newServiceDuration = appointment.serviceName && user && user.role === 'barber' ?
-                    (user.specialties?.find(s => s === appointment.serviceName) ? 30 : 30) // Placeholder for actual service duration lookup
-                    : 30; // Default duration if service not found
-
-                  const newEndTimeMinutes = newStartTimeMinutes + newServiceDuration;
+                  
+                  // Get the original service duration to calculate the new end time
+                  const serviceDuration = timeToMinutes(appointment.endTime) - apptStartTimeMinutes;
+                  const newEndTimeMinutes = newStartTimeMinutes + serviceDuration;
 
                   const newStartTimeStr = minutesToTime(newStartTimeMinutes);
                   const newEndTimeStr = minutesToTime(newEndTimeMinutes);
@@ -419,7 +418,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                   });
               }
             });
-            toast({ title: "Status Updated", description: `Appointments shifted by ${busyDurationMinutes} minutes.` });
+            toast({ title: "Status Updated", description: `Today's appointments shifted by ~${busyDurationMinutes} minutes.` });
           }
         }
       }

@@ -158,6 +158,8 @@ export type AppointmentStatus =
  * @property {Timestamp | null} [barberMarkedDoneAt] - Timestamp of when the barber marked the service as done.
  * @property {Timestamp | null} [serviceActuallyCompletedAt] - Timestamp of when the service was mutually confirmed as completed.
  * @property {Timestamp | null} [noShowMarkedAt] - Timestamp of when the appointment was marked as a no-show.
+ * @property {boolean} [reminderSent] - Flag to indicate if a reminder has been sent.
+ * @property {string} [reminderSkippedReason] - Reason why a reminder was skipped.
  */
 export interface Appointment {
   id:string;
@@ -183,6 +185,9 @@ export interface Appointment {
   barberMarkedDoneAt?: Timestamp | null;
   serviceActuallyCompletedAt?: Timestamp | null; // When both confirm completion
   noShowMarkedAt?: Timestamp | null;
+  // Reminder fields
+  reminderSent?: boolean;
+  reminderSkippedReason?: string;
 }
 
 /**
