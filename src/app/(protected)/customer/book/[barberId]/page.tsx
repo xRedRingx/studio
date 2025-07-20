@@ -189,15 +189,8 @@ export default function BookingPage() {
       // Fetch barber's services.
       const servicesQuery = query(collection(firestore, 'services'), where('barberId', '==', barberId), orderBy('createdAt', 'desc'));
       const servicesSnapshot = await getDocs(servicesQuery);
-      const fetchedServices = servicesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BarberService));
-      setServices(fetchedServices);
+      setServices(servicesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as BarberService)));
 
-      // Pre-select service if `serviceId` is provided in URL query parameters.
-      const serviceIdFromQuery = searchParams.get('serviceId');
-      if (serviceIdFromQuery && fetchedServices.length > 0) {
-        const serviceToPreselect = fetchedServices.find(s => s.id === serviceIdFromQuery);
-        if (serviceToPreselect) { setSelectedService(serviceToPreselect); setBookingStep('selectDateTime'); }
-      }
 
       // Fetch barber's schedule and unavailable dates.
       const scheduleDocRef = doc(firestore, 'barberSchedules', barberId);
@@ -223,7 +216,7 @@ export default function BookingPage() {
     } finally {
       setIsLoadingBarberDetails(false);
     }
-  }, [barberId, toast, router, searchParams]); // Dependencies for useCallback.
+  }, [barberId, toast, router]); // Dependencies for useCallback.
 
 
   /**
@@ -256,6 +249,21 @@ export default function BookingPage() {
   // Effects to fetch data on component mount or when dependencies change.
   useEffect(() => { fetchBarberData(); }, [fetchBarberData]);
   useEffect(() => { if (user?.uid) fetchCustomerAppointments(); }, [user?.uid, fetchCustomerAppointments]);
+  
+  // Effect to pre-select a service if provided in the URL, this is separated to break the dependency loop.
+  useEffect(() => {
+    if (services.length > 0) {
+      const serviceIdFromQuery = searchParams.get('serviceId');
+      if (serviceIdFromQuery) {
+        const serviceToPreselect = services.find(s => s.id === serviceIdFromQuery);
+        if (serviceToPreselect) {
+          setSelectedService(serviceToPreselect);
+          setBookingStep('selectDateTime');
+        }
+      }
+    }
+  }, [services, searchParams]);
+
 
   /**
    * Effect to calculate available time slots when selected service, date, schedule,
