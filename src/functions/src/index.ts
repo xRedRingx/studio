@@ -1,4 +1,3 @@
-
 /**
  * @fileoverview This file contains all Firebase Cloud Functions for the BarberFlow application.
  * It includes scheduled functions for reminders and Firestore-triggered functions for
@@ -243,12 +242,11 @@ export const onBarberUpdate = onDocumentUpdated("users/{userId}", async (event) 
 
     // Check if the barber was temporarily unavailable and now is available.
     if (before.isTemporarilyUnavailable === true && after.isTemporarilyUnavailable === false) {
-        // Ensure that the timestamps are valid Firestore Timestamps before proceeding
-        const busyStartTime = before.unavailableSince instanceof admin.firestore.Timestamp ? before.unavailableSince.toDate() : null;
-        const busyEndTime = after.updatedAt instanceof admin.firestore.Timestamp ? after.updatedAt.toDate() : null;
+        const busyStartTime = before.unavailableSince?.toDate();
+        const busyEndTime = after.updatedAt?.toDate();
 
         if (!busyStartTime || !busyEndTime) {
-            console.log(`[Shift Notify] Barber ${barberId} is now available, but missing valid timestamps. Cannot calculate shift.`);
+            console.log(`[Shift Notify] Barber ${barberId} is now available, but missing timestamps. Cannot calculate shift.`);
             return;
         }
 
@@ -263,7 +261,7 @@ export const onBarberUpdate = onDocumentUpdated("users/{userId}", async (event) 
 
         const todayStr = new Date().toISOString().split('T')[0];
         // Find all of today's appointments for this barber that were not completed/cancelled
-        // and were scheduled to start after the busy period began.
+        // and started after the busy period began.
         const appointmentsSnapshot = await db.collection("appointments")
             .where('barberId', '==', barberId)
             .where('date', '==', todayStr)
