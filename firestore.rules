@@ -1,163 +1,121 @@
 
 rules_version = '2';
 
-// By default, deny all reads and writes.
-// We will explicitly allow access for each collection.
 service cloud.firestore {
   match /databases/{database}/documents {
-  
-    // =====================================================================
-    // Helper Functions
-    // =====================================================================
     
-    // Check if the user is authenticated.
-    function isAuthenticated() {
+    // Helper functions for security rules
+    function isSignedIn() {
       return request.auth != null;
     }
-    
-    // Check if the user is the owner of the document.
-    function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+
+    function isUser(userId) {
+      return isSignedIn() && request.auth.uid == userId;
     }
     
-    // Check if the user has a specific role.
-    // Use `get()` to read the user's own profile document.
-    function hasRole(role) {
-      return isAuthenticated() && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role;
+    function getUserRole(userId) {
+      return get(/databases/$(database)/documents/users/$(userId)).data.role;
+    }
+    
+    function isBarber(userId) {
+      return isUser(userId) && getUserRole(userId) == 'barber';
     }
 
-    // =====================================================================
-    // Users Collection
-    // =====================================================================
+    // Default Deny All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Users Collection Rules
     match /users/{userId} {
-      // Anyone authenticated can read user profiles (e.g., for customers to see barber info).
-      // A user can always read their own full document.
-      allow read: if isAuthenticated();
+      // Allow a user to read their own document fully.
+      // Allow any signed-in user to read public-facing fields of any user profile.
+      allow read: if isUser(userId) || isSignedIn();
 
-      // A user can only create their own document.
-      allow create: if isOwner(userId);
-      
-      // A user can only update their own document.
-      // Critical fields like 'role' and 'email' should not be changed after creation.
-      allow update: if isOwner(userId)
-                    && request.resource.data.role == resource.data.role
-                    && request.resource.data.email == resource.data.email;
-                    
-      // Disallow deletion of user accounts from the client.
-      allow delete: if false;
+      // Allow a user to create their own user document.
+      allow create: if isUser(userId);
+
+      // Allow a user to update their own document, but protect critical fields.
+      allow update: if isUser(userId) 
+                    && request.resource.data.email == resource.data.email
+                    && request.resource.data.role == resource.data.role;
     }
 
-    // =====================================================================
-    // Services Collection (Offered by Barbers)
-    // =====================================================================
+    // Services Collection Rules (barber-specific)
     match /services/{serviceId} {
-      // Any authenticated user can read services (e.g., for customers to browse).
-      allow read: if isAuthenticated();
-      
-      // Only a barber can create a service, and it must belong to them.
-      allow create: if hasRole('barber')
-                    && request.resource.data.barberId == request.auth.uid;
-                    
-      // Only the barber who owns the service can update or delete it.
-      allow update, delete: if hasRole('barber')
-                           && get(/databases/$(database)/documents/services/$(serviceId)).data.barberId == request.auth.uid;
+      // Any authenticated user can read services.
+      allow read: if isSignedIn();
+      // Only a barber can write (create, update, delete) their own services.
+      allow write: if isBarber(request.resource.data.barberId);
     }
-    
-    // =====================================================================
-    // Barber Schedules and Availability
-    // =====================================================================
+
+    // Barber Schedules Collection Rules
     match /barberSchedules/{barberId} {
-      // Anyone authenticated can read schedules to check for availability.
-      allow read: if isAuthenticated();
-      
+      // Any authenticated user can read schedule data for booking purposes.
+      allow read: if isSignedIn();
       // Only the barber can write to their own schedule.
-      allow write: if isOwner(barberId);
+      allow write: if isUser(barberId);
       
-      // Subcollection for specific unavailable dates.
+      // Subcollection for unavailable dates
       match /unavailableDates/{dateId} {
-        // Anyone authenticated can read unavailable dates.
-        allow read: if isAuthenticated();
-        
-        // Only the parent barber can write to their unavailable dates.
-        allow write: if isOwner(barberId);
+         // Any authenticated user can read unavailable dates for booking.
+        allow read: if isSignedIn();
+        // Only the barber can manage their own unavailable dates.
+        allow write: if isUser(barberId);
       }
     }
     
-    // =====================================================================
-    // Appointments Collection
-    // =====================================================================
-    match /appointments/{appointmentId} {
-      // A user can read an appointment if they are the customer or the barber.
-      allow read: if isAuthenticated() && (
-                    resource.data.customerId == request.auth.uid || 
-                    resource.data.barberId == request.auth.uid
-                  );
-                  
-      // A customer can create (book) an appointment for themselves.
-      // Walk-ins are created by the barber on the backend (not covered by client rules).
-      allow create: if hasRole('customer')
-                    && request.resource.data.customerId == request.auth.uid
-                    && request.resource.data.status == 'upcoming';
+    // NEW: Public Barber Data for safe availability checks
+    match /publicBarberData/{barberId} {
+        match /bookedSlots/{slotId} {
+            // Any authenticated user can read the anonymized booked slots
+            allow read: if isSignedIn();
+            // Writes are handled by Cloud Functions, no client writes allowed.
+            allow write: if false;
+        }
+    }
 
-      // A user can update an appointment if they are part of it.
-      // We must also validate the status transitions they are allowed to make.
-      allow update: if isAuthenticated() && (
-        
-        // Customer is part of the appointment and is making a valid status change.
-        (
-          resource.data.customerId == request.auth.uid &&
+    // Appointments Collection Rules
+    match /appointments/{appointmentId} {
+      // A user can only read an appointment if they are the customer or the barber for that appointment.
+      allow read: if isUser(resource.data.customerId) || isUser(resource.data.barberId);
+      
+      // A customer can create an appointment for themselves.
+      allow create: if isUser(request.resource.data.customerId)
+                      && request.resource.data.status == 'upcoming';
+                      
+      // Rules for updating appointments.
+      allow update: if (
+        // Customer can update if they are the customer for the appointment
+        (isUser(resource.data.customerId) && 
           (
-            // Customer can check-in.
-            (resource.data.status == 'upcoming' && request.resource.data.status == 'customer-initiated-check-in') ||
-            // Customer can confirm start after barber check-in.
-            (resource.data.status == 'barber-initiated-check-in' && request.resource.data.status == 'in-progress') ||
-            // Customer can mark as done.
-            (resource.data.status == 'in-progress' && request.resource.data.status == 'customer-initiated-completion') ||
-            // Customer can confirm completion after barber marks done.
-            (resource.data.status == 'barber-initiated-completion' && request.resource.data.status == 'completed') ||
-            // Customer can cancel.
-            (request.resource.data.status == 'cancelled')
+            // Allowed status changes by customer
+            request.resource.data.status == 'customer-initiated-check-in' ||
+            request.resource.data.status == 'in-progress' ||
+            request.resource.data.status == 'customer-initiated-completion' ||
+            request.resource.data.status == 'completed' ||
+            request.resource.data.status == 'cancelled'
           )
         ) ||
-        
-        // Barber is part of the appointment and is making a valid status change.
-        (
-          hasRole('barber') &&
-          resource.data.barberId == request.auth.uid &&
+        // Barber can update if they are the barber for the appointment
+        (isUser(resource.data.barberId) && 
           (
-            // Barber can check-in a customer.
-            (resource.data.status == 'upcoming' && request.resource.data.status == 'barber-initiated-check-in') ||
-            // Barber can confirm start after customer check-in.
-            (resource.data.status == 'customer-initiated-check-in' && request.resource.data.status == 'in-progress') ||
-            // Barber can mark as done.
-            (resource.data.status == 'in-progress' && request.resource.data.status == 'barber-initiated-completion') ||
-            // Barber can confirm completion after customer marks done.
-            (resource.data.status == 'customer-initiated-completion' && request.resource.data.status == 'completed') ||
-            // Barber can mark as no-show.
-            (request.resource.data.status == 'no-show') ||
-            // Barber can cancel.
-            (request.resource.data.status == 'cancelled')
+            // Allowed status changes by barber
+            request.resource.data.status == 'barber-initiated-check-in' ||
+            request.resource.data.status == 'in-progress' ||
+            request.resource.data.status == 'barber-initiated-completion' ||
+            request.resource.data.status == 'completed' ||
+            request.resource.data.status == 'no-show' ||
+            request.resource.data.status == 'cancelled'
           )
         )
       );
-
-      // Disallow direct deletion from the client. Status should be changed to 'cancelled'.
-      allow delete: if false;
     }
     
-    // =====================================================================
-    // Spendings Collection (For Barbers)
-    // =====================================================================
+    // Spendings Collection Rules
     match /spendings/{spendingId} {
-      // A user can read/write a spending entry only if they are the barber who owns it.
-      allow read, write: if hasRole('barber')
-                       && (
-                         // For reads/updates/deletes, check existing document.
-                         get(/databases/$(database)/documents/spendings/$(spendingId)).data.barberId == request.auth.uid ||
-                         // For creates, check the new data being written.
-                         request.resource.data.barberId == request.auth.uid
-                       );
+        // A barber can read and write their own spending entries.
+        allow read, write: if isBarber(request.resource.data.barberId);
     }
-    
   }
 }

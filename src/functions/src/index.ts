@@ -1,70 +1,54 @@
 
-import {onSchedule} from "firebase-functions/v2/scheduler";
-import * as admin from "firebase-admin";
+/**
+ * @fileoverview This file contains all Firebase Cloud Functions for the BarberFlow application.
+ * It includes scheduled functions for reminders and Firestore-triggered functions for
+ * real-time notifications about bookings, cancellations, and appointment shifts.
+ */
 
-// Initialize the Firebase Admin SDK.
+import { onSchedule } from "firebase-functions/v2/scheduler";
+import { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } from "firebase-functions/v2/firestore";
+import * as admin from "firebase-admin";
+import type { AppUser, Appointment } from "../../src/types";
+
+// Initialize Firebase Admin SDK
 admin.initializeApp();
 const db = admin.firestore();
+const messaging = admin.messaging();
 
-// --- Configuration for Faster Testing ---
-// IMPORTANT: Remember to change these back for production!
-const REMINDER_MINUTES_BEFORE = 2; // Send reminder 2 mins before
-const REMINDER_WINDOW_MINUTES = 2; // Query for appointments in a 2-min window
+// --- Configuration ---
+const REMINDER_MINUTES_BEFORE = 30;
+const REMINDER_WINDOW_MINUTES = 5;
+const TIMEZONE = "Africa/Algiers";
+
+// =================================================================================
+// 1. SCHEDULED FUNCTION - Send Appointment Reminders
+// =================================================================================
 
 /**
- * A scheduled Cloud Function that sends push notification reminders for
- * upcoming appointments.
+ * A scheduled Cloud Function that sends push notification reminders for upcoming appointments.
+ *
+ * @remarks
+ * Firebase Index Required for `appointments` collection:
+ * - `status` (Ascending)
+ * - `reminderSent` (Ascending)
+ * - `appointmentTimestamp` (Ascending)
  */
 export const sendAppointmentReminders = onSchedule(
   {
-    schedule: "every 1 minutes", // Runs every minute FOR TESTING
-    timeZone: "Africa/Algiers", // User's preferred timezone for scheduling
+    schedule: `every ${REMINDER_WINDOW_MINUTES} minutes`,
+    timeZone: TIMEZONE,
   },
   async (event) => {
-    console.log(`Function triggered by scheduler. Event scheduleTime (UTC): ${
-      event.scheduleTime}`);
-    // Log the event's timezone if available (it might be on the event object)
-    if ((event as any).timeZone) {
-        console.log(`Event's target timezone: ${(event as any).timeZone}`);
-    }
+    console.log(`[Reminders] Function triggered at: ${new Date().toISOString()}`);
 
     try {
-      const now = new Date(); // This is the actual execution time
-      console.log(`Function's current Date() object: ${now.toString()} ` +
-        "(This reflects the function server's perceived time and timezone)");
+      const now = new Date();
+      const windowStart = new Date(now.getTime() + REMINDER_MINUTES_BEFORE * 60 * 1000);
+      const windowEnd = new Date(windowStart.getTime() + REMINDER_WINDOW_MINUTES * 60 * 1000);
 
-      // --- Calculate Reminder Time Window ---
-      // Uses the 'now' object, which reflects the function's execution environment's time.
-      // Timestamps for Firestore query will be UTC.
-      const windowStart = new Date(now.getTime() +
-        REMINDER_MINUTES_BEFORE * 60 * 1000);
-      const windowEnd = new Date(windowStart.getTime() +
-        REMINDER_WINDOW_MINUTES * 60 * 1000);
+      const reminderWindowStartTimestamp = admin.firestore.Timestamp.fromDate(windowStart);
+      const reminderWindowEndTimestamp = admin.firestore.Timestamp.fromDate(windowEnd);
 
-      const reminderWindowStartTimestamp = admin.firestore.Timestamp
-        .fromDate(windowStart);
-      const reminderWindowEndTimestamp = admin.firestore.Timestamp
-        .fromDate(windowEnd);
-
-      console.log(`Current time (UTC from now.toISOString()): ${
-        now.toISOString()}`);
-      console.log("Calculated Query Window (UTC from Timestamps):");
-      console.log(`  Start: ${
-        reminderWindowStartTimestamp.toDate().toISOString()} (Timestamp sec: ${
-        reminderWindowStartTimestamp.seconds})`);
-      console.log(`  End:   ${
-        reminderWindowEndTimestamp.toDate().toISOString()} (Timestamp sec: ${
-        reminderWindowEndTimestamp.seconds})`);
-      console.log("Checking for appointments with 'appointmentTimestamp' " +
-        "(UTC) between these values.");
-
-      // --- Important: Firestore Index Required! ---
-      // Collection ID: 'appointments'
-      // Fields to index:
-      // 1. status (Ascending)
-      // 2. reminderSent (Ascending)
-      // 3. appointmentTimestamp (Ascending)
-      // Query scope: Collection
       const appointmentsSnapshot = await db.collection("appointments")
         .where("status", "==", "upcoming")
         .where("reminderSent", "==", false)
@@ -73,135 +57,283 @@ export const sendAppointmentReminders = onSchedule(
         .get();
 
       if (appointmentsSnapshot.empty) {
-        console.log("No appointments found in the current window " +
-          "requiring a reminder.");
+        console.log("[Reminders] No appointments found in the current reminder window.");
         return;
       }
 
-      console.log(`Found ${appointmentsSnapshot.docs.length} appointments ` +
-        "to remind.");
-      appointmentsSnapshot.forEach((doc) => {
-        const appt = doc.data();
-        const apptTimestamp = (appt.appointmentTimestamp as
-          admin.firestore.Timestamp);
-        console.log(`  - Found Appt ID: ${doc.id}, Timestamp: ${
-          apptTimestamp.toDate().toISOString()} (sec: ${
-          apptTimestamp.seconds}), Cust: ${appt.customerName}`);
-      });
-
-      const reminderPromises: Promise<void>[] = [];
+      console.log(`[Reminders] Found ${appointmentsSnapshot.docs.length} appointments needing reminders.`);
       for (const doc of appointmentsSnapshot.docs) {
-        const appointment = doc.data();
-        const appointmentId = doc.id;
-        const {customerId, serviceName, barberName, startTime} = appointment;
+        const appointment = doc.data() as Appointment;
+        const { customerId, serviceName, barberName, startTime } = appointment;
+        if (!customerId) continue;
 
-        if (!customerId) {
-          console.warn(`Appointment ${appointmentId} is missing a ` +
-            "customerId. Skipping.");
-          continue;
+        const customer = await getUserData(customerId);
+        if (customer?.fcmToken) {
+          const message = {
+            notification: {
+              title: "⏰ Appointment Reminder!",
+              body: `Hi ${customer.firstName || "Customer"}, your ${serviceName} appointment with ${barberName} is in about ${REMINDER_MINUTES_BEFORE} minutes at ${startTime}.`,
+            },
+            token: customer.fcmToken,
+          };
+          await sendNotification(customerId, message, `reminder for appointment ${doc.id}`);
+          await doc.ref.update({ reminderSent: true });
+        } else {
+            await doc.ref.update({ reminderSent: true, reminderSkippedReason: "No FCM token" });
         }
-
-        const sendPromise = processAndSendReminder(
-          customerId,
-          appointmentId,
-          {serviceName, barberName, startTime},
-        );
-        reminderPromises.push(sendPromise);
       }
-
-      await Promise.all(reminderPromises);
-      console.log("Finished processing all reminders for this batch.");
     } catch (error) {
-      console.error("A critical error occurred in the " +
-        "sendAppointmentReminders function:", error);
+      console.error("[Reminders] Critical error in sendAppointmentReminders:", error);
     }
   }
 );
 
+
+// =================================================================================
+// 2. FIRESTORE TRIGGER - New Booking & Cancellation Handlers
+// =================================================================================
+
 /**
- * Processes and sends a reminder notification for a specific appointment.
+ * Function: onAppointmentCreate
+ * Triggered when a new appointment document is created.
+ * Sends a notification to the barber and creates a public, anonymized "booked slot"
+ * for client-side availability checks.
  */
-async function processAndSendReminder(
-  customerId: string,
-  appointmentId: string,
-  appointmentDetails: {
-    serviceName: string;
-    barberName: string;
-    startTime: string; // This is the local time string, e.g., "10:00 AM"
-  }
-): Promise<void> {
-  const userDocRef = db.collection("users").doc(customerId);
-  const appointmentDocRef = db.collection("appointments").doc(appointmentId);
+export const onAppointmentCreate = onDocumentCreated("appointments/{appointmentId}", async (event) => {
+    const snapshot = event.data;
+    if (!snapshot) {
+        console.log("[New Booking] No data associated with the event.");
+        return;
+    }
+    const appointment = snapshot.data() as Appointment;
+    const appointmentId = snapshot.id;
+    const { barberId, customerName, serviceName, date, startTime, endTime } = appointment;
 
-  try {
-    const userDocSnap = await userDocRef.get();
-    if (!userDocSnap.exists) {
-      console.warn(`User document not found for customerId: ${customerId} ` +
-        `(Appointment ID: ${appointmentId})`);
-      // Mark as sent to avoid retrying for a user that doesn't exist
-      await appointmentDocRef.update({
-        reminderSent: true,
-        reminderSkippedReason: "User document not found",
-      });
-      return;
+    // --- Action 1: Notify Barber ---
+    console.log(`[New Booking] New appointment created: ${appointmentId}. Notifying barber ${barberId}.`);
+    const barber = await getUserData(barberId);
+    if (barber?.fcmToken) {
+        const message = {
+            notification: {
+                title: "✅ New Booking!",
+                body: `${customerName} booked ${serviceName} for ${date} at ${startTime}.`,
+            },
+            token: barber.fcmToken,
+        };
+        await sendNotification(barberId, message, `new booking notification for ${appointmentId}`);
     }
 
-    const userData = userDocSnap.data() as {
-      fcmToken?: string | null;
-      firstName?: string;
-    };
-    const fcmToken = userData.fcmToken;
+    // --- Action 2: Create Public Booked Slot ---
+    // This creates an anonymized document that clients can safely read to check for availability.
+    const publicSlotRef = db.doc(`publicBarberData/${barberId}/bookedSlots/${appointmentId}`);
+    try {
+        await publicSlotRef.set({
+            startTime: startTime,
+            endTime: endTime,
+            date: date,
+        });
+        console.log(`[New Booking] Created public booked slot for appointment ${appointmentId}.`);
+    } catch (error) {
+        console.error(`[New Booking] Failed to create public booked slot for ${appointmentId}:`, error);
+    }
+});
 
-    if (!fcmToken) {
-      console.log(`No FCM token for customer ${customerId} ` +
-        `(Appt ID: ${appointmentId}). Marking reminderSent=true.`);
-      await appointmentDocRef.update({
-        reminderSent: true,
-        reminderSkippedReason: "No FCM token",
-      });
-      return;
+
+/**
+ * Function: onAppointmentUpdate
+ * Triggered when an appointment document is updated.
+ * Handles two main cases:
+ * 1. If status changes to 'cancelled', it sends notifications and deletes the public booked slot.
+ * 2. If status changes to 'completed' or 'no-show', it also deletes the public booked slot.
+ */
+export const onAppointmentUpdate = onDocumentUpdated("appointments/{appointmentId}", async (event) => {
+    const change = event.data;
+    if (!change) return;
+
+    const before = change.before.data() as Appointment;
+    const after = change.after.data() as Appointment;
+    const appointmentId = change.after.id;
+
+    const hasBecomeCancelled = before.status !== 'cancelled' && after.status === 'cancelled';
+    const hasBecomeInactive = !['completed', 'no-show'].includes(before.status) && ['completed', 'no-show'].includes(after.status);
+
+    // --- Case 1: Appointment was just cancelled ---
+    if (hasBecomeCancelled) {
+        const { barberId, customerId, customerName, barberName, serviceName } = after;
+        console.log(`[Cancellation] Appointment ${appointmentId} was cancelled. Notifying parties.`);
+
+        // Notify the Barber
+        if (barberId) {
+            const barber = await getUserData(barberId);
+            if (barber?.fcmToken) {
+                const message = {
+                    notification: { title: "Appointment Cancelled", body: `Your appointment with ${customerName} for ${serviceName} has been cancelled.` },
+                    token: barber.fcmToken,
+                };
+                await sendNotification(barberId, message, `cancellation for ${appointmentId}`);
+            }
+        }
+
+        // Notify the Customer
+        if (customerId) {
+            const customer = await getUserData(customerId);
+            if (customer?.fcmToken) {
+                const message = {
+                    notification: { title: "Appointment Cancelled", body: `Your appointment with ${barberName} for ${serviceName} has been cancelled.` },
+                    token: customer.fcmToken,
+                };
+                await sendNotification(customerId, message, `cancellation for ${appointmentId}`);
+            }
+        }
     }
 
-    const customerFirstName = userData.firstName || "Customer";
-    const {serviceName, barberName, startTime} = appointmentDetails;
-
-    // The reminder message uses the local startTime string from the appointment
-    const messagePayload = {
-      notification: {
-        title: "Appointment Reminder!",
-        body: `Hi ${customerFirstName}, your appointment for ${serviceName} ` +
-          `with ${barberName} is in about ${REMINDER_MINUTES_BEFORE} ` +
-          `minutes at ${startTime}.`,
-      },
-      token: fcmToken,
-    };
-
-    console.log(`Attempting to send reminder for appointment ${
-      appointmentId} to user ${customerId}.`);
-    await admin.messaging().send(messagePayload);
-    console.log(`Successfully sent message for appointment ${appointmentId}.`);
-
-    await appointmentDocRef.update({reminderSent: true});
-    console.log(`Updated 'reminderSent' flag for appointment ${
-      appointmentId}.`);
-  } catch (error: unknown) {
-    console.error(`Error processing reminder for appointment ${
-      appointmentId}:`, error);
-    const errorCode = (error as {code?: string}).code;
-    if (errorCode === "messaging/registration-token-not-registered" ||
-        errorCode === "messaging/invalid-registration-token") {
-      console.log(`FCM token for user ${customerId} is invalid. ` +
-        "Removing it.");
-      await userDocRef.update({fcmToken: admin.firestore.FieldValue.delete()});
-      // Mark as sent even if token was invalid, to avoid retrying with a
-      // known bad token
-      await appointmentDocRef.update({
-        reminderSent: true,
-        reminderSkippedReason: "Invalid FCM token",
-      });
+    // --- Case 2: Appointment just became inactive (cancelled, completed, no-show) ---
+    // This is to clean up the public booked slots.
+    if (hasBecomeCancelled || hasBecomeInactive) {
+        const publicSlotRef = db.doc(`publicBarberData/${after.barberId}/bookedSlots/${appointmentId}`);
+        try {
+            await publicSlotRef.delete();
+            console.log(`[Inactive] Deleted public booked slot for inactive appointment ${appointmentId}.`);
+        } catch (error) {
+            // It's okay if it fails (e.g., doesn't exist), just log it.
+            console.warn(`[Inactive] Could not delete public booked slot for ${appointmentId}:`, error);
+        }
     }
-    // For other errors, don't mark reminderSent, allow retry.
-  }
+});
+
+/**
+ * Function: onAppointmentDelete
+ * Triggered when an appointment document is deleted directly (less common, but for cleanup).
+ * Deletes the corresponding public booked slot.
+ */
+export const onAppointmentDelete = onDocumentDeleted("appointments/{appointmentId}", async (event) => {
+    const deletedAppointment = event.data?.data() as Appointment;
+    if (!deletedAppointment) return;
+
+    const { barberId } = deletedAppointment;
+    const appointmentId = event.params.appointmentId;
+    
+    const publicSlotRef = db.doc(`publicBarberData/${barberId}/bookedSlots/${appointmentId}`);
+    try {
+        await publicSlotRef.delete();
+        console.log(`[Delete] Deleted public booked slot for deleted appointment ${appointmentId}.`);
+    } catch (error) {
+        console.warn(`[Delete] Could not delete public booked slot for ${appointmentId}:`, error);
+    }
+});
+
+
+// =================================================================================
+// 3. FIRESTORE TRIGGER - Barber Busy Mode / Appointment Shift Notifications
+// =================================================================================
+
+/**
+ * Function: onBarberUpdate
+ * Triggered when a barber's user document is updated.
+ * Specifically handles the case when a barber goes from "temporarily unavailable" back to "available".
+ * If so, it finds affected customers and notifies them of their appointment shifts.
+ */
+export const onBarberUpdate = onDocumentUpdated("users/{userId}", async (event) => {
+    const change = event.data;
+    if (!change) return;
+
+    const before = change.before.data() as AppUser;
+    const after = change.after.data() as AppUser;
+    const barberId = change.after.id;
+
+    // Check if the barber was temporarily unavailable and now is available.
+    if (before.isTemporarilyUnavailable === true && after.isTemporarilyUnavailable === false) {
+        const busyStartTime = before.unavailableSince?.toDate();
+        const busyEndTime = after.updatedAt?.toDate();
+
+        if (!busyStartTime || !busyEndTime) {
+            console.log(`[Shift Notify] Barber ${barberId} is now available, but missing timestamps. Cannot calculate shift.`);
+            return;
+        }
+
+        const busyDurationMinutes = Math.round((busyEndTime.getTime() - busyStartTime.getTime()) / (1000 * 60));
+
+        if (busyDurationMinutes <= 0) {
+            console.log(`[Shift Notify] Barber ${barberId} available. No significant busy duration (${busyDurationMinutes} mins). No notifications sent.`);
+            return;
+        }
+
+        console.log(`[Shift Notify] Barber ${barberId} is now available after being busy for ${busyDurationMinutes} minutes. Checking for appointments to notify.`);
+
+        const todayStr = new Date().toISOString().split('T')[0];
+        // Find all of today's appointments for this barber that were not completed/cancelled
+        // and started after the busy period began.
+        const appointmentsSnapshot = await db.collection("appointments")
+            .where('barberId', '==', barberId)
+            .where('date', '==', todayStr)
+            .where('status', 'in', ['upcoming', 'customer-initiated-check-in', 'barber-initiated-check-in'])
+            .where('appointmentTimestamp', '>=', before.unavailableSince)
+            .get();
+
+        if (appointmentsSnapshot.empty) {
+            console.log(`[Shift Notify] No upcoming appointments found for barber ${barberId} to notify.`);
+            return;
+        }
+
+        console.log(`[Shift Notify] Found ${appointmentsSnapshot.docs.length} appointments to notify about shifting.`);
+        for (const doc of appointmentsSnapshot.docs) {
+            const appointment = doc.data() as Appointment;
+            const { customerId } = appointment;
+            const newStartTime = appointment.startTime; // The new shifted start time is already on the document.
+
+            if (customerId) {
+                const customer = await getUserData(customerId);
+                if (customer?.fcmToken) {
+                    const message = {
+                        notification: {
+                            title: "🗓️ Your Appointment Time Has Shifted",
+                            body: `Your barber was briefly unavailable. Your appointment has been moved by about ${busyDurationMinutes} minutes. Your new start time is ${newStartTime}.`,
+                        },
+                        token: customer.fcmToken,
+                    };
+                    await sendNotification(customerId, message, `shift notification for appointment ${doc.id}`);
+                }
+            }
+        }
+    }
+});
+
+
+// =================================================================================
+// HELPER FUNCTIONS
+// =================================================================================
+
+/**
+ * Fetches a user's data from the 'users' collection in Firestore.
+ * @param {string} userId - The ID of the user to fetch.
+ * @returns {Promise<AppUser | null>} The user's data or null if not found.
+ */
+async function getUserData(userId: string): Promise<AppUser | null> {
+  const userDoc = await db.collection("users").doc(userId).get();
+  return userDoc.exists ? userDoc.data() as AppUser : null;
 }
 
-    
+/**
+ * Sends a push notification payload using Firebase Cloud Messaging.
+ * Includes error handling for invalid or unregistered FCM tokens.
+ * @param {string} userId - The recipient's user ID (for logging and token removal).
+ * @param {admin.messaging.Message} message - The message payload to send.
+ * @param {string} contextLog - A string for logging to identify the notification's context.
+ * @returns {Promise<void>}
+ */
+async function sendNotification(userId: string, message: admin.messaging.Message, contextLog: string): Promise<void> {
+    try {
+        await messaging.send(message);
+        console.log(`[Notification] Successfully sent ${contextLog} to user ${userId}.`);
+    } catch (error: any) {
+        console.error(`[Notification] Error sending ${contextLog} to user ${userId}:`, error);
+        // If the error is due to an invalid token, remove it from the user's document.
+        if (
+            error.code === 'messaging/invalid-registration-token' ||
+            error.code === 'messaging/registration-token-not-registered'
+        ) {
+            console.log(`[Notification] Invalid FCM token for user ${userId}. Removing it.`);
+            await db.collection("users").doc(userId).update({ fcmToken: admin.firestore.FieldValue.delete() });
+        }
+    }
+}

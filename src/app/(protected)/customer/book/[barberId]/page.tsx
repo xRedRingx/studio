@@ -1,3 +1,4 @@
+
 /**
  * @fileoverview Customer Booking Page.
  * This page allows customers to book an appointment with a specific barber.
@@ -7,7 +8,6 @@
  * 3. Confirming the booking details.
  * The page fetches barber details, services, schedule, unavailable dates, and existing appointments
  * to determine availability and prevent conflicts.
- * It also implements booking policies like limits on cancellations and number of active bookings.
  */
 'use client';
 
@@ -31,7 +31,7 @@ import { cn } from '@/lib/utils'; // Utility for conditional class names.
 import { Progress } from '@/components/ui/progress'; // Progress bar UI component.
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'; // Alert UI component.
 
-// Defines the different steps in the booking process.
+// Defines the possible steps in the booking process.
 type BookingStep = 'selectService' | 'selectDateTime' | 'confirm' | 'confirmed' | 'queued';
 
 // Titles for each booking step (excluding final confirmation/queue steps).
@@ -107,6 +107,13 @@ const getWeekBoundaries = (date: Date): { weekStart: Date, weekEnd: Date } => {
   return { weekStart, weekEnd };
 };
 
+// Interface for the anonymized booked slots data.
+interface BookedSlot {
+    startTime: string;
+    endTime: string;
+    date: string;
+}
+
 /**
  * BookingPage component.
  * Renders the multi-step booking process for a customer.
@@ -126,7 +133,8 @@ export default function BookingPage() {
   const [services, setServices] = useState<BarberService[]>([]);
   const [schedule, setSchedule] = useState<DayAvailability[]>([]);
   const [barberUnavailableDates, setBarberUnavailableDates] = useState<UnavailableDate[]>([]);
-  const [existingAppointments, setExistingAppointments] = useState<Appointment[]>([]); // Barber's existing appointments.
+  // NEW: State for publicly readable, anonymized booked slots.
+  const [bookedSlots, setBookedSlots] = useState<BookedSlot[]>([]);
   const [customerExistingAppointments, setCustomerExistingAppointments] = useState<Appointment[]>([]); // Customer's own existing appointments.
 
   // State for the booking flow.
@@ -154,12 +162,9 @@ export default function BookingPage() {
   const sevenDaysFromNow = new Date(today); sevenDaysFromNow.setDate(today.getDate() + 6); // Booking allowed up to 7 days in advance.
 
   /**
-   * Fetches all necessary data for the specified barber:
-   * - Barber's profile information.
-   * - Barber's services.
-   * - Barber's weekly schedule and specific unavailable dates.
-   * - Barber's existing appointments for the next 7 days (to calculate availability).
-   * Also handles pre-selection of service if `serviceId` is in query params.
+   * Fetches all necessary public data for the specified barber to enable booking.
+   * - Barber's profile, services, schedule, unavailable dates.
+   * - Barber's anonymized booked slots for availability calculation.
    */
   const fetchBarberData = useCallback(async () => {
     if (!barberId) return;
@@ -208,17 +213,18 @@ export default function BookingPage() {
         setBarberUnavailableDates([]);
       }
 
-      // Fetch barber's appointments for the next 7 days to check for conflicts.
-      const dateQueryArray: string[] = Array.from({ length: 7 }, (_, i) => formatDateToYYYYMMDD(new Date(new Date().setDate(today.getDate() + i))));
-      const appointmentsSnapshot = await getDocs(query(collection(firestore, 'appointments'), where('barberId', '==', barberId), where('date', 'in', dateQueryArray)));
-      setExistingAppointments(appointmentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Appointment)));
+      // UPDATED: Fetch ANONYMIZED booked slots instead of full appointments.
+      const bookedSlotsSnapshot = await getDocs(collection(firestore, `publicBarberData/${barberId}/bookedSlots`));
+      setBookedSlots(bookedSlotsSnapshot.docs.map(doc => doc.data() as BookedSlot));
+
     } catch (error) {
       console.error("Error fetching barber data:", error);
-      toast({ title: "Error", description: "Could not load barber information.", variant: "destructive" });
+      toast({ title: "Error", description: "Could not load barber information. Please check permissions.", variant: "destructive" });
     } finally {
       setIsLoadingBarberDetails(false);
     }
-  }, [barberId, toast, router, searchParams, today]); // Dependencies for useCallback.
+  }, [barberId, toast, router, searchParams]); // Dependencies for useCallback.
+
 
   /**
    * Fetches the current customer's existing appointments for validation purposes
@@ -276,16 +282,17 @@ export default function BookingPage() {
     const serviceDuration = selectedService.duration;
     let currentTimeMinutes = timeToMinutes(daySchedule.startTime); // Start from barber's opening time.
     const endTimeMinutes = timeToMinutes(daySchedule.endTime); // Barber's closing time.
-    // Get existing non-cancelled appointments for the selected date to check for conflicts.
-    const bookedSlots = existingAppointments
-      .filter(app => app.date === targetDateStr && app.status !== 'cancelled')
-      .map(app => ({ start: timeToMinutes(app.startTime), end: timeToMinutes(app.endTime) }));
+    
+    // UPDATED: Use anonymized bookedSlots for conflict checking
+    const conflictingSlots = bookedSlots
+      .filter(slot => slot.date === targetDateStr)
+      .map(slot => ({ start: timeToMinutes(slot.startTime), end: timeToMinutes(slot.endTime) }));
 
     // Iterate through potential time slots (every 15 minutes).
     while (currentTimeMinutes + serviceDuration <= endTimeMinutes) {
       const slotEndMinutes = currentTimeMinutes + serviceDuration;
       // Check if the potential slot overlaps with any existing booked slots.
-      const isSlotFree = !bookedSlots.some(bs => currentTimeMinutes < bs.end && slotEndMinutes > bs.start);
+      const isSlotFree = !conflictingSlots.some(bs => currentTimeMinutes < bs.end && slotEndMinutes > bs.start);
       // Ensure the slot is in the future, respecting the minimum booking lead time for today.
       let isSlotInFuture = true;
       if (targetDateStr === formatDateToYYYYMMDD(new Date())) { // If booking for today.
@@ -300,7 +307,8 @@ export default function BookingPage() {
       currentTimeMinutes += 15; // Move to the next potential slot.
     }
     setAvailableTimeSlots(slots); setSelectedTimeSlot(null); // Reset selected time slot when date/service changes.
-  }, [selectedService, selectedDate, schedule, existingAppointments, barberUnavailableDates, barber]); // Dependencies for slot calculation.
+  }, [selectedService, selectedDate, schedule, bookedSlots, barberUnavailableDates, barber]); // Dependencies for slot calculation.
+
 
   // Event handlers for booking step navigation and selections.
   const handleServiceSelect = (serviceId: string) => {
@@ -390,6 +398,7 @@ export default function BookingPage() {
         appointmentTimestamp: appointmentTimestampValue, status: 'upcoming', createdAt: now, updatedAt: now,
         customerCheckedInAt: null, barberCheckedInAt: null, serviceActuallyStartedAt: null,
         customerMarkedDoneAt: null, barberMarkedDoneAt: null, serviceActuallyCompletedAt: null, noShowMarkedAt: null,
+        reminderSent: false, // Explicitly set reminderSent to false
       };
       const docRef = await addDoc(collection(firestore, 'appointments'), newAppointmentData); // Add to Firestore.
       const finalAppointment: Appointment = { id: docRef.id, ...newAppointmentData };
@@ -407,6 +416,7 @@ export default function BookingPage() {
       setIsSubmitting(false); // Clear submission loading state.
     }
   };
+
 
   /**
    * Renders the progress bar indicating the current booking step.
@@ -439,10 +449,10 @@ export default function BookingPage() {
 
   // If barber is not accepting bookings or temporarily unavailable, show appropriate message.
   if (!barberIsAcceptingBookings && bookingStep !== 'confirmed' && bookingStep !== 'queued') {
-    return (<ProtectedPage expectedRole="customer"><div className="space-y-6 max-w-xl mx-auto text-center py-10"><AlertTriangle className="mx-auto h-16 w-16 text-yellow-500 mb-4" /><h1 className="text-2xl font-bold font-headline">Booking Not Available</h1><p className="text-base text-gray-600 dark:text-gray-400">{barber.firstName} {barber.lastName} is not accepting online bookings.</p><Button onClick={() => router.push(`/customer/view-barber/${barberId}`)} className="mt-6 h-12 rounded-full px-6 text-base">Barber's Profile</Button></div></ProtectedPage>);
+    return (<ProtectedPage expectedRole="customer"><Card className="border-none text-center py-10"><CardContent className="space-y-4"><AlertTriangle className="mx-auto h-16 w-16 text-yellow-500" /><h1 className="text-2xl font-bold font-headline">Booking Not Available</h1><p className="text-base text-gray-600 dark:text-gray-400">{barber.firstName} {barber.lastName} is not accepting online bookings.</p><Button onClick={() => router.push(`/customer/view-barber/${barberId}`)} className="mt-6 h-12 rounded-full px-6 text-base">Barber's Profile</Button></CardContent></Card></ProtectedPage>);
   }
   if (barberIsTemporarilyUnavailable && bookingStep !== 'confirmed' && bookingStep !== 'queued') {
-    return (<ProtectedPage expectedRole="customer"><div className="space-y-6 max-w-xl mx-auto text-center py-10"><Hourglass className="mx-auto h-16 w-16 text-yellow-500 mb-4" /><h1 className="text-2xl font-bold font-headline">Barber Temporarily Busy</h1><p className="text-base text-gray-600 dark:text-gray-400">{barber.firstName} {barber.lastName} is temporarily unavailable. Please check back soon.</p><Button onClick={() => router.push(`/customer/view-barber/${barberId}`)} className="mt-6 h-12 rounded-full px-6 text-base">Barber's Profile</Button></div></ProtectedPage>);
+    return (<ProtectedPage expectedRole="customer"><Card className="border-none text-center py-10"><CardContent className="space-y-4"><Hourglass className="mx-auto h-16 w-16 text-yellow-500" /><h1 className="text-2xl font-bold font-headline">Barber Temporarily Busy</h1><p className="text-base text-gray-600 dark:text-gray-400">{barber.firstName} {barber.lastName} is temporarily unavailable. Please check back soon.</p><Button onClick={() => router.push(`/customer/view-barber/${barberId}`)} className="mt-6 h-12 rounded-full px-6 text-base">Barber's Profile</Button></CardContent></Card></ProtectedPage>);
   }
 
   /**
@@ -452,23 +462,23 @@ export default function BookingPage() {
   const renderStepContent = () => {
     switch (bookingStep) {
       case 'selectService': return ( // --- Step 1: Select Service ---
-        <Card className="border-none shadow-lg rounded-xl overflow-hidden">
-          <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-card via-muted/10 to-card"><CardTitle className="text-xl font-bold">Select a Service</CardTitle><CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">Choose from services by {barber.firstName}.</CardDescription></CardHeader>
+        <Card className="border-none">
+          <CardHeader className="p-4 md:p-6"><CardTitle className="text-xl font-bold">Select a Service</CardTitle><CardDescription className="text-sm text-gray-500 dark:text-gray-400 mt-1">Choose from services by {barber.firstName}.</CardDescription></CardHeader>
           <CardContent className="space-y-3 p-4 md:p-6">
             {services.length === 0 ? <div className="text-center py-6"><Info className="mx-auto h-10 w-10 text-muted-foreground mb-3" /><p className="text-base">This barber has no services listed.</p></div> :
               services.map(service => ( // List each service as a clickable button.
-                <Button key={service.id} variant="outline" className="w-full justify-start text-left h-auto py-4 px-4 rounded-lg border shadow-sm hover:bg-accent/50" onClick={() => handleServiceSelect(service.id)}>
+                <Button key={service.id} variant="outline" className="w-full justify-between text-left h-auto py-4 px-4 rounded-lg border hover:bg-accent/50" onClick={() => handleServiceSelect(service.id)}>
                   <div className="flex flex-col flex-grow"><span className="font-semibold text-base">{service.name}</span><span className="text-sm text-gray-500 dark:text-gray-400 mt-1"><DollarSign className="inline h-4 w-4 mr-1" />{service.price.toFixed(2)}<Clock className="inline h-4 w-4 ml-3 mr-1" /><span className="text-primary">{service.duration} min</span></span></div><ChevronLeft className="h-5 w-5 ml-auto text-gray-400 transform rotate-180" /> {/* Chevron indicates "next" action. */}
                 </Button>))}
           </CardContent></Card>);
       case 'selectDateTime': // --- Step 2: Select Date & Time ---
         const isDateUnavailable = barberUnavailableDates.some(ud => ud.date === formatDateToYYYYMMDD(selectedDate));
         return (
-          <Card className="border-none shadow-lg rounded-xl overflow-hidden">
-            <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-card via-muted/10 to-card"><CardTitle className="text-xl font-bold">Pick Date &amp; Time</CardTitle><CardDescription className="text-sm text-gray-500 mt-1">Service: <span className="font-semibold">{selectedService?.name}</span></CardDescription></CardHeader>
+          <Card className="border-none">
+            <CardHeader className="p-4 md:p-6"><CardTitle className="text-xl font-bold">Pick Date &amp; Time</CardTitle><CardDescription className="text-sm text-gray-500 mt-1">Service: <span className="font-semibold">{selectedService?.name}</span></CardDescription></CardHeader>
             <CardContent className="space-y-6 p-4 md:p-6">
               {/* Display barber's weekly availability summary. */}
-              {schedule.length > 0 && <div className="mb-6 p-4 border rounded-lg bg-card shadow-sm"><h4 className="text-md font-semibold mb-3 flex items-center"><Info className="h-5 w-5 mr-2 text-primary" />Barber's Weekly Availability</h4><div className="space-y-1.5">{daysOfWeekOrder.map(dayName => { const d = schedule.find(s => s.day === dayName); if (!d) return null; return (<div key={d.day} className="flex justify-between items-center text-sm"><span className="text-gray-600 dark:text-gray-400">{d.day}</span>{d.isOpen ? <span className="font-medium text-primary">{d.startTime} &ndash; {d.endTime}</span> : <span className="text-gray-500">Closed</span>}</div>);})}</div></div>}
+              {schedule.length > 0 && <div className="mb-6 p-4 border rounded-lg bg-card"><h4 className="text-md font-semibold mb-3 flex items-center"><Info className="h-5 w-5 mr-2 text-primary" />Barber's Weekly Availability</h4><div className="space-y-1.5">{daysOfWeekOrder.map(dayName => { const d = schedule.find(s => s.day === dayName); if (!d) return null; return (<div key={d.day} className="flex justify-between items-center text-sm"><span className="text-gray-600 dark:text-gray-400">{d.day}</span>{d.isOpen ? <span className="font-medium text-primary">{d.startTime} &ndash; {d.endTime}</span> : <span className="text-gray-500">Closed</span>}</div>);})}</div></div>}
               {/* Date Picker */}
               <div><Label className="text-base font-medium mb-2 block">Select Date</Label><Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}><PopoverTrigger asChild><Button variant="outline" className={cn("w-full sm:w-[280px] justify-start text-left font-normal h-12 text-base mb-1 rounded-md",!selectedDate && "text-muted-foreground")}><CalendarDays className="mr-2 h-4 w-4" />{selectedDate ? formatSelectedDateForDisplay(selectedDate) : <span>Pick a date</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0 rounded-lg"><Calendar mode="single" selected={selectedDate} onSelect={handleDateSelect} disabled={(date) => date < today || date > sevenDaysFromNow || barberUnavailableDates.some(ud => ud.date === formatDateToYYYYMMDD(date))} initialFocus /></PopoverContent></Popover>{isDateUnavailable && <p className="text-sm text-destructive flex items-center mt-1 mb-4"><Ban className="h-4 w-4 mr-1.5" />This date is unavailable.</p>}</div>
               {/* Time Slot Selector */}
@@ -478,20 +488,20 @@ export default function BookingPage() {
               <div className="flex flex-col sm:flex-row justify-between items-center pt-6 space-y-3 sm:space-y-0 sm:space-x-3 border-t mt-4"><Button variant="outline" onClick={() => setBookingStep('selectService')} className="w-full sm:w-auto h-12 rounded-full text-base"><ChevronLeft className="mr-2 h-4 w-4" />Back to Services</Button><Button onClick={handleProceedToConfirm} disabled={!selectedTimeSlot || !selectedService || isDateUnavailable} className="w-full sm:w-auto h-12 rounded-full text-base">Proceed <Forward className="ml-2 h-4 w-4" /></Button></div>
             </CardContent></Card>);
       case 'confirm': return ( // --- Step 3: Confirm Booking ---
-        <Card className="border-none shadow-lg rounded-xl overflow-hidden">
-          <CardHeader className="p-4 md:p-6 bg-gradient-to-tr from-card via-muted/10 to-card"><CardTitle className="text-xl font-bold">Confirm Booking</CardTitle><CardDescription className="text-sm text-gray-500 mt-1">Review your appointment details.</CardDescription></CardHeader>
+        <Card className="border-none">
+          <CardHeader className="p-4 md:p-6"><CardTitle className="text-xl font-bold">Confirm Booking</CardTitle><CardDescription className="text-sm text-gray-500 mt-1">Review your appointment details.</CardDescription></CardHeader>
           <CardContent className="space-y-4 p-4 md:p-6">
             {/* Display booking summary. */}
-            <div className="space-y-2 text-base border rounded-lg p-4 shadow-sm bg-card"><p className="font-semibold text-lg text-primary mb-3">Review Details:</p><p><Scissors className="inline mr-2 h-5 w-5 text-gray-500" />Service: <span className="font-medium">{selectedService?.name}</span></p><p><UserCircleIcon className="inline mr-2 h-5 w-5 text-gray-500" />With: <span className="font-medium">{barber.firstName} {barber.lastName}</span></p><p><CalendarDays className="inline mr-2 h-5 w-5 text-gray-500" />Date: <span className="font-medium">{selectedDate ? formatSelectedDateForDisplay(selectedDate) : ''}</span></p><p><Clock className="inline mr-2 h-5 w-5 text-gray-500" />Time: <span className="font-medium text-primary">{selectedTimeSlot}</span></p><p><DollarSign className="inline mr-2 h-5 w-5 text-gray-500" />Price: <span className="font-medium">${selectedService?.price.toFixed(2)}</span></p></div>
+            <div className="space-y-2 text-base border rounded-lg p-4 bg-card"><p className="font-semibold text-lg text-primary mb-3">Review Details:</p><p><Scissors className="inline mr-2 h-5 w-5 text-gray-500" />Service: <span className="font-medium">{selectedService?.name}</span></p><p><UserCircleIcon className="inline mr-2 h-5 w-5 text-gray-500" />With: <span className="font-medium">{barber.firstName} {barber.lastName}</span></p><p><CalendarDays className="inline mr-2 h-5 w-5 text-gray-500" />Date: <span className="font-medium">{selectedDate ? formatSelectedDateForDisplay(selectedDate) : ''}</span></p><p><Clock className="inline mr-2 h-5 w-5 text-gray-500" />Time: <span className="font-medium text-primary">{selectedTimeSlot}</span></p><p><DollarSign className="inline mr-2 h-5 w-5 text-gray-500" />Price: <span className="font-medium">${selectedService?.price.toFixed(2)}</span></p></div>
             {/* Navigation Buttons */}
             <div className="flex flex-col sm:flex-row justify-between items-center pt-6 space-y-3 sm:space-y-0 sm:space-x-3 border-t mt-4"><Button variant="outline" onClick={() => setBookingStep('selectDateTime')} className="w-full sm:w-auto h-12 rounded-full text-base"><ChevronLeft className="mr-2 h-4 w-4" />Back</Button><Button onClick={handleConfirmBooking} className="w-full sm:w-auto h-14 rounded-full text-lg" disabled={isSubmitting || isLoadingCustomerAppointments}>{(isSubmitting || isLoadingCustomerAppointments) && <LoadingSpinner className="mr-2 h-5 w-5" />}<Check className="mr-2 h-5 w-5" />{(isSubmitting || isLoadingCustomerAppointments) ? 'Validating...' : 'Confirm Booking'}</Button></div>
           </CardContent></Card>);
       case 'confirmed': return ( // --- Final Step: Booking Confirmed ---
-        <Card className="text-center border-none shadow-lg rounded-xl overflow-hidden p-4 md:p-6">
+        <Card className="text-center border-none p-4 md:p-6">
           <CardHeader className="pt-4 pb-2"><CheckCircle className="mx-auto h-16 w-16 text-green-500 mb-4" /><CardTitle className="text-2xl font-bold">Booking Confirmed!</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-base pt-2"><p>Your appointment for <span className="font-semibold">{newlyBookedAppointment?.serviceName}</span> with <span className="font-semibold">{barber.firstName} {barber.lastName}</span> on <span className="font-semibold">{formatYYYYMMDDToDisplay(newlyBookedAppointment?.date || '')} at <span className="text-primary">{newlyBookedAppointment?.startTime}</span></span> has been booked.</p><Button onClick={() => router.push('/customer/dashboard')} className="mt-8 w-full max-w-xs mx-auto h-14 rounded-full text-lg"><LayoutDashboard className="mr-2 h-5 w-5" />Back to Dashboard</Button></CardContent></Card>);
       case 'queued': return ( // --- Final Step: Queued (Placeholder) ---
-        <Card className="text-center border-none shadow-lg rounded-xl overflow-hidden p-4 md:p-6">
+        <Card className="text-center border-none p-4 md:p-6">
           <CardHeader className="pt-4 pb-2">{isCurrentUserNext && <AlertCircle className="mx-auto h-16 w-16 text-primary mb-4" />}{!isCurrentUserNext && queuePosition && <Users className="mx-auto h-16 w-16 text-primary mb-4" />}<CardTitle className="text-2xl font-bold">{isCurrentUserNext ? "You're Next!" : (queuePosition ? `You are #${queuePosition} in line` : "Queue Information")}</CardTitle></CardHeader>
           <CardContent className="space-y-3 text-base pt-2">{newlyBookedAppointment && barber && (<div className="pb-3 mb-4 border-b border-border"><p className="text-lg font-semibold text-foreground">Your Appointment:</p><p><span className="font-medium">{newlyBookedAppointment.serviceName}</span> with <span className="font-medium">{barber.firstName} {barber.lastName}</span></p><p>Today at <span className="font-medium text-primary">{newlyBookedAppointment.startTime}</span>.</p></div>)}<div className="space-y-1.5">{isCurrentUserNext && (<p className="text-xl font-semibold text-green-600">You are next! Please proceed to the barbershop.</p>)}{queuePosition && !isCurrentUserNext && (<p className="text-lg">Your position: <span className="font-bold text-2xl text-primary">#{queuePosition}</span></p>)}{estimatedWaitTime !== null && estimatedWaitTime > 0 && !isCurrentUserNext && (<p className="text-md">Estimated wait: <span className="font-semibold text-primary">~{estimatedWaitTime} minutes</span></p>)}{currentlyServingCustomerName && (<p className="text-sm text-muted-foreground">Currently serving: <span className="font-medium text-foreground">{currentlyServingCustomerName}</span>.</p>)}{!currentlyServingCustomerName && queuePosition === 1 && !isCurrentUserNext && ( <p className="text-md text-muted-foreground">You are at the front. Barber will call you shortly.</p>)}</div><p className="text-xs text-muted-foreground pt-4">Note: Queue info is an estimate. Please arrive on time.</p><Button onClick={() => router.push('/customer/dashboard')} className="mt-6 w-full max-w-xs mx-auto h-14 rounded-full text-lg"><LayoutDashboard className="mr-2 h-5 w-5" />Back to Dashboard</Button></CardContent></Card>);
       default: return null;
